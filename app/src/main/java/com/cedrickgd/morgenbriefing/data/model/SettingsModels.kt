@@ -1,6 +1,7 @@
 package com.cedrickgd.morgenbriefing.data.model
 
 import com.cedrickgd.morgenbriefing.data.news.Regions
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -63,6 +64,9 @@ enum class WeatherCard(val label: String, val description: String) {
     }
 }
 
+/** When the reader may load articles ahead of time (so they open instantly and offline). */
+enum class PrefetchMode { OFF, WIFI_ONLY, ALWAYS }
+
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val accent: AccentId = AccentId.DYNAMIC,
@@ -99,7 +103,28 @@ data class AppSettings(
     val newsAge: NewsAge = NewsAge.DAY,
     /** Weather blocks shown on "Heute" besides the hero. */
     val weatherCards: Set<WeatherCard> = WeatherCard.ALL,
+    /** Interface language; null = follow the phone (see [AppLanguage.resolve]). */
+    val uiLanguage: AppLanguage? = null,
+    /** Where the news come from (country + language), independent of [uiLanguage]. */
+    val edition: NewsEdition = NewsEdition.GERMANY,
+    /**
+     * The topics the feed shows, in order: categories (`wirtschaft`), sub-topics
+     * (`wirtschaft/boerse`), local places (`local:…`) and custom topics (`custom:…`).
+     * Replaces [topicOrder] + [hiddenTopics], which are only read to migrate old installs.
+     */
+    val followed: List<String> = emptyList(),
+    /** Places anywhere on earth whose local news the user follows (`local:` topics). */
+    val localPlaces: List<Place> = emptyList(),
+    /** Hide articles of sites the in-app reader cannot show (paywall, consent wall, bot block). */
+    val readableOnly: Boolean = true,
+    /** Load the articles on screen ahead of time. */
+    val prefetch: PrefetchMode = PrefetchMode.WIFI_ONLY,
+    /** Recent search queries, newest first (at most a handful). */
+    val recentSearches: List<String> = emptyList(),
 ) {
+    /** The interface language to use now. */
+    val language: AppLanguage get() = AppLanguage.resolve(uiLanguage)
+
     companion object {
         const val DEFAULT_SECTION_SIZE = 4
         const val MIN_SECTION_SIZE = 2

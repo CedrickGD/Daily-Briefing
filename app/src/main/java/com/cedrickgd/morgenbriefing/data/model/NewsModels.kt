@@ -15,6 +15,12 @@ data class Topic(
     val seed: Long,
     /** Created by the user (Einstellungen → Themen → "Eigenes Thema"); has only its own sources. */
     val custom: Boolean = false,
+    /** Key of a [TopicIcon] (built-in topics, new custom topics); null → [emoji] is shown. */
+    val icon: String? = null,
+    /** The category of a sub-topic (`wirtschaft` for `wirtschaft/boerse`); null for categories. */
+    val parentId: String? = null,
+    /** A custom topic that follows a search ("Midterms"): the Google News query. */
+    val query: String? = null,
 )
 
 /**
@@ -53,6 +59,10 @@ data class NewsItem(
     val publishedAt: String? = null,
     /** The feed's picture for the article, if it carried one. */
     val image: ArticleImage? = null,
+    /** Host of the publisher (`bbc.com`), from Google News' `<source url>` or the link. */
+    val publisherDomain: String = "",
+    /** "google" when the item came from Google News (then [url] is a news.google.com link until resolved). */
+    val aggregator: String? = null,
 ) {
     val key: String get() = id
 }
