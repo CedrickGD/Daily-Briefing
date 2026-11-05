@@ -68,7 +68,8 @@ class TopicSourcesTest {
     fun `the region is the Bundesland in Germany plus the home place, elsewhere only the home place`() {
         val home = Place("Bad Düben", 51.59, 12.58, "Sachsen, Deutschland", "DE")
         val german = TopicSources.resolve(Topics.REGION_ID, germany.copy(region = "sachsen", home = home))
-        assertEquals(listOf("mdr-sachsen", "lvz", "l-iz"), german.filterNot { it.isGoogleNews }.map { it.id })
+        // LVZ sits behind a bot wall (KnownWalls): with "readable only" (the default) its feed is left out.
+        assertEquals(listOf("mdr-sachsen", "l-iz"), german.filterNot { it.isGoogleNews }.map { it.id })
         assertEquals(GoogleNews.geoUrl("Bad Düben, Sachsen", NewsEdition.GERMANY), google(german).url)
         val american = TopicSources.resolve(Topics.REGION_ID, usa)
         assertEquals(GoogleNews.geoUrl("Austin, Texas", NewsEdition.USA), american.single().url)

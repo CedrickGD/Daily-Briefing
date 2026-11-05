@@ -49,8 +49,9 @@ class GoogleNewsTest {
     @Test
     fun `exclusions are ranked for the edition`() {
         val german = GoogleNews.rankExclusions(KnownWalls.DOMAINS, NewsEdition.GERMANY)
-        assertTrue(german.take(7).all { it.endsWith(".de") || it == "faz.net" })
-        assertEquals("youtube.com", german[7])
+        val germanOwn = KnownWalls.DOMAINS.count { it.endsWith(".de") || it == "faz.net" }
+        assertTrue(german.take(germanOwn).all { it.endsWith(".de") || it == "faz.net" })
+        assertEquals("youtube.com", german[germanOwn])
         assertTrue(german.takeLast(5).all { it in setOf("tiktok.com", "instagram.com", "facebook.com", "x.com", "twitter.com") })
         val american = GoogleNews.rankExclusions(KnownWalls.DOMAINS, NewsEdition.USA)
         assertEquals("nytimes.com", american.first())
