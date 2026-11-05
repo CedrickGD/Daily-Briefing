@@ -58,6 +58,27 @@ object GoogleNews {
     fun searchUrl(query: String, edition: NewsEdition): String =
         base(edition, "rss/search").addQueryParameter("q", query.trim()).build().toString()
 
+    /**
+     * What the user typed as Google News should get it ([SearchQuery.googleQuery]): tickers,
+     * ISINs and WKNs quoted (`SLV ETF` → `"SLV" ETF`), the user's own quotes, `OR`, `-terms`
+     * and operators kept. For searches and followed searches, not for the app's own topic
+     * queries.
+     */
+    fun userQuery(text: String): String = SearchQuery.parse(text).googleQuery
+
+    /**
+     * The editions a search reads: [main] and, with [allLanguages] when [main] is not English,
+     * the US and British editions – a US ticker, a football club or an election abroad has most
+     * of its coverage in English (SLV ETF: 20 German results, mostly quote pages, against 41
+     * English news; the British edition adds about 70 stories the US one lacks for "Champions
+     * League" and "Midterms", checked 05.11.2026).
+     */
+    fun searchEditions(main: NewsEdition, allLanguages: Boolean): List<NewsEdition> =
+        if (!allLanguages || main.language == ENGLISH) listOf(main) else (listOf(main) + ENGLISH_EDITIONS).distinct()
+
+    private const val ENGLISH = "en"
+    private val ENGLISH_EDITIONS = listOf(NewsEdition.USA, NewsEdition("GB", ENGLISH))
+
     private fun base(edition: NewsEdition, path: String): HttpUrl.Builder =
         HttpUrl.Builder().scheme("https").host(HOST).addPathSegments(path)
             .addEncodedQueryParameter("hl", edition.hl)
@@ -206,8 +227,28 @@ object GoogleNews {
     /** An ISIN (`DE000FG2TZV5`): searches for "Aktien" also find stock quote pages, which are no articles. */
     private val ISIN = Regex("\\b[A-Z]{2}[A-Z0-9]{9}[0-9]\\b")
 
-    /** True for search hits that are a quote or product page ("DAX Turbo … | Kurs, Chart | DE000…"). */
-    fun isQuotePage(headline: String): Boolean = ISIN.containsMatchIn(headline)
+    /**
+     * Headlines of quote, chart and fund pages (Yahoo Finance, TradingView, finanzen.net,
+     * Stocktwits …), seen in searches for tickers and shares (05.11.2026): "iShares Silver Trust
+     * (SLV) Stock Price, News, Quote & History", "SLV ETF-Preis und Chart — AMEX:SLV",
+     * "iShares Silver Trust (SLV) Bestände", "Direct Market Index: Kurs, Chart & Einzelwerte",
+     * "Silver ETF VIX aktuell | Index | Stand | Kurs". News headlines do not take these forms
+     * ("Rheinmetall-Aktie: Kurs gibt nach", "Silver ETF (SLV) Hits New 52-Week High").
+     */
+    private val QUOTE_PAGE = listOf(
+        Regex("(?i)\\b(stock|share|etf|fund)[- ]price(s)?( today)?(,| and| &)? (news|quote|chart|history|analysis)\\b"),
+        Regex("(?i)\\b(stock|etf|fund)[- ]?(preis|kurs)\\b,? (und|&) chart\\b|\\bpreis und chart\\b"),
+        Regex("(?i)\\baktienkurs,? (news|nachrichten)\\b|\\bnews (&|und) aktienkurs\\b|\\bkurs und verlauf\\b|\\bkurs, (chart|prognose)\\b|\\bcharts, daten und nachrichten\\b"),
+        Regex("(?i)\\|\\s*kurs\\b|\\bkurs\\s*\\|"),
+        Regex("\\([A-Z0-9.^=-]{1,12}\\)\\s+(Bestände|Holdings|Optionskette|Options Chain|Performance-Verlauf|Performance History|Aktienkurs|Historische Kurse|Historical Data|Profil|Profile)\\b"),
+        Regex("[—–]\\s*(AMEX|NASDAQ|NYSE|NYSEARCA|ARCA|BATS|CBOE|OTC|XETR|XETRA|FWB|LSE|TVC|EURONEXT|SIX|TSX):[A-Z0-9.^]+\\s*$"),
+        Regex("(?i)\\betf-profil\\b|\\bdividenden, renditen\\b"),
+        // "Aktueller SLV ETF | SLV Kurs & Chart", "SLV – iShares Silver Trust – ETF Stock Quote", "USO vs SLV - ETF Comparison".
+        Regex("(?i)\\bkurs (&|und) chart\\b|\\b(etf |fund )?stock quote\\b|\\b(etf|fund|stock) comparison\\s*$"),
+    )
+
+    /** True for search hits that are a quote or product page ("DAX Turbo … | Kurs, Chart | DE000…"), not an article. */
+    fun isQuotePage(headline: String): Boolean = ISIN.containsMatchIn(headline) || QUOTE_PAGE.any { it.containsMatchIn(headline) }
 
     /**
      * Subscriber-only articles marked in the headline: "(S+)" / "SPIEGEL+", "Z+", "F+",

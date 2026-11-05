@@ -99,10 +99,57 @@ class GoogleNewsTest {
     }
 
     @Test
+    fun `a search reads the English editions too unless the edition is English`() {
+        val gb = NewsEdition("GB", "en")
+        assertEquals(listOf(NewsEdition.GERMANY, NewsEdition.USA, gb), GoogleNews.searchEditions(NewsEdition.GERMANY, allLanguages = true))
+        assertEquals(listOf(NewsEdition.GERMANY), GoogleNews.searchEditions(NewsEdition.GERMANY, allLanguages = false))
+        assertEquals(listOf(NewsEdition.USA), GoogleNews.searchEditions(NewsEdition.USA, allLanguages = true))
+        assertEquals(listOf(gb), GoogleNews.searchEditions(gb, allLanguages = true))
+        assertEquals(listOf(NewsEdition("FR", "fr"), NewsEdition.USA, gb), GoogleNews.searchEditions(NewsEdition("FR", "fr"), allLanguages = true))
+        // The user's query as Google gets it, with exclusions and a date window around it.
+        val q = GoogleNews.buildQuery(GoogleNews.userQuery("SLV ETF"), listOf("wsj.com"), GoogleNews.DateWindow(LocalDate.of(2026, 10, 29), LocalDate.of(2026, 11, 6)))
+        assertEquals("after:2026-10-29 before:2026-11-06 \"SLV\" ETF -site:wsj.com", q)
+    }
+
+    @Test
     fun `quote pages and subscriber-only headlines are recognized`() {
         assertTrue(GoogleNews.isQuotePage("DAX Turbo S 27083.00813 open end (SG) | Kurs, Chart, Analysen | DE000FG2TZV5"))
         assertFalse(GoogleNews.isQuotePage("Dax steigt auf Rekordhoch – drei Treiber für den Leitindex"))
         assertFalse(GoogleNews.isQuotePage("NASA SPACEX launch delayed to 2027"))
+        // Quote, chart and fund pages a search for "SLV ETF" or "Rheinmetall Aktie" brought (05.11.2026).
+        listOf(
+            "iShares Silver Trust (SLV) Stock Price, News, Quote & History",
+            "iShares Silver Trust (SLV) stock price, news, quote and history",
+            "SLV: iShares Silver Stock Price Today, News, Analysis, and Trading Ideas",
+            "SLV ETF Price and Chart — AMEX:SLV",
+            "SLV ETF-Preis und Chart — AMEX:SLV",
+            "SLV-ETF Bestandsliste — AMEX:SLV",
+            "SLV ETF-Profil: Dividenden, Renditen (AMEX:SLV)",
+            "iShares Silver Trust (SLV) Aktienkurs, Nachrichten, Kurs und Verlauf",
+            "iShares Silver Trust (SLV) Bestände",
+            "iShares Silver Trust (SLV) Optionskette",
+            "iShares Silver Trust (SLV) Performance-Verlauf",
+            "CBOE SILVER ETF VOLATILITY INDE (^VXSLV) Charts, Daten und Nachrichten",
+            "Silver ETF VIX aktuell | Index | Stand | Kurs",
+            "Direct Market Index: Kurs, Chart & Einzelwerte",
+            "Rheinmetall (XTRA:RHM) Aktie: Kurs, Prognose & Analyse",
+            "Aktueller SLV ETF | SLV Kurs & Chart",
+            "SLV – iShares Silver Trust – ETF Stock Quote",
+            "USO vs SLV - ETF Comparison",
+        ).forEach { assertTrue(it, GoogleNews.isQuotePage(it)) }
+        // News about the same, which must stay.
+        listOf(
+            "Silver and SLV ETF Prices Lost Crucial Support: Will US NFP Data Turn the Tide?",
+            "Silver ETF (SLV) Hits New 52-Week High",
+            "Does iShares SLV ETF Really Hold Silver? (NYSEARCA:SLV)",
+            "Silber Preis: 109,66 Tonnen Zufluss in SLV",
+            "Rheinmetall-Aktie: Kurs gibt nach",
+            "Nvidia-Aktienkursprognose: Aktie fällt nach siebentägiger Verlustserie auf fast Dreimonatstief",
+            "Is NVIDIA Stock A Buy Right Now?",
+            "Rheinmetall Stock 2026: Why It Slumped and What Comes Next",
+            "FINMA genehmigt ersten Schweizer Bitcoin-ETF – mit Verspätung, aber mit Fondsschutz | News | Aktuell",
+            "Champions League highlights: Fenerbahçe 3-2 Liverpool | Highlights",
+        ).forEach { assertFalse(it, GoogleNews.isQuotePage(it)) }
         assertTrue(GoogleNews.isPaywallHeadline("(S+) Elon Musk wollte die US-Midterms für Trump retten"))
         assertTrue(GoogleNews.isPaywallHeadline("Z+ Wie die Demokraten gewannen"))
         assertTrue(GoogleNews.isPaywallHeadline("Analyse: WELTplus – Was jetzt kommt"))

@@ -25,7 +25,9 @@ keine Cloud und keine KI. (Paket und applicationId heißen aus Update-Gründen w
         ├─ zusammenführen, gleiche Meldung (Link oder Überschrift) raus, neueste zuerst,
         │   ausgefallene Quellen behalten ihre letzten Meldungen (3 Tage)
         ├─ loadMore: ältere Google-News-Zeitfenster (after:/before:) anhängen = endlose Liste
-        ├─ search(query, page): flüchtige Ergebnisse, Seiten = Zeitfenster
+        ├─ search(query, page): flüchtige Ergebnisse, Seiten = Zeitfenster; SearchQuery versteht
+        │   die Anfrage (Ticker wie SLV exakt, Anführungszeichen, OR, -Wort), Hauptausgabe + US/GB
+        │   parallel, SearchRanking sortiert nach Relevanz (ohne -site:, das Google lockert)
         └─ NewsCache: store/news/<thema>.json (Offline-Start)
 
 Artikel öffnen / vorladen
@@ -82,7 +84,7 @@ Artikel öffnen / vorladen
 |---|---|
 | `i18n` | `AppLanguage`, `LocalAppLanguage` und alle Texte (`CommonStrings`, `TopicStrings`, `FeedStrings`, `DiscoverStrings`, `SearchStrings`, `ReaderStrings`, `SettingsStrings`, `SourcesStrings`, `RegionStrings`, `OnboardingStrings`, `WeatherStrings`, `ClothingStrings`, `FormatStrings`, `NotifyStrings`, `ListenStrings`, `UpdateStrings`, `ComponentStrings`, `ShellStrings`) |
 | `data/model` | `Topic`, `TopicIcon`, `FeedSource`, `NewsItem`, `TopicNews`, `NewsEdition`, `Topics` (Fassade), Wetter, `AppSettings` |
-| `data/news` | `Taxonomy` (Kategorien + Unterthemen), `TopicSources` (Quellen eines Themas), `GoogleNews` (URLs, Suchbegriffe, Ausschlüsse, Zeitfenster), `FeedCatalog` + `Regions`, `RssParser`, `RssDates`, `HtmlText` |
+| `data/news` | `Taxonomy` (Kategorien + Unterthemen), `TopicSources` (Quellen eines Themas), `GoogleNews` (URLs, Suchbegriffe, Ausschlüsse, Zeitfenster, Kursseiten), `SearchQuery` (Suchanfrage verstehen, ganze Wörter), `SearchRanking` (Relevanz der Treffer), `FeedCatalog` + `Regions`, `RssParser`, `RssDates`, `HtmlText` |
 | `data/remote` | `OpenMeteoClient`, `RssClient` (Feeds lesen, Feed hinter einer Website finden), `GoogleNewsDecoder` (Google-News-Link → Artikel-URL) |
 | `data/local` | `WeatherStore`, `NewsCache` (JSON-Dateien, atomar geschrieben) |
 | `data` | `SettingsRepository` (DataStore) + `SettingsOps` (folgen, sortieren, Orte, Suchen) + `SettingsMigration`, `WeatherRepository`, `NewsRepository` |
@@ -96,7 +98,7 @@ Artikel öffnen / vorladen
 | `ui/glass` | Morgenglas: `Modifier.glass`, `GlassCard`, durchgehender Himmel (`AmbientSky`), Seitentitel/-leiste |
 | `ui/today`, `ui/news` | Heute-Seite, News-Feed (Chips, Sektionen mit Themen-Icons, endlose Listen, Themen-Sheet, Vorladen) |
 | `ui/discover` | „Themen entdecken“: Kategorie-Kacheln, Kategorie mit Unterthemen und Vorschau, lokale Orte, gefolgte Suchen |
-| `ui/search` | Suche: Feld, letzte Suchen, „Gerade wichtig“, endlose Ergebnisse, „Diesem Thema folgen“ |
+| `ui/search` | Suche: Feld, letzte Suchen, „Gerade wichtig“, endlose Ergebnisse (Relevanz/Neueste, Alle Sprachen/Nur Ausgabe, „EN“-Marke, mit „nur lesbar“ nur geprüfte: `SearchView`), „Diesem Thema folgen“ |
 | `ui/settings` | Einstellungen: Status, Sprache & Region, lokale Nachrichten, Wecker, Deine Themen (sortieren, eigene), Quellen, Feed & Lesen, Darstellung, Orte, Wetterblöcke, App/Updates |
 | `ui/onboarding` | Erster Start: Sprache, Ausgabe, Benachrichtigungen, Ort |
 | `ui/theme` | Theme, Akzent-Schemata, Typografie, `Reading` (Serif-Lesestile) |

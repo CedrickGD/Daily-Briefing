@@ -15,10 +15,12 @@ import com.cedrickgd.morgenbriefing.MorgenbriefingApp
 import com.cedrickgd.morgenbriefing.data.SettingsOps
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.ArticleImage
+import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.data.model.TopicNews
 import com.cedrickgd.morgenbriefing.data.model.Topics
+import com.cedrickgd.morgenbriefing.data.news.GoogleNews
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.ui.news.FeedArticle
 import com.cedrickgd.morgenbriefing.util.attempt
@@ -51,7 +53,11 @@ import java.util.Locale
 @Immutable
 data class SearchUiState(
     val results: SearchResults = SearchResults(),
-    /** [SearchResults.items] ready for the feed's entries (topic, and the picture once the prefetcher knows it). */
+    /**
+     * [SearchResults.items] as they show, in [options]' order and ready for the feed's entries
+     * (topic, and the picture once the prefetcher knows it); with "only readable articles" only
+     * the verified ones ([SearchView.readable]).
+     */
     val articles: List<FeedArticle> = emptyList(),
     val recent: List<String> = emptyList(),
     /** "Gerade wichtig": the edition's newest top stories. */
@@ -60,6 +66,20 @@ data class SearchUiState(
     /** The own topic that follows the current query, when it is followed. */
     val followedTopicId: String? = null,
     val showImages: Boolean = true,
+    val options: SearchOptions = SearchOptions(),
+    /** The edition's language (`de`); [offerLanguages] when the search can add English editions to it. */
+    val editionLanguage: String = "",
+    val offerLanguages: Boolean = false,
+    /** "EN" per item id, for results in another language than the interface. */
+    val languageTags: Map<String, String> = emptyMap(),
+    /** "Only readable articles" is on: [articles] are verified ones. */
+    val readableOnly: Boolean = false,
+    /** Results still being verified ("weitere Artikel werden geprüft"). */
+    val checking: Int = 0,
+    /** The next results to verify, in list order (for [com.cedrickgd.morgenbriefing.data.article.ArticlePrefetcher.prefetch]). */
+    val candidates: List<NewsItem> = emptyList(),
+    /** Results that turned out not to be readable in full. */
+    val unreadable: Int = 0,
 )
 
 /** One-off messages for the snackbar. */
@@ -76,6 +96,7 @@ internal const val TRENDING_SIZE = 5
  * Builds the search screen's state. Pure (unit-tested).
  *
  * @param images lead pictures the prefetcher found, by item id (Google News items have none).
+ * @param statuses what the prefetcher verified, by item id (missing = not checked yet).
  */
 internal fun buildSearchUi(
     settings: AppSettings,
@@ -84,12 +105,15 @@ internal fun buildSearchUi(
     images: Map<String, String>,
     top: TopicNews?,
     topLoading: Boolean,
+    statuses: Map<String, ArticleStatus>,
+    options: SearchOptions = SearchOptions(),
 ): SearchUiState {
     val ownTopic = results.query.takeIf { it.isNotEmpty() }?.let { query ->
         settings.customTopics.firstOrNull { it.query.equals(query, ignoreCase = true) }
     }
     val resultsTopic = searchResultsTopic(results.query, ownTopic, lang)
-    val articles = results.items.map { item ->
+    val view = SearchView.readable(SearchView.ordered(results.items, options.sort), statuses, settings.readableOnly)
+    val articles = view.shown.map { item ->
         val picture = images[item.id]
         val shown = if (item.image == null && picture != null) item.copy(image = ArticleImage(picture)) else item
         val topic = if (item.topicId == Topics.SEARCH_ID) resultsTopic else Topics.resolveOrNeutral(item.topicId, settings, lang)
@@ -104,6 +128,14 @@ internal fun buildSearchUi(
         trendingLoading = topLoading,
         followedTopicId = followedTopic,
         showImages = settings.showImages,
+        options = options,
+        editionLanguage = settings.edition.language,
+        offerLanguages = GoogleNews.searchEditions(settings.edition, allLanguages = true).size > 1,
+        languageTags = view.shown.mapNotNull { item -> SearchView.languageTag(item, lang)?.let { item.id to it } }.toMap(),
+        readableOnly = settings.readableOnly,
+        checking = view.checking,
+        candidates = view.candidates,
+        unreadable = view.unreadable,
     )
 }
 
@@ -126,8 +158,10 @@ private val SEARCH_SEEDS = listOf(0xFF2F6FDE, 0xFF0F9D9A, 0xFF2E8B57, 0xFF7B61FF
 /**
  * The news search: typing searches after a short pause ([DEBOUNCE_MS]; the IME's search key
  * at once), every new query cancels the previous one, results page endlessly into the past
- * ([SearchPaging]), the visible results are prefetched for the reader, and a query can be
- * followed as an own topic. The text in the field survives process death.
+ * ([SearchPaging]), the visible results are prefetched for the reader (with "only readable
+ * articles" also the next ones to verify, [SearchUiState.candidates]), their order and
+ * languages are the user's choice ([SearchOptions]), and a query can be followed as an own
+ * topic. The text in the field and the choices survive process death.
  */
 @OptIn(FlowPreview::class)
 class SearchViewModel(
@@ -145,6 +179,14 @@ class SearchViewModel(
     private var searchJob: Job? = null
     private var moreJob: Job? = null
 
+    /** Order and languages of the results; they survive process death like the query. */
+    private val options = MutableStateFlow(
+        SearchOptions(
+            sort = saved.get<String>(KEY_SORT)?.let { name -> SearchSort.entries.firstOrNull { it.name == name } } ?: SearchSort.RELEVANCE,
+            allLanguages = saved.get<Boolean>(KEY_ALL_LANGUAGES) ?: true,
+        ),
+    )
+
     private val settingsFlow = container.settings.settings
         .catch { e ->
             Log.w(TAG, "Settings unavailable", e)
@@ -155,10 +197,11 @@ class SearchViewModel(
     val state: StateFlow<SearchUiState> = combine(
         settingsFlow.filterNotNull(),
         results,
-        container.prefetcher.images,
+        combine(container.prefetcher.images, container.prefetcher.status, ::Pair),
         container.news.state,
-    ) { settings, current, images, news ->
-        buildSearchUi(settings, settings.language, current, images, news.topics[Topics.TOP_ID], Topics.TOP_ID in news.loading)
+        options,
+    ) { settings, current, (images, statuses), news, chosen ->
+        buildSearchUi(settings, settings.language, current, images, news.topics[Topics.TOP_ID], Topics.TOP_ID in news.loading, statuses, chosen)
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SearchUiState())
@@ -221,7 +264,7 @@ class SearchViewModel(
         moreJob?.cancel()
         moreJob = viewModelScope.launch {
             val settings = currentSettings() ?: return@launch
-            val result = attempt { container.news.search(query, settings, page) }
+            val result = attempt { container.news.search(query, settings, page, options.value.allLanguages) }
             results.update { current ->
                 result.fold(
                     onSuccess = { SearchPaging.onPage(current, it) },
@@ -241,12 +284,31 @@ class SearchViewModel(
         rememberQuery(results.value.query)
     }
 
-    /** Warms the reader for [items] (those on screen). */
+    /**
+     * Warms the reader for [items]: those on screen and, with "only readable articles", the
+     * next results to verify ([SearchUiState.candidates], in list order) – only verified ones show.
+     */
     fun prefetch(items: List<NewsItem>) {
         val settings = settingsFlow.value ?: return
         if (items.isEmpty()) return
         items.forEach { prefetched += it.id }
         container.prefetcher.prefetch(items, settings)
+    }
+
+    /** Orders the results as ranked or newest first (no new search). */
+    fun setSort(sort: SearchSort) {
+        if (options.value.sort == sort) return
+        options.update { it.copy(sort = sort) }
+        saved[KEY_SORT] = sort.name
+    }
+
+    /** Searches all languages (the English editions too) or only the edition's; runs the search again. */
+    fun setAllLanguages(all: Boolean) {
+        if (options.value.allLanguages == all) return
+        options.update { it.copy(allLanguages = all) }
+        saved[KEY_ALL_LANGUAGES] = all
+        val query = results.value.query
+        if (SearchPaging.isSearchable(query)) search(query, force = true)
     }
 
     /** Follows the current query as an own topic, or stops following it again. */
@@ -283,7 +345,7 @@ class SearchViewModel(
         results.value = SearchPaging.start(query)
         searchJob = viewModelScope.launch {
             val settings = currentSettings() ?: return@launch
-            val result = attempt { container.news.search(query, settings, 0) }
+            val result = attempt { container.news.search(query, settings, 0, options.value.allLanguages) }
             results.update { state ->
                 result.fold(
                     onSuccess = { SearchPaging.onPage(state, it) },
@@ -329,6 +391,8 @@ class SearchViewModel(
         private const val TAG = "SearchViewModel"
         private const val STOP_TIMEOUT_MS = 5_000L
         private const val KEY_QUERY = "query"
+        private const val KEY_SORT = "sort"
+        private const val KEY_ALL_LANGUAGES = "allLanguages"
 
         /** Pause after the last keystroke before searching. */
         const val DEBOUNCE_MS = 450L

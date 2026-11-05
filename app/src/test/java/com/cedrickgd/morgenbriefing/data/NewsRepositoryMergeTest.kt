@@ -215,6 +215,25 @@ class NewsRepositoryMergeTest {
     fun `texts fold for comparison and search`() {
         assertEquals("borse dax rekord", NewsRepository.normalizeText("„Börse: DAX-Rekord!“"))
         assertEquals("strasse", NewsRepository.normalizeText("Straße"))
-        assertEquals(listOf("midterms", "senat"), NewsRepository.searchWords("Midterms OR Senat -site:x.com when:1d"))
+    }
+
+    @Test
+    fun `cached matches need every word whole, and one of an OR`() {
+        val topic = TopicNews(
+            "a", "2026-10-29T08:00:00+01:00",
+            listOf(
+                item("slv", a, "2026-10-29T10:00:00+01:00", "Silber: Zufluss in SLV-ETF"),
+                item("etf", a, "2026-10-29T10:00:00+01:00", "Ein ETF für alle Fälle"),
+                item("slvp", a, "2026-10-29T10:00:00+01:00", "SLVP ETF zieht an"),
+                item("senat", a, "2026-10-29T09:00:00+01:00", "Der Senat nach der Wahl"),
+            ),
+        )
+        // Both words, whole: "SLV" is not in "SLVP", "ETF" alone is not enough.
+        assertEquals(listOf("slv"), NewsRepository.matching(listOf(topic), "SLV ETF").map { it.id })
+        // "OR" wants one of them.
+        assertEquals(setOf("slv", "etf", "slvp", "senat"), NewsRepository.matching(listOf(topic), "Senat OR ETF").map { it.id }.toSet())
+        // Operators and excluded sites are for Google; the words still have to be there.
+        assertEquals(listOf("senat"), NewsRepository.matching(listOf(topic), "Midterms OR Senat -site:x.com when:1d").map { it.id })
+        assertEquals(listOf("etf"), NewsRepository.matching(listOf(topic), "ETF -Silber -SLVP").map { it.id })
     }
 }

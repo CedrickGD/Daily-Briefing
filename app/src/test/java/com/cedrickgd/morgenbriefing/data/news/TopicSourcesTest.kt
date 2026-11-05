@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.data.news
 
+import com.cedrickgd.morgenbriefing.data.article.KnownWalls
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.FeedSource
 import com.cedrickgd.morgenbriefing.data.model.NewsEdition
@@ -114,13 +115,35 @@ class TopicSourcesTest {
         val blog = FeedSource("custom:b", "Blog", "https://blog.example/feed", "custom:f", builtIn = false)
         val settings = usa.copy(customTopics = listOf(search, feeds), customFeeds = listOf(blog))
         val gn = TopicSources.resolve("custom:m", settings).single()
-        assertTrue(gn.url.toHttpUrl().queryParameter("q")!!.startsWith("Midterms -site:"))
+        // No -site: exclusions: they make Google News answer loosely; walled sites go by domain.
+        assertEquals("Midterms", gn.url.toHttpUrl().queryParameter("q"))
+        assertTrue(TopicSources.searchExclusions("custom:m", settings, NewsEdition.USA, KnownWalls.DOMAINS).isEmpty())
+        assertTrue(TopicSources.searchExclusions("wirtschaft/boerse", settings, NewsEdition.USA, KnownWalls.DOMAINS).isNotEmpty())
         assertEquals(listOf(blog), TopicSources.resolve("custom:f", settings))
         assertEquals(PagingQuery("Midterms", NewsEdition.USA, "gn:custom:m@US:en"), TopicSources.pagingQuery("custom:m", settings))
         assertNull(TopicSources.pagingQuery("custom:f", settings))
         // A user feed of a blocked site stays: the user chose it.
         val walled = FeedSource("custom:z", "ZEIT", "https://newsfeed.zeit.de/index", "custom:f", builtIn = false)
         assertTrue(TopicSources.resolve("custom:f", settings.copy(customFeeds = listOf(walled))).isNotEmpty())
+    }
+
+    @Test
+    fun `a followed search reads like the search screen - exact ticker, English editions too`() {
+        val slv = Topic("custom:slv", "SLV ETF", "🔎", 0xFF2F6FDE, custom = true, query = "SLV ETF")
+        val settings = germany.copy(customTopics = listOf(slv))
+        // The settings list the search once; the English editions come along with it.
+        val main = TopicSources.resolve("custom:slv", settings).single()
+        val extra = TopicSources.extraEditions("custom:slv", settings)
+        val sources = listOf(main) + extra
+        assertEquals(listOf("gn:custom:slv@DE:de", "gn:custom:slv@US:en", "gn:custom:slv@GB:en"), sources.map { it.id })
+        assertEquals(listOf("DE:de", "US:en", "GB:en"), sources.map { it.url.toHttpUrl().queryParameter("ceid") })
+        assertTrue(sources.all { it.url.toHttpUrl().queryParameter("q") == "\"SLV\" ETF" })
+        // Only the main edition pages into the past, with the same query.
+        assertEquals(PagingQuery("\"SLV\" ETF", NewsEdition.GERMANY, "gn:custom:slv@DE:de"), TopicSources.pagingQuery("custom:slv", settings))
+        // Switching the search off switches its English editions off; English main editions and other topics have none.
+        assertTrue(TopicSources.extraEditions("custom:slv", settings.copy(disabledFeeds = setOf(main.id))).isEmpty())
+        assertTrue(TopicSources.extraEditions("custom:slv", settings.copy(edition = NewsEdition.USA)).isEmpty())
+        assertTrue(TopicSources.extraEditions("wirtschaft/boerse", settings).isEmpty())
     }
 
     @Test

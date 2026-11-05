@@ -76,8 +76,16 @@ class NewsRepositoryPagingTest {
             val before = Regex("before:(\\d{4}-\\d{2}-\\d{2})").find(q)?.groupValues?.get(1)
             val after = Regex("after:(\\d{4}-\\d{2}-\\d{2})").find(q)?.groupValues?.get(1)
             val newest = LocalDate.parse(firstPageDay)
+            val ceid = request.requestUrl!!.queryParameter("ceid")
             val items = when {
                 q.startsWith("Nothing") -> emptyList()
+                // A ticker: German news in the German edition, English news (and noise) in the English ones.
+                q.startsWith("\"BTC\"") && ceid == "DE:de" -> listOf(story("BTC springt nach der Wahl über 80.000 Dollar", "$newest", site = "https://www.btc-echo.de", publisher = "BTC-ECHO"))
+                q.startsWith("\"BTC\"") -> listOf(
+                    story("BTC jumps as ETF flows return after the vote", "$newest"),
+                    story("Weather turns cold across the country this weekend", "$newest", site = "https://www.weather.com", publisher = "Weather"),
+                    story("BTC hits a record in a year long gone", "2024-03-01"),
+                )
                 // A story that was quiet in the last week.
                 "Quiet" in q && before != null && before > "2026-10-30" -> emptyList()
                 before == null -> listOfNotNull(
@@ -246,8 +254,11 @@ class NewsRepositoryPagingTest {
         repository.refresh(listOf(KRYPTO), settings)
         val first = repository.search("Ethereum upgrade", settings)
         assertTrue(first.items.isNotEmpty())
-        assertEquals("Bitcoin jumps after the election results came in", first.items.first().headline)
-        assertTrue(first.items.any { it.topicId == KRYPTO })
+        // Most relevant first: the story with both words, as the topic's own copy; Google's
+        // first hit shares no word with the query and comes last (it stays: Google saw more).
+        assertEquals("Ethereum upgrade goes live on the main network", first.items.first().headline)
+        assertEquals(KRYPTO, first.items.first().topicId)
+        assertEquals("Bitcoin jumps after the election results came in", first.items.last().headline)
         assertTrue(first.items.none { it.publisherDomain == "wsj.com" })
         assertTrue(first.hasMore)
         val second = repository.search("Ethereum upgrade", settings, page = 1)
@@ -255,6 +266,38 @@ class NewsRepositoryPagingTest {
         assertEquals(Topics.SEARCH_ID, second.items.single().topicId)
         assertFalse(repository.search("Nothing at all", settings).hasMore)
         assertTrue(repository.search("   ", settings).items.isEmpty())
+    }
+
+    @Test
+    fun `a search in a German edition reads the English editions too, ranked and filtered`() = runTest {
+        val germany = AppSettings(edition = NewsEdition.GERMANY, followed = listOf(KRYPTO))
+        val found = repository.search("BTC", germany)
+        val asked = seen.filter { "/rss/search" in it }.map { it.toHttpUrl() }
+        assertEquals(setOf("DE:de", "US:en", "GB:en"), asked.map { it.queryParameter("ceid") }.toSet())
+        // The ticker goes to Google News quoted, in every edition.
+        assertTrue(asked.all { it.queryParameter("q")!!.startsWith("\"BTC\"") })
+        // English noise that shares no word, and a page from years ago, stay out; the same English story from two editions shows once.
+        assertEquals(listOf("BTC springt nach der Wahl über 80.000 Dollar", "BTC jumps as ETF flows return after the vote"), found.items.map { it.headline })
+        assertEquals(listOf("gn:search@DE:de", "gn:search@US:en"), found.items.map { it.sourceId })
+
+        seen.clear()
+        val german = repository.search("BTC", germany, allLanguages = false)
+        assertEquals(listOf("DE:de"), seen.filter { "/rss/search" in it }.map { it.toHttpUrl().queryParameter("ceid") })
+        assertEquals(1, german.items.size)
+    }
+
+    @Test
+    fun `a followed search reads the English editions too, without their noise`() = runTest {
+        val followed = Topic("custom:btc", "BTC", "🔎", 0xFF2F6FDE, custom = true, query = "BTC")
+        val germany = AppSettings(edition = NewsEdition.GERMANY, customTopics = listOf(followed), followed = listOf(followed.id))
+        repository.refresh(listOf(followed.id), germany)
+        val news = repository.state.value.topics.getValue(followed.id)
+        assertEquals(listOf("gn:custom:btc@DE:de", "gn:custom:btc@US:en", "gn:custom:btc@GB:en"), news.sources.map { it.sourceId })
+        assertEquals(
+            setOf("BTC springt nach der Wahl über 80.000 Dollar", "BTC jumps as ETF flows return after the vote"),
+            news.items.map { it.headline }.toSet(),
+        )
+        assertTrue(seen.filter { "/rss/search" in it }.all { it.toHttpUrl().queryParameter("q")!!.startsWith("\"BTC\"") })
     }
 
     @Test

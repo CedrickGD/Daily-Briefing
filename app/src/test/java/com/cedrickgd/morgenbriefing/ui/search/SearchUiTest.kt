@@ -15,7 +15,8 @@ import org.junit.Test
 
 class SearchUiTest {
 
-    private val settings = AppSettings(followed = listOf("top", "politik"), recentSearches = listOf("Midterms", "EZB"))
+    /** Everything shows: the readability filter has its own tests ([SearchViewTest]). */
+    private val settings = AppSettings(followed = listOf("top", "politik"), recentSearches = listOf("Midterms", "EZB"), readableOnly = false)
 
     private fun item(id: String, topic: String = Topics.SEARCH_ID, image: ArticleImage? = null, source: String = "gn") = NewsItem(
         id = id, headline = "Story $id", url = "https://news.example/$id", source = "Example", sourceId = source, topicId = topic, image = image,
@@ -34,6 +35,7 @@ class SearchUiTest {
             images = mapOf("a" to "https://img.example/a.jpg", "b" to "https://img.example/other.jpg"),
             top = null,
             topLoading = false,
+            statuses = emptyMap(),
         )
         val (a, b, c) = ui.articles
         assertEquals("https://img.example/a.jpg", a.item.image?.url)
@@ -52,10 +54,10 @@ class SearchUiTest {
     fun `the query counts as followed only while its own topic is followed`() {
         val (followed, id) = SettingsOps.followSearch(settings, "Midterms")
         val query = results("midterms")
-        assertEquals(id, buildSearchUi(followed, AppLanguage.DE, query, emptyMap(), null, false).followedTopicId)
+        assertEquals(id, buildSearchUi(followed, AppLanguage.DE, query, emptyMap(), null, false, emptyMap()).followedTopicId)
         val unfollowed = SettingsOps.unfollow(followed, id)
-        assertNull(buildSearchUi(unfollowed, AppLanguage.DE, query, emptyMap(), null, false).followedTopicId)
-        assertNull(buildSearchUi(followed, AppLanguage.DE, SearchResults(), emptyMap(), null, false).followedTopicId)
+        assertNull(buildSearchUi(unfollowed, AppLanguage.DE, query, emptyMap(), null, false, emptyMap()).followedTopicId)
+        assertNull(buildSearchUi(followed, AppLanguage.DE, SearchResults(), emptyMap(), null, false, emptyMap()).followedTopicId)
     }
 
     @Test
@@ -81,7 +83,7 @@ class SearchUiTest {
             (1..8).map { item("t$it", topic = Topics.TOP_ID, source = if (it == 2) "off" else "gn") },
             listOf(SourceStatus("gn", "Google News", ok = true, count = 8)),
         )
-        val ui = buildSearchUi(settings.copy(disabledFeeds = setOf("off")), AppLanguage.DE, SearchResults(), emptyMap(), top, topLoading = true)
+        val ui = buildSearchUi(settings.copy(disabledFeeds = setOf("off")), AppLanguage.DE, SearchResults(), emptyMap(), top, topLoading = true, statuses = emptyMap())
         assertEquals(listOf("t1", "t3", "t4", "t5", "t6"), ui.trending.map { it.id })
         assertEquals(TRENDING_SIZE, ui.trending.size)
         assertTrue(ui.trendingLoading)

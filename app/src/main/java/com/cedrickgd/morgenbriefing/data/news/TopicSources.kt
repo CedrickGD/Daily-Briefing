@@ -28,7 +28,8 @@ data class PagingQuery(
  * - **Region**: in Germany the chosen Bundesland preset ([Regions]), everywhere the Google News
  *   page of the home place (in the edition of the place's country).
  * - **Place** (`local:…`): the Google News page of the place, in its country's edition.
- * - **Own topic** (`custom:…`): the user's feeds and, for a followed search, that search.
+ * - **Own topic** (`custom:…`): the user's feeds and, for a followed search, that search in
+ *   the main edition (plus, read by the repository, the English editions: [extraEditions]).
  *
  * Feeds the user added to any topic come last. With [AppSettings.readableOnly] publisher feeds
  * of sites the reader cannot show are skipped and searches leave those sites out (`-site:`).
@@ -50,7 +51,7 @@ object TopicSources {
         val own = settings.customFeeds.filter { it.topicId == topicId }
         val sources = when {
             Topics.isLocalId(topicId) -> listOfNotNull(Topics.placeFor(topicId, settings)?.let { localSource(topicId, it, settings) })
-            Topics.isCustomId(topicId) -> listOfNotNull(customSearch(topicId, settings, blocked))
+            Topics.isCustomId(topicId) -> listOfNotNull(customSearch(topicId, settings, blocked, settings.edition))
             topicId == Topics.REGION_ID -> regionSources(settings)
             else -> builtInSources(topicId, settings, blocked)
         }
@@ -72,7 +73,7 @@ object TopicSources {
         if (sourceId in settings.disabledFeeds) return null
         val query = when {
             Topics.isLocalId(topicId) -> Topics.placeFor(topicId, settings)?.let { placeQuery(it, edition) }
-            Topics.isCustomId(topicId) -> settings.customTopics.firstOrNull { it.id == topicId }?.query?.takeIf { it.isNotBlank() }
+            Topics.isCustomId(topicId) -> settings.customTopics.firstOrNull { it.id == topicId }?.query?.takeIf { it.isNotBlank() }?.let(GoogleNews::userQuery)
             topicId == Topics.REGION_ID -> settings.home.takeIf { it.name.isNotBlank() }?.let { placeQuery(it, edition) }
             else -> Taxonomy.byId(topicId)?.queryFor(edition)
         } ?: return null
@@ -173,11 +174,41 @@ object TopicSources {
         return googleSource(topicId, GoogleNews.geoUrl(geoName(place), edition), edition)
     }
 
-    private fun customSearch(topicId: String, settings: AppSettings, blocked: Collection<String>): FeedSource? {
-        val query = settings.customTopics.firstOrNull { it.id == topicId }?.query?.takeIf { it.isNotBlank() } ?: return null
-        val edition = settings.edition
-        return googleSource(topicId, GoogleNews.searchUrl(GoogleNews.buildQuery(query, exclusions(settings, edition, blocked)), edition), edition)
+    /**
+     * The English editions a followed search reads besides its main-edition source, like the
+     * search screen does ([GoogleNews.searchEditions]): empty for other topics, for an English
+     * main edition and when the search's Google News source is switched off. They are not
+     * among [resolve]'s sources – the settings list the search once, and switching it off
+     * switches these off too; [com.cedrickgd.morgenbriefing.data.NewsRepository] reads them
+     * with the topic and keeps only their articles that name the query.
+     */
+    fun extraEditions(topicId: String, settings: AppSettings, blocked: Collection<String> = KnownWalls.DOMAINS): List<FeedSource> {
+        if (!Topics.isCustomId(topicId) || googleNewsId(topicId, settings.edition) in settings.disabledFeeds) return emptyList()
+        return GoogleNews.searchEditions(settings.edition, allLanguages = true)
+            .filter { it != settings.edition }
+            .mapNotNull { edition -> customSearch(topicId, settings, blocked, edition) }
     }
+
+    /**
+     * A followed search in [edition]: the query as [GoogleNews.userQuery] gives it (tickers
+     * exact, the user's operators kept), like the search screen without `-site:` exclusions
+     * ([searchExclusions]). Only the main edition pages into the past ([pagingQuery]).
+     */
+    private fun customSearch(topicId: String, settings: AppSettings, blocked: Collection<String>, edition: NewsEdition): FeedSource? {
+        val query = settings.customTopics.firstOrNull { it.id == topicId }?.query?.takeIf { it.isNotBlank() } ?: return null
+        return googleSource(topicId, GoogleNews.searchUrl(GoogleNews.buildQuery(GoogleNews.userQuery(query), searchExclusions(topicId, settings, edition, blocked)), edition), edition)
+    }
+
+    /**
+     * The `-site:` exclusions of [topicId]'s Google News search (its first page and its endless
+     * list): none for a followed search – any `site:` operator makes Google News answer loosely,
+     * 100 results whatever the query ("Bundestagswahl": 18 results, 15 naming it; with one
+     * `-site:` 100 results, 4 naming it; checked 05.11.2026), and a followed search has no
+     * ranking to sort that out. Walled sites still go by domain ([com.cedrickgd.morgenbriefing.data.NewsRepository.readable]).
+     * Other topics: [exclusions].
+     */
+    fun searchExclusions(topicId: String, settings: AppSettings, edition: NewsEdition, blocked: Collection<String>): List<String> =
+        if (Topics.isCustomId(topicId)) emptyList() else exclusions(settings, edition, blocked)
 
     private fun googleSource(topicId: String, url: String, edition: NewsEdition) = FeedSource(
         id = googleNewsId(topicId, edition),
