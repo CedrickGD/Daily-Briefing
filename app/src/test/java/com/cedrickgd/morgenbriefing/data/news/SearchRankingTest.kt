@@ -182,9 +182,22 @@ class SearchRankingTest {
         val found = listOf(gn("Midterms: Machtwechsel in Texas stellt die US-Politik auf den Kopf", "2026-11-05", "handelsblatt.com"))
         val result = NewsRepository.searchResults(SearchQuery.parse("Midterms"), listOf(held), listOf(SearchRanking.Found(found, main = true)), now)
         assertEquals(listOf("politik/usa"), result.map { it.topicId })
-        assertEquals(12.0, SearchRanking.freshness(0), 0.0)
+        assertEquals(16.0, SearchRanking.freshness(0), 0.0)
         assertEquals(0.0, SearchRanking.freshness(200), 0.0)
         assertEquals(-12.0, SearchRanking.freshness(400), 0.0)
+    }
+
+    @Test
+    fun `an old analysis naming the ticker ranks after this week's stories`() {
+        val us = listOf(
+            gn("SLV ETF stock analysis as silver prices momentum gains steam", "2025-12-12", "tradingview.com", "US:en"),
+            gn("Silver and SLV ETF Prices Lost Crucial Support: Will US NFP Data Turn the Tide?", "2026-10-31", "benzinga.com", "US:en"),
+            gn("Silver ETFs rally as SLV draws record inflows", "2026-11-04", "cnbc.com", "US:en"),
+        )
+        val result = ranked("SLV ETF", emptyList(), us)
+        assertEquals(3, result.size)
+        // The phrase match outranks the bare ticker among this week's stories; the 328-day-old analysis comes last.
+        assertEquals("SLV ETF stock analysis as silver prices momentum gains steam", result.last())
     }
 
     @Test

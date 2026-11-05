@@ -43,6 +43,26 @@ class ArticleCleanerTest {
     }
 
     @Test
+    fun `a lead paragraph that rewords the teaser goes (ABC News, seen on the emulator)`() {
+        val teaser = "President Donald Trump said he intends to keep Defense Secretary Pete Hegseth in his job, as Rep. Massie, prepares to introduce an impeachment resolution against him."
+        val lead = "President Donald Trump said Thursday he intends to keep Defense Secretary Pete Hegseth in his job, as GOP Rep. Thomas Massie prepares to reintroduce an impeachment resolution against Hegseth."
+        val next = "\"I have every intention to keep him,\" Trump said."
+        val arranged = ArticleCleaner.arrange(content(ArticleBlock.paragraph(lead), ArticleBlock.paragraph(next)), teaser)
+        assertEquals(listOf(next), arranged.content.blocks.map { it.text })
+        assertEquals(lead, arranged.teaser)
+    }
+
+    @Test
+    fun `a second paragraph sharing the teaser's words but saying more stays`() {
+        val teaser = "The central bank kept interest rates unchanged on Thursday and signalled that further cuts are unlikely before the spring."
+        val lead = "Inflation has eased for three months in a row, the bank said, but wage growth and energy prices remain a worry for its policymakers."
+        val arranged = ArticleCleaner.arrange(content(ArticleBlock.paragraph(lead)), teaser)
+        assertEquals(teaser, arranged.teaser)
+        assertEquals(1, arranged.content.blocks.size)
+        assertFalse(TextMatch.paraphrase(lead, teaser))
+    }
+
+    @Test
     fun `a header box with headline and teaser is dropped and the feed teaser stays (Handelsblatt)`() {
         val teaser = "Die Bundeswehr wächst und übernimmt mehr Verantwortung in der Nato. Verteidigungsminister Pistorius setzt für den weiteren Aufbau auf Heeresinspekteur Christian Freuding als neuen Generalinspekteur."
         val box = "Bundeswehr : Heereschef Freuding tritt an Spitze der Bundeswehr $teaser"

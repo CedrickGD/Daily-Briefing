@@ -14,8 +14,9 @@ import java.time.Instant
  * silver-ETF story), all of them there more, the query as a phrase there and a ticker there
  * more again; words only in the teaser or the publisher's name count less. Google News' own
  * order is a prior (its first hit gets the most), the freshness a mild factor, the main
- * edition a small edge over the English ones. Pages older than a year come after the fresh
- * results (hardly news: quote pages and explainers from 2017 that name "SLV ETF" in full), and
+ * edition a small edge over the English ones. Results older than [OLD_DAYS] come after the
+ * fresh ones (a 328-day-old analysis must not sit between this week's SLV stories), pages older
+ * than a year after those (hardly news: quote pages and explainers from 2017 that name "SLV ETF" in full), and
  * results that share no word of the query at all (Google matched the article's body, which the
  * app does not see) come last.
  *
@@ -36,6 +37,9 @@ object SearchRanking {
 
     /** Older than this (days) is no news any more. */
     const val STALE_DAYS = 365L
+
+    /** Older than this (days) ranks after every fresh related result. */
+    const val OLD_DAYS = 60L
 
     private const val HEADLINE = 32.0
     private const val TEXT = 12.0
@@ -94,6 +98,7 @@ object SearchRanking {
         if (match.excluded) return null
         val age = ageInDays(item.publishedAt, now)
         val stale = age != null && age > STALE_DAYS
+        val old = age != null && age > OLD_DAYS
         val related = !query.hasTerms || match.sharesAnyTerm
         if (position != null) {
             if (!main && (!related || stale)) return null
@@ -112,15 +117,20 @@ object SearchRanking {
         val tier = when {
             !related -> TIER_UNRELATED
             stale -> TIER_STALE
+            old -> TIER_OLD
             else -> TIER_RELATED
         }
         return Scored(item, tier = tier, score = score)
     }
 
-    /** Results that share a word with the query come first, those older than [STALE_DAYS] after them, those that share none last. */
+    /**
+     * Results that share a word with the query come first, those older than [OLD_DAYS] after
+     * them, then those older than [STALE_DAYS], those that share none last.
+     */
     private const val TIER_RELATED = 0
-    private const val TIER_STALE = 1
-    private const val TIER_UNRELATED = 2
+    private const val TIER_OLD = 1
+    private const val TIER_STALE = 2
+    private const val TIER_UNRELATED = 3
 
     /** Forums and social sites Google News lists among the results: discussions, not news ("Who else buys the SLV ETF?"). */
     private val FORUMS = listOf("reddit.com", "quora.com", "stocktwits.com", "x.com", "twitter.com", "facebook.com", "instagram.com", "tiktok.com")
@@ -161,16 +171,18 @@ object SearchRanking {
     }
 
     /**
-     * The mild freshness bonus: +12 today, falling to 0 after three months; a page older than a
-     * year gets −12 (a stray old hit, an evergreen explainer). Undated: 0.
+     * The freshness bonus: +16 today, falling to 0 after two months; a page older than a year
+     * gets −12 (a stray old hit, an evergreen explainer). Undated: 0. News search: this week's
+     * story with the ticker beats last month's with the ticker and a phrase match.
      */
     internal fun freshness(ageDays: Long?): Double = when {
         ageDays == null -> 0.0
-        ageDays <= 1 -> 12.0
-        ageDays <= 3 -> 10.0
-        ageDays <= 7 -> 8.0
-        ageDays <= 30 -> 5.0
-        ageDays <= 90 -> 2.0
+        ageDays <= 1 -> 16.0
+        ageDays <= 3 -> 13.0
+        ageDays <= 7 -> 10.0
+        ageDays <= 14 -> 7.0
+        ageDays <= 30 -> 4.0
+        ageDays <= OLD_DAYS -> 1.0
         ageDays <= STALE_DAYS -> 0.0
         else -> -12.0
     }

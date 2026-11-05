@@ -537,6 +537,12 @@ internal object ArticleCleaner {
                             shown = ""
                         }
                     }
+                    i == candidates.first().index && TextMatch.paraphrase(text, bare) &&
+                        listOf(headline, content.title).none { TextMatch.words(it).size >= 3 && TextMatch.covers(text, it) } -> {
+                        // The lead paragraph rewords the teaser: say it once, in the page's own words.
+                        if (TextMatch.wordCount(text) <= PROMOTE_MAX_WORDS) shown = text
+                        blocks = blocks.filterIndexed { k, _ -> k != i }
+                    }
                     else -> continue
                 }
                 break

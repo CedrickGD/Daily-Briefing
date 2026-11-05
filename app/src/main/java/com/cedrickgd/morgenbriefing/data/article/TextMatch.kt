@@ -55,6 +55,28 @@ internal object TextMatch {
         return containment(wa, wb) >= threshold && containment(wb, wa) >= threshold
     }
 
+    /**
+     * True when [a] and [b] say the same in slightly different words – the teaser the page's
+     * own lead paragraph rewords ("Trump said he intends to keep Hegseth … as Rep. Massie
+     * prepares to introduce …" vs "Trump said Thursday he intends to keep Hegseth … as GOP Rep.
+     * Thomas Massie prepares to reintroduce …": 73 % of the word pairs shared, below [same]'s
+     * threshold). Only for the teaser against the lead: both at least [PARAPHRASE_MIN_WORDS]
+     * long, of similar length, the same numbers, and at least [threshold] of each one's word
+     * pairs in the other.
+     */
+    fun paraphrase(a: String, b: String, threshold: Double = 0.6): Boolean {
+        val wa = words(a)
+        val wb = words(b)
+        if (wa.size < PARAPHRASE_MIN_WORDS || wb.size < PARAPHRASE_MIN_WORDS) return false
+        val ratio = wa.size.toDouble() / wb.size
+        if (ratio < 0.6 || ratio > 1.0 / 0.6) return false
+        if (numbers(wa) != numbers(wb)) return false
+        return containment(wa, wb) >= threshold && containment(wb, wa) >= threshold
+    }
+
+    /** Shorter texts are too easy to confuse to call a rewording the same. */
+    const val PARAPHRASE_MIN_WORDS = 12
+
     private fun numbers(words: List<String>): Set<String> = words.filter { w -> w.any(Char::isDigit) }.toSet()
 
     /**
