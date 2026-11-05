@@ -44,7 +44,7 @@ jobs:
       - name: Debug-APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: morgenbriefing-debug-apk
+          name: dailybriefing-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
@@ -121,7 +121,7 @@ jobs:
             echo "::error::Keine Release-APK gefunden."
             exit 1
           fi
-          target="Morgenbriefing-${GITHUB_REF_NAME}.apk"
+          target="DailyBriefing-${GITHUB_REF_NAME}.apk"
           mv "$apk" "$target"
           echo "path=$target" >> "$GITHUB_OUTPUT"
 

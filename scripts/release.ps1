@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds, signs, tags and publishes a Morgenbriefing release (GitHub release with the APK).
+    Builds, signs, tags and publishes a Daily Briefing release (GitHub release with the APK).
 
 .DESCRIPTION
     1. Refuses to run on a dirty working tree, outside of main, or when the tag already exists.
@@ -8,7 +8,7 @@
     3. Runs ./gradlew testDebugUnitTest assembleRelease (JAVA_HOME defaults to the local JDK 17).
     4. Verifies the release APK: signature (apksigner, signer CN=CedrickGD) and package/version (aapt2).
     5. Commits "release: v<Version>", tags v<Version>, pushes main and the tag.
-    6. Creates the GitHub release with gh and uploads the APK as Morgenbriefing-v<Version>.apk.
+    6. Creates the GitHub release with gh and uploads the APK as DailyBriefing-v<Version>.apk.
     7. With -Install: "adb install -r" on every connected physical device (emulators are skipped).
 
     -DryRun does all checks, the version bump, the build and the APK verification, then restores
@@ -255,7 +255,7 @@ try {
     if ($packageLine -notmatch "versionName='$([regex]::Escape($Version))'") { throw "APK has the wrong versionName: $packageLine" }
     Write-Ok "package $PackageName $Version ($newCode)"
 
-    $assetName = "Morgenbriefing-$Tag.apk"
+    $assetName = "DailyBriefing-$Tag.apk"
     $assetPath = Join-Path $apkDir $assetName
     Copy-Item -Path $apk -Destination $assetPath -Force
 
@@ -264,11 +264,11 @@ try {
         Write-Step 'Dry run complete - would now:'
         Write-Host "    git commit gradle.properties -m 'release: $Tag'"
         Write-Host "    git tag -a $Tag; git push origin main; git push origin $Tag"
-        Write-Host "    gh release create $Tag $assetName --title 'Morgenbriefing $Version'"
+        Write-Host "    gh release create $Tag $assetName --title 'Daily Briefing $Version'"
         Write-Host "    release notes:`n$Notes" -ForegroundColor DarkGray
     } else {
         Write-Step "Committing and tagging $Tag"
-        $messageFile = Join-Path ([System.IO.Path]::GetTempPath()) "morgenbriefing-release-$Version.txt"
+        $messageFile = Join-Path ([System.IO.Path]::GetTempPath()) "dailybriefing-release-$Version.txt"
         [System.IO.File]::WriteAllText($messageFile, "release: $Tag`n`n$CoAuthor`n", $Utf8NoBom)
         try {
             Invoke-Native git @('add', '--', 'gradle.properties')
@@ -282,7 +282,7 @@ try {
         }
         $propsBumped = $false
         $stage = 'committed'
-        Invoke-Native git @('tag', '-a', $Tag, '-m', "Morgenbriefing $Version")
+        Invoke-Native git @('tag', '-a', $Tag, '-m', "Daily Briefing $Version")
         $stage = 'tagged'
 
         Write-Step 'Pushing main and the tag'
@@ -291,10 +291,10 @@ try {
         $stage = 'pushed'
 
         Write-Step 'Creating the GitHub release'
-        $notesFile = Join-Path ([System.IO.Path]::GetTempPath()) "morgenbriefing-notes-$Version.md"
+        $notesFile = Join-Path ([System.IO.Path]::GetTempPath()) "dailybriefing-notes-$Version.md"
         [System.IO.File]::WriteAllText($notesFile, $Notes, $Utf8NoBom)
         try {
-            $ghArgs = @('release', 'create', $Tag, $assetPath, '--title', "Morgenbriefing $Version", '--notes-file', $notesFile, '--verify-tag')
+            $ghArgs = @('release', 'create', $Tag, $assetPath, '--title', "Daily Briefing $Version", '--notes-file', $notesFile, '--verify-tag')
             if ($Version.Contains('-')) { $ghArgs += '--prerelease' }
             Invoke-Native $gh $ghArgs
         } finally {
@@ -335,7 +335,7 @@ try {
         'tagged' { Write-Host "Commit and tag $Tag exist locally. Finish with: git push origin main; git push origin $Tag; then create the release with gh." -ForegroundColor Yellow }
         'pushed' {
             if ($released) { Write-Host 'The GitHub release is published; only the installation failed.' -ForegroundColor Yellow }
-            else { Write-Host "Commit and tag are pushed; create the release manually: gh release create $Tag <apk> --title 'Morgenbriefing $Version'" -ForegroundColor Yellow }
+            else { Write-Host "Commit and tag are pushed; create the release manually: gh release create $Tag <apk> --title 'Daily Briefing $Version'" -ForegroundColor Yellow }
         }
     }
     exit 1

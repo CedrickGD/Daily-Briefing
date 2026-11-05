@@ -30,7 +30,7 @@ android {
 
         // Where the in-app updater looks for new releases (GitHub Releases of this repo).
         buildConfigField("String", "REPO_OWNER", "\"CedrickGD\"")
-        buildConfigField("String", "REPO_NAME", "\"Morgenbriefing\"")
+        buildConfigField("String", "REPO_NAME", "\"Daily-Briefing\"")
 
         vectorDrawables { useSupportLibrary = true }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
