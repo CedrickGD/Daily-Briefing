@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.ui.today
 
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -312,7 +313,7 @@ private fun TodayContent(
         pages++
     }
 
-    val greeting = remember(now) { Fmt.greeting(now) }
+    val greeting = Fmt.greeting(now, LocalAppLanguage.current)
     val showSkeleton = weather == null && state.weatherLoading
     val headline = weather?.headline?.takeIf { it.isNotBlank() } ?: if (state.weatherLoading) {
         "Einen Moment – ich schau kurz nach draußen."
@@ -440,7 +441,7 @@ private fun TodayContent(
             derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > headerGonePx }
         }
         TopGlassBar(
-            title = "Heute · ${Fmt.shortDate(today)}",
+            title = "Heute · ${Fmt.shortDate(today, LocalAppLanguage.current)}",
             visible = headerGone || parked,
             onTap = {
                 scope.launch { if (reduceMotion) listState.scrollToItem(0) else listState.animateScrollToItem(0) }

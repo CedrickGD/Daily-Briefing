@@ -14,7 +14,7 @@ data class ReleaseInfo(
     val tag: String,
     /** Normalized version without prefix, e.g. `1.2.0` (see [SemVer.toString]). */
     val version: String,
-    /** Release title; falls back to "Morgenbriefing {version}". */
+    /** Release title; falls back to "Daily Briefing {version}". */
     val title: String,
     /** Release notes (GitHub markdown), may be empty. */
     val notes: String = "",

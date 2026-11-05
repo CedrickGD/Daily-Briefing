@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_morning_name">Morgenbriefing</string>
+    <string name="channel_morning_desc">Dein tägliches Briefing mit Wetter und News</string>
+    <string name="channel_sync_name">Aktualisierung</string>
+    <string name="channel_sync_desc">Kurzer Hinweis, während das Briefing geladen wird</string>
+    <string name="channel_updates_name">App-Updates</string>
+    <string name="channel_updates_desc">Hinweis, wenn eine neue Version von Daily Briefing bereitliegt</string>
+</resources>

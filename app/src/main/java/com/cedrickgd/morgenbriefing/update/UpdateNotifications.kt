@@ -11,6 +11,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.cedrickgd.morgenbriefing.R
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.UpdateStrings
 import com.cedrickgd.morgenbriefing.notify.Notifications
 import com.cedrickgd.morgenbriefing.ui.shell.AppLinks
 
@@ -20,32 +22,31 @@ object UpdateNotifications {
     const val ID_UPDATE = 540
 
     private const val TAG = "UpdateNotifications"
-    private const val CHANNEL_NAME = "App-Updates"
-    private const val CHANNEL_DESC = "Hinweis, wenn eine neue Version von Morgenbriefing bereitliegt"
 
-    /** Idempotent; no-op below API 26. */
+    /** Idempotent; no-op below API 26. Name and description from the resources (phone language). */
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannelCompat.Builder(CHANNEL_UPDATES, NotificationManagerCompat.IMPORTANCE_DEFAULT)
-            .setName(CHANNEL_NAME)
-            .setDescription(CHANNEL_DESC)
+            .setName(context.getString(R.string.channel_updates_name))
+            .setDescription(context.getString(R.string.channel_updates_desc))
             .setShowBadge(true)
             .build()
         NotificationManagerCompat.from(context).createNotificationChannel(channel)
     }
 
-    /** "Update verfügbar: Morgenbriefing 1.2.0"; tapping opens the app. Skips when blocked. */
-    fun showAvailable(context: Context, release: ReleaseInfo) {
+    /** "Update verfügbar: Daily Briefing 1.2.0" in [lang]; tapping opens the app. Skips when blocked. */
+    fun showAvailable(context: Context, release: ReleaseInfo, lang: AppLanguage) {
         if (!Notifications.canPost(context)) {
             Log.i(TAG, "Notifications are blocked, not announcing ${release.tag}")
             return
         }
+        val strings = UpdateStrings.of(lang)
         val excerpt = UpdateText.notesExcerpt(release.notes, maxLines = 4, maxChars = 220)
-        val text = "Tippe, um es unter Einstellungen → App zu installieren."
+        val text = strings.availableText
         val builder = NotificationCompat.Builder(context, CHANNEL_UPDATES)
             .setSmallIcon(R.drawable.ic_stat_sun)
             .setColor(ContextCompat.getColor(context, R.color.brand))
-            .setContentTitle("Update verfügbar: Morgenbriefing ${release.version}")
+            .setContentTitle(strings.availableTitle(release.version))
             .setContentText(text)
             .setStyle(
                 NotificationCompat.BigTextStyle().bigText(

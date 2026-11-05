@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cedrickgd.morgenbriefing.domain.ClothingAdvice
 import com.cedrickgd.morgenbriefing.domain.ClothingItem
+import com.cedrickgd.morgenbriefing.i18n.ComponentStrings
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
@@ -41,8 +43,9 @@ fun ClothingCard(advice: ClothingAdvice, modifier: Modifier = Modifier) {
         tint = colors.primaryContainer,
     ) {
         CompositionLocalProvider(LocalContentColor provides colors.onPrimaryContainer) {
+            val language = LocalAppLanguage.current
             Text(
-                text = "ANZIEHEN",
+                text = ComponentStrings.of(language).clothingTitle.uppercase(language.locale),
                 style = typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
                 modifier = Modifier.semantics { heading() },
             )

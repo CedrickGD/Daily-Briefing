@@ -10,6 +10,8 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.cedrickgd.morgenbriefing.container
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -44,7 +46,15 @@ class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     private suspend fun announce(context: Context, services: UpdateServices, release: ReleaseInfo) {
         val alreadyAnnounced = withContext(Dispatchers.IO) { services.store.wasAnnounced(release.tag) }
         if (alreadyAnnounced) return
-        UpdateNotifications.showAvailable(context, release)
+        val language = try {
+            context.container.settings.current().language
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Settings unavailable, announcing in the phone's language", e)
+            AppLanguage.system()
+        }
+        UpdateNotifications.showAvailable(context, release, language)
         withContext(Dispatchers.IO) { services.store.markAnnounced(release.tag) }
         Log.i(TAG, "Announced ${release.tag}")
     }

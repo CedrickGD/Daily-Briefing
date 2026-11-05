@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.listen
 
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -14,7 +15,7 @@ class ListenScriptBodyTest {
 
     @Test
     fun `the full text replaces the teaser and keeps the source`() {
-        val script = ListenScript.from(item, 4000, body = "Erster Absatz.\n\nZweiter Absatz.")
+        val script = ListenScript.from(item, AppLanguage.DE, 4000, body = "Erster Absatz.\n\nZweiter Absatz.")
         val texts = script.parts.map { it.text }
         assertEquals("Bahnstreik geht weiter", texts.first())
         assertTrue(texts.contains("Erster Absatz."))
@@ -25,7 +26,7 @@ class ListenScriptBodyTest {
 
     @Test
     fun `without a body the teaser is read as before`() {
-        val texts = ListenScript.from(item, 4000, body = "   ").parts.map { it.text }
+        val texts = ListenScript.from(item, AppLanguage.DE, 4000, body = "   ").parts.map { it.text }
         assertEquals(listOf("Bahnstreik geht weiter", "Der Teaser.", "Quelle: Golem."), texts)
     }
 }

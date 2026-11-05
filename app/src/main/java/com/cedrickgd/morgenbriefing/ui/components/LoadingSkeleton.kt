@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.cedrickgd.morgenbriefing.i18n.componentStrings
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 
 /**
@@ -45,12 +46,13 @@ fun LoadingSkeleton(modifier: Modifier = Modifier) {
         progress = rememberShimmerProgress(),
     )
     val shapes = MaterialTheme.shapes
+    val loading = componentStrings().loadingBriefing
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clearAndSetSemantics {
-                contentDescription = "Dein Briefing wird geladen"
+                contentDescription = loading
                 progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
             },
         verticalArrangement = Arrangement.spacedBy(16.dp),

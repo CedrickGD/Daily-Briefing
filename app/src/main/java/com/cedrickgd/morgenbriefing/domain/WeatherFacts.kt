@@ -3,6 +3,8 @@ package com.cedrickgd.morgenbriefing.domain
 import com.cedrickgd.morgenbriefing.data.model.DayWeather
 import com.cedrickgd.morgenbriefing.data.model.HomeWeather
 import com.cedrickgd.morgenbriefing.data.model.HourPoint
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.WeatherStrings
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.DateTimeException
@@ -81,25 +83,24 @@ internal fun dominantCondition(conditions: List<Condition>): Condition? {
         ?.key
 }
 
-/** German noun for a kind of precipitation, usable mid-sentence ("ab 14 Uhr Regen"). */
-internal fun precipNoun(condition: Condition): String = when (condition) {
-    Condition.DRIZZLE -> "Nieselregen"
-    Condition.SHOWERS -> "Schauer"
-    Condition.HEAVY_RAIN -> "kräftiger Regen"
-    Condition.FREEZING_RAIN -> "Eisregen"
-    Condition.SNOW -> "Schnee"
-    Condition.SNOW_SHOWERS -> "Schneeschauer"
-    Condition.THUNDER -> "Gewitter"
-    else -> "Regen"
-}
-
 /** What falls from the sky, for the short precipitation chip ("Schnee 80 %"). */
-internal enum class PrecipKind(val word: String, val emoji: String) {
-    RAIN("Regen", "💧"),
-    SNOW("Schnee", "❄️"),
+internal enum class PrecipKind(val emoji: String) {
+    RAIN("💧"),
+    SNOW("❄️"),
 
     /** Snow and rain in the same hours. */
-    SLEET("Schneeregen", "🌨️"),
+    SLEET("🌨️"),
+    ;
+
+    /** "Regen", "Snow", "Neige fondue" … */
+    fun word(lang: AppLanguage): String {
+        val s = WeatherStrings.of(lang)
+        return when (this) {
+            RAIN -> s.rainWord
+            SNOW -> s.snowWord
+            SLEET -> s.sleetWord
+        }
+    }
 }
 
 /**
@@ -123,13 +124,6 @@ internal fun precipKind(home: HomeWeather): PrecipKind =
     precipKind(listOf(Condition.fromCode(home.current.code)) + home.nextHours.map { it.condition })
 
 private val Condition.isSnow: Boolean get() = this == Condition.SNOW || this == Condition.SNOW_SHOWERS
-
-/** "ab Mittag" for 12/13 Uhr, otherwise "ab 15 Uhr"; "später" when the hour is unknown. */
-internal fun fromHour(hour: Int?): String = when (hour) {
-    null -> "später"
-    12, 13 -> "ab Mittag"
-    else -> "ab $hour Uhr"
-}
 
 /** Deterministic choice for a little wording variety: same date, same text. */
 internal fun <T> pick(seed: String, salt: Int, options: List<T>): T =

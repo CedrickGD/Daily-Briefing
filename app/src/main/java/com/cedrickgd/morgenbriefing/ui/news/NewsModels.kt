@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.ui.news
 
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import androidx.compose.runtime.Immutable
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsAge
@@ -161,7 +162,7 @@ internal data class FeedMetaParts(val time: String?, val source: String?)
 
 /** "vor 3 Std." and "tagesschau" separately, so the time never gets shortened. */
 internal fun feedMetaParts(item: NewsItem, now: ZonedDateTime): FeedMetaParts {
-    val time = Fmt.relative(item.publishedAt, now)
+    val time = Fmt.relative(item.publishedAt, now, AppLanguage.DE)
     val source = item.source.trim().ifEmpty { hostOf(item.url) }
     return FeedMetaParts(time = time, source = source.ifEmpty { null })
 }

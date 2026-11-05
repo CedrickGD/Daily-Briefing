@@ -16,6 +16,8 @@ import androidx.core.content.ContextCompat
 import androidx.work.ForegroundInfo
 import com.cedrickgd.morgenbriefing.R
 import com.cedrickgd.morgenbriefing.domain.NotificationText
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.NotifyStrings
 import com.cedrickgd.morgenbriefing.ui.components.EmojiSupport
 import com.cedrickgd.morgenbriefing.ui.shell.AppLinks
 
@@ -31,10 +33,12 @@ object Notifications {
     const val ID_SYNC = 531
 
     private const val TAG = "Notifications"
-    private const val SYNC_TITLE = "Briefing wird geladen…"
-    private const val SYNC_TEXT = "Wetter und News werden gerade frisch geholt."
 
-    /** Idempotent; no-op below API 26. */
+    /**
+     * Idempotent; no-op below API 26. The channel names come from the resources (the phone's
+     * language, as the rest of the system settings); calling this again after a language change
+     * renames the existing channels.
+     */
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val morning = NotificationChannelCompat.Builder(CHANNEL_MORNING, NotificationManagerCompat.IMPORTANCE_DEFAULT)
@@ -84,13 +88,14 @@ object Notifications {
         post(context, ID_MORNING, builder)
     }
 
-    /** Required for expedited work below API 31. */
-    fun syncForegroundInfo(context: Context): ForegroundInfo {
+    /** Required for expedited work below API 31; texts in [lang]. */
+    fun syncForegroundInfo(context: Context, lang: AppLanguage): ForegroundInfo {
+        val strings = NotifyStrings.of(lang)
         val builder = NotificationCompat.Builder(context, CHANNEL_SYNC)
             .setSmallIcon(R.drawable.ic_stat_sun)
             .setColor(ContextCompat.getColor(context, R.color.brand))
-            .setContentTitle(SYNC_TITLE)
-            .setContentText(SYNC_TEXT)
+            .setContentTitle(strings.syncTitle)
+            .setContentText(strings.syncText)
             .setProgress(0, 0, true)
             .setOngoing(true)
             .setSilent(true)

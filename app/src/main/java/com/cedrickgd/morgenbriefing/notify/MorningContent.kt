@@ -7,6 +7,8 @@ import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
 import com.cedrickgd.morgenbriefing.domain.NotificationText
 import com.cedrickgd.morgenbriefing.domain.WeatherInsights
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.NotifyStrings
 
 private const val TAG = "MorningContent"
 
@@ -22,20 +24,21 @@ internal fun topHeadlines(news: Map<String, TopicNews>, settings: AppSettings, c
         .take(count)
 
 /**
- * Notification text from [WeatherInsights]; falls back to a plain greeting if building the
- * text fails, so a formatting problem never costs the user the whole morning notification.
+ * Notification text from [WeatherInsights] in [lang]; falls back to a plain greeting if building
+ * the text fails, so a formatting problem never costs the user the whole morning notification.
  */
-internal fun morningText(snapshot: WeatherSnapshot?, headlines: List<String>): NotificationText =
+internal fun morningText(snapshot: WeatherSnapshot?, headlines: List<String>, lang: AppLanguage): NotificationText =
     try {
-        WeatherInsights.notification(snapshot, headlines)
+        WeatherInsights.notification(snapshot, headlines, lang)
     } catch (e: Exception) {
         Log.e(TAG, "Building the notification text failed, using the fallback", e)
-        fallbackText(headlines)
+        fallbackText(headlines, lang)
     }
 
-private fun fallbackText(headlines: List<String>): NotificationText {
+private fun fallbackText(headlines: List<String>, lang: AppLanguage): NotificationText {
+    val strings = NotifyStrings.of(lang)
     val lines = headlines.map { "• ${it.trim()}" }.filter { it.length > 2 }
-    val text = "Wetter und News warten auf dich."
+    val text = strings.fallbackText
     val bigText = if (lines.isEmpty()) text else text + "\n\n" + lines.joinToString("\n")
-    return NotificationText(title = "Guten Morgen! ☀️", text = text, bigText = bigText)
+    return NotificationText(title = strings.fallbackTitle, text = text, bigText = bigText)
 }

@@ -87,6 +87,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cedrickgd.morgenbriefing.data.model.AccentId
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
+import com.cedrickgd.morgenbriefing.i18n.ListenStrings
+import com.cedrickgd.morgenbriefing.i18n.listenStrings
 import com.cedrickgd.morgenbriefing.listen
 import com.cedrickgd.morgenbriefing.ui.glass.GlassLevel
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
@@ -182,6 +184,7 @@ internal fun ListenMiniPlayerContent(
             // Only a reading whose article is known can be opened (not the "no voice" hint).
             val open = onOpen?.takeIf { shown.issue == null && !shown.articleUrl.isNullOrBlank() }
             val title = shown.title.orEmpty()
+            val strings = listenStrings()
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
                 Row(
                     modifier = Modifier
@@ -198,8 +201,8 @@ internal fun ListenMiniPlayerContent(
                         .then(
                             if (open != null) {
                                 Modifier
-                                    .clickable(role = Role.Button, onClickLabel = "Artikel öffnen", onClick = open)
-                                    .semantics { contentDescription = "Vorlesen: $title öffnen" }
+                                    .clickable(role = Role.Button, onClickLabel = strings.openArticle, onClick = open)
+                                    .semantics { contentDescription = strings.openReading(title) }
                             } else {
                                 Modifier
                             },
@@ -211,7 +214,7 @@ internal fun ListenMiniPlayerContent(
                 ) {
                     val issue = shown.issue
                     if (issue != null) {
-                        IssueContent(issue = issue, onFix = onFix, onClose = onClose)
+                        IssueContent(issue = issue, voice = shown.voiceLanguage, onFix = onFix, onClose = onClose)
                     } else {
                         PlayerContent(state = shown, onToggle = onToggle, onClose = onClose, onFix = onFix)
                     }
@@ -226,6 +229,7 @@ private class LastVisible(var value: ListenState)
 
 @Composable
 private fun RowScope.PlayerContent(state: ListenState, onToggle: () -> Unit, onClose: () -> Unit, onFix: () -> Unit) {
+    val strings = listenStrings()
     val reduceMotion = rememberReduceMotion()
     val progress = animateFloatAsState(
         targetValue = state.progress.coerceIn(0f, 1f),
@@ -241,7 +245,7 @@ private fun RowScope.PlayerContent(state: ListenState, onToggle: () -> Unit, onC
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = statusLine(state),
+            text = statusLine(state, strings),
             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.8.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -272,11 +276,11 @@ private fun RowScope.PlayerContent(state: ListenState, onToggle: () -> Unit, onC
     }
     Spacer(Modifier.width(4.dp))
     if (state.onlineVoiceOnly) {
-        // Reading uses a network voice: offer the offline German voice (works without internet).
+        // Reading uses a network voice: offer the offline voice (works without internet).
         IconButton(onClick = onFix) {
             Icon(
                 imageVector = Icons.Rounded.Download,
-                contentDescription = "Deutsche Stimme offline installieren",
+                contentDescription = strings.installOfflineVoice(state.voiceLanguage),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -285,7 +289,7 @@ private fun RowScope.PlayerContent(state: ListenState, onToggle: () -> Unit, onC
     IconButton(onClick = onClose) {
         Icon(
             imageVector = Icons.Rounded.Close,
-            contentDescription = "Vorlesen beenden",
+            contentDescription = strings.stop,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -325,15 +329,15 @@ private fun Modifier.marqueeFadeArea(): Modifier = this
 private val MarqueeFade = 12.dp
 
 /** "LIEST VOR · NOCH ETWA 3 MIN." */
-private fun statusLine(state: ListenState): String {
+internal fun statusLine(state: ListenState, strings: ListenStrings): String {
     val status = when {
-        state.preparing -> "STIMME WIRD VORBEREITET"
-        state.paused -> "PAUSIERT"
-        state.onlineVoiceOnly -> "LIEST VOR · ONLINE-STIMME"
-        else -> "LIEST VOR"
+        state.preparing -> strings.statusPreparing
+        state.paused -> strings.statusPaused
+        state.onlineVoiceOnly -> "${strings.statusReading} · ${strings.statusOnlineVoice}"
+        else -> strings.statusReading
     }
     val remaining = remainingMinutes(state.estimatedSeconds, state.progress)
-    return if (remaining != null && !state.preparing) "$status · NOCH ETWA $remaining MIN." else status
+    return if (remaining != null && !state.preparing) "$status · ${strings.remaining(remaining)}" else status
 }
 
 /** Whole minutes still to listen to (at least 1), or null when unknown. */
@@ -439,6 +443,7 @@ private fun ProgressLine(progress: State<Float>) {
 
 @Composable
 private fun ToggleButton(paused: Boolean, onToggle: () -> Unit) {
+    val strings = listenStrings()
     IconButton(onClick = onToggle) {
         Box(
             modifier = Modifier
@@ -448,14 +453,15 @@ private fun ToggleButton(paused: Boolean, onToggle: () -> Unit) {
         ) {
             Icon(
                 imageVector = if (paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
-                contentDescription = if (paused) "Weiter vorlesen" else "Vorlesen pausieren",
+                contentDescription = if (paused) strings.resume else strings.pause,
             )
         }
     }
 }
 
 @Composable
-private fun RowScope.IssueContent(issue: ListenIssue, onFix: () -> Unit, onClose: () -> Unit) {
+private fun RowScope.IssueContent(issue: ListenIssue, voice: String, onFix: () -> Unit, onClose: () -> Unit) {
+    val strings = listenStrings()
     Box(
         modifier = Modifier
             .size(44.dp)
@@ -478,8 +484,8 @@ private fun RowScope.IssueContent(issue: ListenIssue, onFix: () -> Unit, onClose
     ) {
         Text(
             text = when (issue) {
-                ListenIssue.MISSING_VOICE -> "Keine deutsche Stimme"
-                ListenIssue.NO_ENGINE -> "Vorlesen nicht verfügbar"
+                ListenIssue.MISSING_VOICE -> strings.missingVoiceTitle(voice)
+                ListenIssue.NO_ENGINE -> strings.noEngineTitle
             },
             style = MaterialTheme.typography.titleSmall,
             maxLines = 1,
@@ -487,8 +493,8 @@ private fun RowScope.IssueContent(issue: ListenIssue, onFix: () -> Unit, onClose
         )
         Text(
             text = when (issue) {
-                ListenIssue.MISSING_VOICE -> "Lade sie einmal herunter, dann klappt's."
-                ListenIssue.NO_ENGINE -> "Richte eine Sprachausgabe ein."
+                ListenIssue.MISSING_VOICE -> strings.missingVoiceText
+                ListenIssue.NO_ENGINE -> strings.noEngineText
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -497,11 +503,11 @@ private fun RowScope.IssueContent(issue: ListenIssue, onFix: () -> Unit, onClose
         )
     }
     TextButton(onClick = onFix) {
-        Text(if (issue == ListenIssue.MISSING_VOICE) "Installieren" else "Einrichten")
+        Text(if (issue == ListenIssue.MISSING_VOICE) strings.install else strings.setUp)
     }
     IconButton(
         onClick = onClose,
-        modifier = Modifier.semantics { contentDescription = "Hinweis schließen" },
+        modifier = Modifier.semantics { contentDescription = strings.dismiss },
     ) {
         Icon(
             imageVector = Icons.Rounded.Close,

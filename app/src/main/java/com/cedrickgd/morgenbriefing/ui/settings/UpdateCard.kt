@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.ui.settings
 
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -76,9 +77,10 @@ internal fun UpdateCard(
     actions: UpdateCardActions,
     modifier: Modifier = Modifier,
 ) {
-    val lastCheck = remember(state.lastCheckAt) {
+    val language = LocalAppLanguage.current
+    val lastCheck = remember(state.lastCheckAt, language) {
         val at = state.lastCheckAt?.let { Instant.ofEpochMilli(it).atZone(BERLIN) }
-        UpdateText.lastCheck(ZonedDateTime.now(BERLIN), at)
+        UpdateText.lastCheck(ZonedDateTime.now(BERLIN), at, language)
     }
     GlassCard(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -198,7 +200,7 @@ private fun PhaseContent(
         is UpdatePhase.Failed -> {
             StatusLine(
                 icon = Icons.Rounded.ErrorOutline,
-                text = UpdateText.errorMessage(phase.error, debugBuild = BuildConfig.DEBUG),
+                text = UpdateText.errorMessage(phase.error, LocalAppLanguage.current, debugBuild = BuildConfig.DEBUG),
                 tint = colors.error,
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -218,8 +220,8 @@ private fun PhaseContent(
 @Composable
 private fun ReleaseSummary(release: ReleaseInfo) {
     val meta = listOfNotNull(
-        parseInstantOrNull(release.publishedAt)?.let { "vom ${Fmt.shortDate(it.atZone(BERLIN).toLocalDate())}" },
-        release.apk.size.takeIf { it > 0 }?.let(UpdateText::megabytes),
+        parseInstantOrNull(release.publishedAt)?.let { "vom ${Fmt.shortDate(it.atZone(BERLIN).toLocalDate(), LocalAppLanguage.current)}" },
+        release.apk.size.takeIf { it > 0 }?.let { UpdateText.megabytes(it, LocalAppLanguage.current) },
     ).joinToString(" · ")
     if (meta.isNotEmpty()) Caption(meta)
     val excerpt = remember(release.notes) { UpdateText.notesExcerpt(release.notes) }
@@ -242,7 +244,7 @@ private fun DownloadProgressBar(phase: UpdatePhase.Downloading, reduceMotion: Bo
     val track = if (isGlassDark()) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.08f)
     if (fraction == null) {
         LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), strokeCap = StrokeCap.Round, trackColor = track)
-        Caption(if (phase.received > 0) UpdateText.megabytes(phase.received) else "Verbinde …")
+        Caption(if (phase.received > 0) UpdateText.megabytes(phase.received, LocalAppLanguage.current) else "Verbinde …")
         return
     }
     val animated by animateFloatAsState(
@@ -263,13 +265,13 @@ private fun DownloadProgressBar(phase: UpdatePhase.Downloading, reduceMotion: Bo
     )
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = UpdateText.percent(fraction),
+            text = UpdateText.percent(fraction, LocalAppLanguage.current),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f),
         )
         Text(
-            text = "${UpdateText.megabytes(phase.received)} von ${UpdateText.megabytes(phase.total)}",
+            text = "${UpdateText.megabytes(phase.received, LocalAppLanguage.current)} von ${UpdateText.megabytes(phase.total, LocalAppLanguage.current)}",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

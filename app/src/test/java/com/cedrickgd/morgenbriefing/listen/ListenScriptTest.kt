@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.listen
 
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -77,7 +78,7 @@ class ListenScriptTest {
     @Test
     fun `every script part stays below the engine limit`() {
         val summary = (1..30).joinToString(" ") { "Absatz $it. " + "Ein recht langer Satz über Märkte und Zinsen. ".repeat(12) }
-        val script = ListenScript.from(item(summary = summary), maxLength = 200)
+        val script = ListenScript.from(item(summary = summary), AppLanguage.DE, maxLength = 200)
         assertTrue(script.parts.isNotEmpty())
         assertTrue(script.parts.all { it.text.length < 200 })
     }
@@ -86,7 +87,7 @@ class ListenScriptTest {
 
     @Test
     fun `reads headline, lead and source in that order`() {
-        val script = ListenScript.from(item())
+        val script = ListenScript.from(item(), AppLanguage.DE)
         assertEquals(
             listOf("Telekom will mit KI sparen", "Die Telekom setzt auf KI.", "Quelle: Handelsblatt."),
             texts(script),
@@ -98,14 +99,14 @@ class ListenScriptTest {
 
     @Test
     fun `markup in the text is not read out`() {
-        val script = ListenScript.from(item(summary = "Mehr bei <a href='https://x.de'>tagesschau</a> &amp; <b>MDR</b>."))
+        val script = ListenScript.from(item(summary = "Mehr bei <a href='https://x.de'>tagesschau</a> &amp; <b>MDR</b>."), AppLanguage.DE)
         assertEquals("Mehr bei tagesschau & MDR.", script.parts[1].text)
     }
 
     @Test
     fun `sources sentence names the newsroom`() {
-        assertEquals("Quelle: Handelsblatt.", ListenScript.sourcesSentence(item()))
-        assertNull(ListenScript.sourcesSentence(item(source = "")))
+        assertEquals("Quelle: Handelsblatt.", ListenScript.sourcesSentence(item(), AppLanguage.DE))
+        assertNull(ListenScript.sourcesSentence(item(source = ""), AppLanguage.DE))
     }
 
     @Test
@@ -118,7 +119,7 @@ class ListenScriptTest {
 
     @Test
     fun `an article without text gives an empty script`() {
-        assertTrue(ListenScript.from(item(headline = " ", summary = "", source = "", url = "")).isEmpty)
+        assertTrue(ListenScript.from(item(headline = " ", summary = "", source = "", url = ""), AppLanguage.DE).isEmpty)
     }
 
     // --- progress -------------------------------------------------------------------------
@@ -142,7 +143,7 @@ class ListenScriptTest {
 
     @Test
     fun `progress never goes backwards while reading through a real script`() {
-        val script = ListenScript.from(item(summary = "Erster Satz mit Text. Zweiter Satz folgt. Dritter Satz! Schluss."))
+        val script = ListenScript.from(item(summary = "Erster Satz mit Text. Zweiter Satz folgt. Dritter Satz! Schluss."), AppLanguage.DE)
         var last = -1f
         script.parts.forEachIndexed { i, part ->
             for (offset in 0..part.text.length step 3) {

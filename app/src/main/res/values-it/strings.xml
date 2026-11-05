@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_morning_name">Briefing del mattino</string>
+    <string name="channel_morning_desc">Il tuo briefing quotidiano con meteo e notizie</string>
+    <string name="channel_sync_name">Aggiornamento</string>
+    <string name="channel_sync_desc">Breve avviso mentre il briefing si carica</string>
+    <string name="channel_updates_name">Aggiornamenti dell\'app</string>
+    <string name="channel_updates_desc">Ti avvisa quando è pronta una nuova versione di Daily Briefing</string>
+</resources>

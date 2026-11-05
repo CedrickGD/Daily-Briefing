@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.domain.Fmt
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
 import java.time.LocalDate
 
@@ -30,7 +31,7 @@ fun TodayHeader(date: LocalDate, greeting: String, headline: String, modifier: M
 
     Column(modifier.entrance(entrance, distance = 20.dp)) {
         Text(
-            text = Fmt.dateLine(date),
+            text = Fmt.dateLine(date, LocalAppLanguage.current),
             style = typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
             color = headerOverlineColor(colors.onSurfaceVariant, colors.onSurface),
         )

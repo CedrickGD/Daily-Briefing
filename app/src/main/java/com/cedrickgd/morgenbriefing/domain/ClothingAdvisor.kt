@@ -1,98 +1,94 @@
 package com.cedrickgd.morgenbriefing.domain
 
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.ClothingReason
+import com.cedrickgd.morgenbriefing.i18n.ClothingStrings
+import com.cedrickgd.morgenbriefing.i18n.SunExtras
 import kotlin.math.max
+
+/** A piece of clothing or an extra the advice can show; the label comes from [ClothingStrings]. */
+enum class ClothingPiece(val emoji: String) {
+    WINTER_COAT("🧥"),
+    WINTER_JACKET("🧥"),
+    WARM_JACKET("🧥"),
+    JACKET("🧥"),
+    LIGHT_JACKET("🧥"),
+    SWEATER("🧶"),
+    THIN_SWEATER("🧶"),
+    T_SHIRT("👕"),
+    SHORTS("🩳"),
+    SCARF("🧣"),
+    GLOVES("🧤"),
+    UMBRELLA("☂️"),
+
+    // Not the coat: next to "warme Jacke" the two chips must look different (the yellow vest reads as rain gear).
+    RAIN_JACKET("🦺"),
+    SUNGLASSES("🕶️"),
+    SUNSCREEN("🧴"),
+    STURDY_SHOES("🥾"),
+}
+
+/** Clothing bands by felt temperature, coldest first (ordinal order matters). */
+enum class ClothingBand(
+    val items: List<ClothingPiece>,
+    /** Added only when the advice would otherwise show a single item. */
+    val filler: ClothingPiece?,
+) {
+    ARCTIC(listOf(ClothingPiece.WINTER_COAT, ClothingPiece.SCARF, ClothingPiece.GLOVES), filler = null),
+    COLD(listOf(ClothingPiece.WINTER_JACKET, ClothingPiece.GLOVES), filler = ClothingPiece.SCARF),
+    WARM_JACKET(listOf(ClothingPiece.WARM_JACKET), filler = ClothingPiece.SCARF),
+    JACKET(listOf(ClothingPiece.JACKET), filler = ClothingPiece.SWEATER),
+    LIGHT(listOf(ClothingPiece.LIGHT_JACKET), filler = ClothingPiece.SWEATER),
+    LONGSLEEVE(listOf(ClothingPiece.THIN_SWEATER), filler = ClothingPiece.T_SHIRT),
+    TSHIRT(listOf(ClothingPiece.T_SHIRT), filler = ClothingPiece.SHORTS),
+    HOT(listOf(ClothingPiece.T_SHIRT, ClothingPiece.SHORTS), filler = null);
+
+    val isWinter: Boolean get() = this <= COLD
+
+    companion object {
+        fun of(feels: Double): ClothingBand = when {
+            feels < -5 -> ARCTIC
+            feels < 2 -> COLD
+            feels < 8 -> WARM_JACKET
+            feels < 13 -> JACKET
+            feels < 17 -> LIGHT
+            feels < 21 -> LONGSLEEVE
+            feels <= 26 -> TSHIRT
+            else -> HOT
+        }
+    }
+}
 
 /**
  * "Was ziehe ich an?" — layers from the felt temperature at home now and the warmest felt
- * temperature in the day window, plus rain, sun and ice extras. Pure and deterministic.
+ * temperature in the day window, plus rain, sun and ice extras. Pure and deterministic; the
+ * wording comes from [ClothingStrings] in the requested language.
  */
 internal object ClothingAdvisor {
 
     private const val MAX_ITEMS = 5
     private const val MAX_SHORT_WORDS = 8
 
-    private val WINTERMANTEL = ClothingItem("🧥", "Wintermantel")
-    private val WINTERJACKE = ClothingItem("🧥", "Winterjacke")
-    private val WARME_JACKE = ClothingItem("🧥", "warme Jacke")
-    private val JACKE = ClothingItem("🧥", "Jacke")
-    private val LEICHTE_JACKE = ClothingItem("🧥", "leichte Jacke")
-    private val PULLI = ClothingItem("🧶", "Pulli")
-    private val DUENNER_PULLI = ClothingItem("🧶", "dünner Pulli")
-    private val T_SHIRT = ClothingItem("👕", "T-Shirt")
-    private val KURZE_HOSE = ClothingItem("🩳", "kurze Hose")
-    private val SCHAL = ClothingItem("🧣", "Schal")
-    private val HANDSCHUHE = ClothingItem("🧤", "Handschuhe")
-    private val SCHIRM = ClothingItem("☂️", "Schirm")
-    // Not the coat: next to "warme Jacke" the two chips must look different (the yellow vest reads as rain gear).
-    private val REGENJACKE = ClothingItem("🦺", "Regenjacke")
-    private val SONNENBRILLE = ClothingItem("🕶️", "Sonnenbrille")
-    private val SONNENCREME = ClothingItem("🧴", "Sonnencreme")
-    private val FESTE_SCHUHE = ClothingItem("🥾", "feste Schuhe")
-
-    /** Clothing bands by felt temperature, coldest first (ordinal order matters). */
-    internal enum class Band(
-        /** Noun phrase for the card text ("Morgens Jacke oder Fleece"). */
-        val wear: String,
-        /** 1–2 words for the change form of the short line ("Morgens Jacke, ab Mittag T-Shirt"). */
-        val compact: String,
-        /** ≤ 3 words for the all-day form of the short line. */
-        val short: String,
-        /** "reichen" instead of "reicht". */
-        val plural: Boolean,
-        val items: List<ClothingItem>,
-        /** Added only when the advice would otherwise show a single item. */
-        val filler: ClothingItem?,
-    ) {
-        ARCTIC(
-            "dicker Wintermantel mit Mütze, Handschuhen und Schal", "Wintermantel", "Wintermantel und Handschuhe",
-            plural = false, items = listOf(WINTERMANTEL, SCHAL, HANDSCHUHE), filler = null,
-        ),
-        COLD(
-            "warme Winterjacke, Mütze und Handschuhe", "Winterjacke", "Winterjacke und Handschuhe",
-            plural = true, items = listOf(WINTERJACKE, HANDSCHUHE), filler = SCHAL,
-        ),
-        WARM_JACKET("warme Jacke", "warme Jacke", "warme Jacke", plural = false, items = listOf(WARME_JACKE), filler = SCHAL),
-        JACKET("Jacke oder Fleece", "Jacke", "Jacke", plural = false, items = listOf(JACKE), filler = PULLI),
-        LIGHT("leichte Jacke oder Pulli", "leichte Jacke", "leichte Jacke", plural = false, items = listOf(LEICHTE_JACKE), filler = PULLI),
-        LONGSLEEVE("Langarm oder dünner Pulli", "Pulli", "dünner Pulli", plural = false, items = listOf(DUENNER_PULLI), filler = T_SHIRT),
-        TSHIRT("T-Shirt", "T-Shirt", "T-Shirt", plural = false, items = listOf(T_SHIRT), filler = KURZE_HOSE),
-        HOT("luftige Sachen und kurze Hose", "kurze Hose", "kurze Hose", plural = true, items = listOf(T_SHIRT, KURZE_HOSE), filler = null);
-
-        val isWinter: Boolean get() = this <= COLD
-
-        companion object {
-            fun of(feels: Double): Band = when {
-                feels < -5 -> ARCTIC
-                feels < 2 -> COLD
-                feels < 8 -> WARM_JACKET
-                feels < 13 -> JACKET
-                feels < 17 -> LIGHT
-                feels < 21 -> LONGSLEEVE
-                feels <= 26 -> TSHIRT
-                else -> HOT
-            }
-        }
-    }
-
     private enum class RainGear { NONE, UMBRELLA, RAINJACKET }
 
     private sealed interface Change {
         data object Same : Change
-        data class Warmer(val band: Band, val hour: Int?) : Change
-        data class Colder(val band: Band, val hour: Int?) : Change
+        data class Warmer(val band: ClothingBand, val hour: Int?) : Change
+        data class Colder(val band: ClothingBand, val hour: Int?) : Change
     }
 
-    private data class Pick(val item: ClothingItem, val priority: Int)
+    private data class Pick(val piece: ClothingPiece, val priority: Int)
 
-    fun advise(s: WeatherSnapshot): ClothingAdvice {
+    fun advise(s: WeatherSnapshot, lang: AppLanguage): ClothingAdvice {
+        val c = ClothingStrings.of(lang)
         val home = HomeFacts(s.home)
         val day = DayFacts(s.day)
         val tomorrow = s.day.isTomorrow
 
         // For tomorrow's window the current evening temperature says nothing about the morning.
         val morningFeels = if (tomorrow) day.hours.firstOrNull()?.feels ?: home.now.feels else home.now.feels
-        val morning = Band.of(morningFeels)
+        val morning = ClothingBand.of(morningFeels)
         val change = changeOf(morning, day)
 
         val wetNow = !tomorrow && (home.wetNow || home.wetSoon != null)
@@ -104,7 +100,7 @@ internal object ClothingAdvisor {
             else -> RainGear.UMBRELLA
         }
         // A rain jacket replaces an ordinary jacket instead of being worn over it.
-        val merged = gear == RainGear.RAINJACKET && (morning == Band.JACKET || morning == Band.LIGHT)
+        val merged = gear == RainGear.RAINJACKET && (morning == ClothingBand.JACKET || morning == ClothingBand.LIGHT)
 
         val sunglasses = day.sunnyHours >= 3
         val sunscreen = s.day.uvMax >= 5
@@ -113,38 +109,39 @@ internal object ClothingAdvisor {
             (!tomorrow && (home.slippery || home.wintryPrecip))
 
         val items = items(morning, change, gear, merged, shoes, sunscreen, sunglasses)
-        val reason = if (tomorrow) null else reasonFor(home, morning)
-        val text = text(morning, change, gear, merged, shoes, sunscreen, sunglasses, reason, rainWhy(home, day, tomorrow))
-        val short = short(morning, change, gear, merged)
+            .map { ClothingItem(it.emoji, c.piece(it)) }
+        val reason = if (tomorrow) null else reasonFor(c, home, morning)
+        val text = text(c, morning, change, gear, merged, shoes, sunscreen, sunglasses, reason, rainWhy(c, home, day, tomorrow))
+        val short = short(c, morning, change, gear, merged)
         return ClothingAdvice(items = items, text = text, short = short)
     }
 
-    private fun changeOf(morning: Band, day: DayFacts): Change {
-        val warm = Band.of(day.maxFeels)
-        val cold = Band.of(day.minFeels)
+    private fun changeOf(morning: ClothingBand, day: DayFacts): Change {
+        val warm = ClothingBand.of(day.maxFeels)
+        val cold = ClothingBand.of(day.minFeels)
         return when {
             warm > morning && !(warm.isWinter && morning.isWinter) ->
-                Change.Warmer(warm, day.hours.firstOrNull { Band.of(it.feels) >= warm }?.hour)
+                Change.Warmer(warm, day.hours.firstOrNull { ClothingBand.of(it.feels) >= warm }?.hour)
             cold < morning && !(cold.isWinter && morning.isWinter) ->
-                Change.Colder(cold, day.hours.firstOrNull { Band.of(it.feels) <= cold }?.hour)
+                Change.Colder(cold, day.hours.firstOrNull { ClothingBand.of(it.feels) <= cold }?.hour)
             else -> Change.Same
         }
     }
 
     private fun items(
-        morning: Band,
+        morning: ClothingBand,
         change: Change,
         gear: RainGear,
         merged: Boolean,
         shoes: Boolean,
         sunscreen: Boolean,
         sunglasses: Boolean,
-    ): List<ClothingItem> {
+    ): List<ClothingPiece> {
         val picks = mutableListOf<Pick>()
         morning.items.forEach { picks += Pick(it, 3) }
         if (merged) {
-            val jacketIndex = picks.indexOfFirst { it.item == morning.items.first() }
-            picks[jacketIndex] = Pick(REGENJACKE, 5)
+            val jacketIndex = picks.indexOfFirst { it.piece == morning.items.first() }
+            picks[jacketIndex] = Pick(ClothingPiece.RAIN_JACKET, 5)
         }
         val target = when (change) {
             is Change.Warmer -> change.band
@@ -153,25 +150,25 @@ internal object ClothingAdvisor {
         }
         val additions = when (change) {
             // Going from one jacket to a lighter jacket adds nothing to carry.
-            is Change.Warmer -> if (change.band >= Band.LONGSLEEVE) change.band.items else emptyList()
+            is Change.Warmer -> if (change.band >= ClothingBand.LONGSLEEVE) change.band.items else emptyList()
             // Already in a jacket: only the extras (gloves …); otherwise the jacket for later.
-            is Change.Colder -> if (morning <= Band.LIGHT) change.band.items.drop(1) else change.band.items.take(1)
+            is Change.Colder -> if (morning <= ClothingBand.LIGHT) change.band.items.drop(1) else change.band.items.take(1)
             Change.Same -> emptyList()
         }
-        additions.filter { item -> picks.none { it.item == item } }.forEach { picks += Pick(it, 3) }
+        additions.filter { piece -> picks.none { it.piece == piece } }.forEach { picks += Pick(it, 3) }
         when (gear) {
-            RainGear.UMBRELLA -> picks += Pick(SCHIRM, 5)
-            RainGear.RAINJACKET -> if (!merged) picks += Pick(REGENJACKE, 5)
+            RainGear.UMBRELLA -> picks += Pick(ClothingPiece.UMBRELLA, 5)
+            RainGear.RAINJACKET -> if (!merged) picks += Pick(ClothingPiece.RAIN_JACKET, 5)
             RainGear.NONE -> Unit
         }
-        if (shoes) picks += Pick(FESTE_SCHUHE, 4)
-        if (sunscreen) picks += Pick(SONNENCREME, 2)
-        if (sunglasses) picks += Pick(SONNENBRILLE, 1)
+        if (shoes) picks += Pick(ClothingPiece.STURDY_SHOES, 4)
+        if (sunscreen) picks += Pick(ClothingPiece.SUNSCREEN, 2)
+        if (sunglasses) picks += Pick(ClothingPiece.SUNGLASSES, 1)
 
-        val unique = picks.distinctBy { it.item.label }.toMutableList()
+        val unique = picks.distinctBy { it.piece }.toMutableList()
         if (unique.size < 2) {
-            listOfNotNull(morning.filler, target?.filler, PULLI)
-                .firstOrNull { item -> unique.none { it.item.label == item.label } }
+            listOfNotNull(morning.filler, target?.filler, ClothingPiece.SWEATER)
+                .firstOrNull { piece -> unique.none { it.piece == piece } }
                 ?.let { unique += Pick(it, 0) }
         }
         // Keep the most important items, but show them in their natural order.
@@ -179,31 +176,36 @@ internal object ClothingAdvisor {
             .sortedByDescending { it.value.priority }
             .take(MAX_ITEMS)
             .sortedBy { it.index }
-            .map { it.value.item }
+            .map { it.value.piece }
     }
 
-    private fun reasonFor(home: HomeFacts, morning: Band): String? {
-        if (morning > Band.LIGHT) return null
+    private fun reasonFor(c: ClothingStrings, home: HomeFacts, morning: ClothingBand): String? {
+        if (morning > ClothingBand.LIGHT) return null
         val feels = Fmt.temp(home.now.feels)
+        val reason = when {
+            home.condition == Condition.FOG -> ClothingReason.FOG
+            home.now.temp - home.now.feels >= 3 -> ClothingReason.WIND_CHILL
+            home.now.feels <= 0 -> ClothingReason.FREEZING
+            home.now.humidity >= 90 && home.now.feels <= 12 -> ClothingReason.DAMP
+            else -> return null
+        }
+        return c.reason(reason, feels)
+    }
+
+    private fun rainWhy(c: ClothingStrings, home: HomeFacts, day: DayFacts, tomorrow: Boolean): String {
+        val firstWet = day.firstWet
         return when {
-            home.condition == Condition.FOG -> "im Nebel fühlen sich $feels klamm an"
-            home.now.temp - home.now.feels >= 3 -> "gefühlt nur $feels"
-            home.now.feels <= 0 -> "gefühlt $feels"
-            home.now.humidity >= 90 && home.now.feels <= 12 -> "die feuchte Luft macht's klamm"
-            else -> null
+            !tomorrow && home.wetNow -> c.wetNowWhy
+            !tomorrow && home.wetSoon != null -> c.wetSoonWhy
+            day.rainStartsLater && firstWet != null -> c.wetFromWhy(firstWet.hour)
+            day.maxPop >= 40 -> c.popWhy(day.maxPop)
+            else -> c.maybeWetWhy
         }
     }
 
-    private fun rainWhy(home: HomeFacts, day: DayFacts, tomorrow: Boolean): String = when {
-        !tomorrow && home.wetNow -> "draußen ist's gerade nass"
-        !tomorrow && home.wetSoon != null -> "gleich wird's nass"
-        day.rainStartsLater -> "ab ${day.firstWet?.hour} Uhr wird's nass"
-        day.maxPop >= 40 -> "bis ${day.maxPop} % Regenrisiko"
-        else -> "es kann nass werden"
-    }
-
     private fun text(
-        morning: Band,
+        c: ClothingStrings,
+        morning: ClothingBand,
         change: Change,
         gear: RainGear,
         merged: Boolean,
@@ -214,91 +216,52 @@ internal object ClothingAdvisor {
         why: String,
     ): String {
         val sun = when {
-            sunglasses && sunscreen -> "Sonnenbrille und Sonnencreme nicht vergessen"
-            sunglasses -> "Sonnenbrille lohnt sich"
-            sunscreen -> "Sonnencreme nicht vergessen"
+            sunglasses && sunscreen -> c.sun(SunExtras.GLASSES_AND_CREAM)
+            sunglasses -> c.sun(SunExtras.GLASSES)
+            sunscreen -> c.sun(SunExtras.CREAM)
             else -> null
         }
-        val because = reason?.let { " – $it" }.orEmpty()
-        val wear = if (merged) mergedWear(morning) else morning.wear
+        val wear = if (merged) c.mergedWear(light = morning == ClothingBand.LIGHT) else c.wear(morning)
         val sentences = mutableListOf<String>()
         when (change) {
             is Change.Warmer -> {
-                val layer = if (!merged && change.band >= Band.TSHIRT && morning in Band.WARM_JACKET..Band.LIGHT) {
-                    " übers Shirt"
-                } else {
-                    ""
-                }
-                sentences += "Morgens $wear$layer$because."
-                val verb = if (change.band.plural) "reichen" else "reicht"
-                val tail = sun?.let { ", $it" }.orEmpty()
-                sentences += "${fromHour(change.hour).capitalizeFirst()} $verb ${change.band.wear}$tail."
+                val overShirt = !merged && change.band >= ClothingBand.TSHIRT && morning in ClothingBand.WARM_JACKET..ClothingBand.LIGHT
+                sentences += c.morningWarmer(wear, overShirt, reason)
+                sentences += c.laterWarmer(change.hour, change.band, sun)
             }
             is Change.Colder -> {
-                val tail = sun?.let { ", $it" }.orEmpty()
-                sentences += "Morgens $wear$because$tail."
-                sentences += "${fromHour(change.hour).capitalizeFirst()} wird's kühler – dann ${change.band.wear}."
+                sentences += c.morningColder(wear, reason, sun)
+                sentences += c.laterColder(change.hour, change.band)
             }
             Change.Same -> {
-                sentences += if (morning >= Band.LONGSLEEVE && !merged) {
-                    "Heute ${if (morning.plural) "reichen" else "reicht"} $wear$because."
+                sentences += if (morning >= ClothingBand.LONGSLEEVE && !merged) {
+                    c.todayEnough(wear, morning, reason)
                 } else {
-                    "Den ganzen Tag $wear$because."
+                    c.allDay(wear, reason)
                 }
-                sun?.let { sentences += "$it." }
+                sun?.let { sentences += c.sunSentence(it) }
             }
         }
         sentences += when (gear) {
-            RainGear.NONE ->
-                if (shoes) "Kein Schirm nötig, aber feste Schuhe – es kann glatt sein." else "Kein Schirm nötig."
-            RainGear.UMBRELLA ->
-                if (shoes) "Schirm einpacken und feste Schuhe an – es kann glatt werden." else "Schirm einpacken – $why."
-            RainGear.RAINJACKET ->
-                if (shoes) {
-                    "Regenjacke statt Schirm – zu windig; dazu feste Schuhe, es kann glatt werden."
-                } else {
-                    "Regenjacke statt Schirm – zu windig."
-                }
+            RainGear.NONE -> c.noUmbrella(shoes)
+            RainGear.UMBRELLA -> c.umbrella(shoes, why)
+            RainGear.RAINJACKET -> c.rainJacket(shoes)
         }
         return sentences.joinToString(" ")
     }
 
-    private fun mergedWear(morning: Band): String =
-        if (morning == Band.LIGHT) "Shirt oder dünner Pulli unter der Regenjacke" else "Pulli oder Fleece unter der Regenjacke"
-
-    private fun short(morning: Band, change: Change, gear: RainGear, merged: Boolean): String {
+    private fun short(c: ClothingStrings, morning: ClothingBand, change: Change, gear: RainGear, merged: Boolean): String {
         val rain = when {
-            merged -> "kein Schirm"
-            gear == RainGear.UMBRELLA -> "Schirm einpacken"
-            gear == RainGear.RAINJACKET -> "Regenjacke statt Schirm"
-            else -> "kein Schirm"
+            merged -> c.noUmbrellaShort
+            gear == RainGear.UMBRELLA -> c.packUmbrellaShort
+            gear == RainGear.RAINJACKET -> c.rainJacketShort
+            else -> c.noUmbrellaShort
         }
-        val m = if (merged) "Regenjacke" else morning.compact
+        val m = if (merged) c.rainJacketLayer else c.compact(morning)
         val candidates = when (change) {
-            is Change.Warmer -> {
-                val a = change.band.compact
-                listOf(
-                    "Morgens $m, ${fromHour(change.hour)} $a, $rain",
-                    "Morgens $m, später $a, $rain",
-                    "$m, später $a, $rain",
-                    "$m, $rain",
-                )
-            }
-            is Change.Colder -> {
-                val a = change.band.compact
-                listOf(
-                    "Erst $m, ${fromHour(change.hour)} $a, $rain",
-                    "Erst $m, später $a, $rain",
-                    "$m, später $a",
-                    "$m, $rain",
-                )
-            }
-            Change.Same ->
-                if (merged) {
-                    listOf("Regenjacke statt Schirm, drunter Pulli")
-                } else {
-                    listOf("Den ganzen Tag ${morning.short}, $rain", "${morning.short}, $rain", "${morning.compact}, $rain")
-                }
+            is Change.Warmer -> c.shortWarmer(m, c.compact(change.band), change.hour, rain)
+            is Change.Colder -> c.shortColder(m, c.compact(change.band), change.hour, rain)
+            Change.Same -> if (merged) listOf(c.shortMerged) else c.shortSame(morning, rain)
         }
         val chosen = candidates.firstOrNull { it.wordCount() <= MAX_SHORT_WORDS } ?: candidates.last()
         return chosen.capitalizeFirst() + "."
