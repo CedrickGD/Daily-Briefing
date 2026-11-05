@@ -2,6 +2,7 @@ package com.cedrickgd.morgenbriefing.ui.article
 
 import com.cedrickgd.morgenbriefing.data.model.ArticleBlock
 import com.cedrickgd.morgenbriefing.data.model.ArticleContent
+import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -30,5 +31,18 @@ class ArticleViewModelLogicTest {
         val c = content(ArticleBlock.paragraph("Ganz anderer Einstieg in den Text, der nichts mit dem Teaser zu tun hat."))
         assertEquals(1, ArticleViewModel.withoutTeaser(c, "Der Teaser der Redaktion ist ein anderer Satz.").blocks.size)
         assertEquals(1, ArticleViewModel.withoutTeaser(c, "").blocks.size)
+    }
+
+    @Test
+    fun `an item without a feed teaser (Google News) gets the page's own, without repeating it`() {
+        val description = "Iranian leaders have hailed what they say is Americans’ rejection of the war, while Republicans look for answers."
+        val c = content(
+            ArticleBlock.paragraph(description),
+            ArticleBlock.paragraph("Iranian leaders hailed the Democratic landslide in the U.S. midterms on Tuesday as a rejection of the war."),
+        ).copy(description = description, image = "https://static.example.com/assets/6aec3f9cd52f4907d2036b3f/tehran.jpg?width=1024")
+        val item = NewsItem(id = "g", headline = "What the Midterms Mean for the Iran War", url = "https://news.google.com/rss/articles/X", source = "TIME", sourceId = "g", topicId = "welt", aggregator = "google")
+        val arranged = ArticleViewModel.arrange(c.copy(blocks = listOf(ArticleBlock.image("https://static.example.com/assets/6aec3f9cd52f4907d2036b3f/tehran.jpg?width=3840")) + c.blocks), item)
+        assertEquals(description, arranged.teaser)
+        assertEquals(listOf(ArticleBlock.PARAGRAPH), arranged.content.blocks.map { it.type })
     }
 }

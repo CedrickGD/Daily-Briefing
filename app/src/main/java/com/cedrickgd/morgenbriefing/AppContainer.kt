@@ -6,8 +6,11 @@ import com.cedrickgd.morgenbriefing.data.AppJson
 import com.cedrickgd.morgenbriefing.data.NewsRepository
 import com.cedrickgd.morgenbriefing.data.SettingsRepository
 import com.cedrickgd.morgenbriefing.data.WeatherRepository
+import com.cedrickgd.morgenbriefing.data.article.AndroidNetworkMeter
+import com.cedrickgd.morgenbriefing.data.article.ArticlePrefetcher
 import com.cedrickgd.morgenbriefing.data.article.ArticleRepository
 import com.cedrickgd.morgenbriefing.data.article.LinkResolver
+import com.cedrickgd.morgenbriefing.data.article.ReadabilityStore
 import com.cedrickgd.morgenbriefing.data.local.NewsCache
 import com.cedrickgd.morgenbriefing.data.local.WeatherStore
 import com.cedrickgd.morgenbriefing.data.news.RssParser
@@ -45,8 +48,18 @@ class AppContainer(context: Context) {
     val googleNewsDecoder = GoogleNewsDecoder(http, File(storeDir, "google-news-links.json"), json)
     val linkResolver: LinkResolver = googleNewsDecoder
 
-    val news = NewsRepository(rss, newsCache, resolvedUrl = googleNewsDecoder::peek, warmUp = googleNewsDecoder::warm)
-    val articles = ArticleRepository(http, storeDir, json)
+    /** Which sites the reader can show; seeded with [com.cedrickgd.morgenbriefing.data.article.KnownWalls], learns on the phone. */
+    val readability = ReadabilityStore(File(storeDir, "readability.json"), json)
+
+    val news = NewsRepository(
+        rss,
+        newsCache,
+        blockedDomains = readability::blockedDomains,
+        resolvedUrl = googleNewsDecoder::peek,
+        warmUp = googleNewsDecoder::warm,
+    )
+    val articles = ArticleRepository(http, storeDir, json, linkResolver = linkResolver, readability = readability)
+    val prefetcher = ArticlePrefetcher(articles, AndroidNetworkMeter(app))
     val location = LocationFinder(app)
 }
 

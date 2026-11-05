@@ -55,6 +55,8 @@ import coil3.compose.AsyncImage
 import com.cedrickgd.morgenbriefing.data.model.ArticleBlock
 import com.cedrickgd.morgenbriefing.data.model.ArticleContent
 import com.cedrickgd.morgenbriefing.data.model.ArticleImage
+import com.cedrickgd.morgenbriefing.i18n.commonStrings
+import com.cedrickgd.morgenbriefing.i18n.readerStrings
 import com.cedrickgd.morgenbriefing.listen
 import com.cedrickgd.morgenbriefing.listen.ListenMiniPlayerDefaults
 import com.cedrickgd.morgenbriefing.ui.components.GlassIconButton
@@ -94,6 +96,8 @@ fun ArticleScreen(
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val playerLift = if (playerShown) ListenMiniPlayerDefaults.Height + ListenMiniPlayerDefaults.Gap else 0.dp
     val openExternal = { links.open(state.item.url) }
+    val common = commonStrings()
+    val reader = readerStrings()
 
     BoxWithConstraints(
         modifier
@@ -124,7 +128,7 @@ fun ArticleScreen(
                 state.loading -> item(key = "skeleton") { BodySkeleton() }
 
                 else -> item(key = "failed") {
-                    LoadFailed(reason = state.error, onRetry = viewModel::retry, onOpenExternal = openExternal)
+                    LoadFailed(failure = state.failure, onRetry = viewModel::retry, onOpenExternal = openExternal)
                 }
             }
         }
@@ -137,18 +141,18 @@ fun ArticleScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            GlassIconButton(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zurück", onClick = onBack)
+            GlassIconButton(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = common.back, onClick = onBack)
             Spacer(Modifier.weight(1f))
             val speakingThis = listeningThis && listenState.speaking
             GlassIconButton(
                 icon = if (speakingThis) Icons.Rounded.Pause else Icons.Rounded.Headphones,
-                contentDescription = if (speakingThis) "Vorlesen pausieren" else "Zuhören",
+                contentDescription = if (speakingThis) reader.pauseListening else reader.listen,
                 onClick = {
                     if (listeningThis) listen.pauseOrResume() else listen.play(state.item, state.content?.text)
                 },
             )
-            GlassIconButton(Icons.Rounded.Share, contentDescription = "Teilen", onClick = { links.shareArticle(state.item) })
-            GlassIconButton(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = "Im Browser öffnen", onClick = openExternal)
+            GlassIconButton(Icons.Rounded.Share, contentDescription = common.share, onClick = { links.shareArticle(state.item) })
+            GlassIconButton(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = common.openInBrowser, onClick = openExternal)
         }
     }
 }
@@ -208,10 +212,10 @@ private fun Head(state: ArticleUiState) {
         if (headline.isNotBlank()) {
             Text(text = headline, style = MaterialTheme.typography.headlineLarge, color = colors.onSurface)
         }
-        if (item.summary.isNotBlank()) {
+        if (state.teaser.isNotBlank()) {
             Spacer(Modifier.height(14.dp))
             Text(
-                text = item.summary,
+                text = state.teaser,
                 style = MaterialTheme.typography.bodyLarge.copy(
                     fontFamily = FontFamily.Serif,
                     fontWeight = FontWeight.Medium,
@@ -306,10 +310,11 @@ private fun BlockView(block: ArticleBlock, showImages: Boolean) {
 @Composable
 private fun EndNote(state: ArticleUiState, content: ArticleContent, onOpenExternal: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val reader = readerStrings()
     Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp)) {
         if (content.looksTruncated) {
             Text(
-                text = "Das war vermutlich nur der Anfang – den Rest zeigt die Redaktion nur auf ihrer Seite.",
+                text = reader.truncatedNote,
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
             )
@@ -318,13 +323,13 @@ private fun EndNote(state: ArticleUiState, content: ArticleContent, onOpenExtern
         val source = state.item.source.ifBlank { content.site }
         if (source.isNotBlank()) {
             Text(
-                text = "Quelle: $source",
+                text = reader.source(source),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
         }
-        GlassPillButton(text = "Im Browser öffnen", icon = Icons.AutoMirrored.Rounded.OpenInNew, onClick = onOpenExternal)
+        GlassPillButton(text = commonStrings().openInBrowser, icon = Icons.AutoMirrored.Rounded.OpenInNew, onClick = onOpenExternal)
     }
 }
 
@@ -345,8 +350,10 @@ private fun BodySkeleton() {
 }
 
 @Composable
-private fun LoadFailed(reason: String?, onRetry: () -> Unit, onOpenExternal: () -> Unit) {
+private fun LoadFailed(failure: ArticleFailure?, onRetry: () -> Unit, onOpenExternal: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val reader = readerStrings()
+    val common = commonStrings()
     Column(
         Modifier
             .fillMaxWidth()
@@ -354,22 +361,22 @@ private fun LoadFailed(reason: String?, onRetry: () -> Unit, onOpenExternal: () 
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        val wall = reason?.contains("Cookie", ignoreCase = true) == true
+        val wall = failure?.isWall == true
         Text(if (wall) "🍪" else "🗞️", fontSize = 40.sp)
         Text(
-            text = if (wall) "Nur bei der Redaktion lesbar" else "Artikel gerade nicht da",
+            text = reader.failureTitle(failure?.outcome),
             style = MaterialTheme.typography.headlineSmall,
             color = colors.onSurface,
             textAlign = TextAlign.Center,
         )
         Text(
-            text = reason ?: "Der Artikel ließ sich gerade nicht laden.",
+            text = reader.failureReason(failure?.outcome, failure?.site.orEmpty(), failure?.httpCode),
             style = MaterialTheme.typography.bodyMedium,
             color = colors.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(6.dp))
-        GlassPillButton(text = "Nochmal versuchen", icon = Icons.Rounded.Refresh, onClick = onRetry, filled = true)
-        GlassPillButton(text = "Im Browser öffnen", icon = Icons.AutoMirrored.Rounded.OpenInNew, onClick = onOpenExternal)
+        GlassPillButton(text = common.retry, icon = Icons.Rounded.Refresh, onClick = onRetry, filled = true)
+        GlassPillButton(text = common.openInBrowser, icon = Icons.AutoMirrored.Rounded.OpenInNew, onClick = onOpenExternal)
     }
 }

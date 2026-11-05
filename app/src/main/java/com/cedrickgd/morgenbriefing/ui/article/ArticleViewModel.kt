@@ -10,11 +10,12 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.cedrickgd.morgenbriefing.AppContainer
 import com.cedrickgd.morgenbriefing.MorgenbriefingApp
+import com.cedrickgd.morgenbriefing.data.article.ArticleCleaner
 import com.cedrickgd.morgenbriefing.data.article.ArticleException
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
-import com.cedrickgd.morgenbriefing.data.model.ArticleBlock
 import com.cedrickgd.morgenbriefing.data.model.ArticleContent
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
+import com.cedrickgd.morgenbriefing.data.model.ReadOutcome
 import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
@@ -31,17 +32,43 @@ import kotlinx.coroutines.launch
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
+/**
+ * Why the reader shows no article: the typed [outcome] (null = an unexpected error), the
+ * newsroom's [site] name and the server's [httpCode]. Turned into text by `ReaderStrings`.
+ */
+@Immutable
+data class ArticleFailure(
+    val outcome: ReadOutcome?,
+    val site: String = "",
+    val httpCode: Int? = null,
+) {
+    /** The site keeps the text to itself (paywall, consent, bot block): only the browser helps. */
+    val isWall: Boolean get() = outcome?.isWall == true
+
+    companion object {
+        fun of(error: Throwable, fallbackSite: String): ArticleFailure = when (error) {
+            is ArticleException -> ArticleFailure(error.outcome, error.site.ifBlank { fallbackSite }, error.httpCode)
+            else -> ArticleFailure(null, fallbackSite)
+        }
+    }
+}
+
 /** What the article reader shows. */
 @Immutable
 data class ArticleUiState(
     /** The feed item (headline, teaser, source, picture); a stub when the feed no longer has it. */
     val item: NewsItem,
     val topic: Topic,
-    /** The extracted article; null while loading or when loading failed. */
+    /** The extracted article without what the head above it already shows; null while loading or when loading failed. */
     val content: ArticleContent? = null,
+    /**
+     * The teaser shown under the headline: the feed's (else the page's own), shortened or
+     * replaced so it never repeats the text below.
+     */
+    val teaser: String = item.summary,
     val loading: Boolean = true,
-    /** Short German reason when the article could not be loaded. */
-    val error: String? = null,
+    /** Why the article could not be loaded; null while loading or on success. */
+    val failure: ArticleFailure? = null,
     val showImages: Boolean = true,
     /** Reference for "vor 3 Min.". */
     val now: ZonedDateTime,
@@ -51,7 +78,9 @@ data class ArticleUiState(
  * Loads the readable article for [route]: the feed item is taken from the news repository (by
  * id, else by URL), the text from [AppContainer.articles]. When the feed has forgotten the
  * item (opened from the mini player much later), a stub carries the URL and the page's own
- * title fills the headline.
+ * title fills the headline. The result is arranged under the reader's head (headline, teaser,
+ * hero picture) so nothing shows twice ([ArticleCleaner.arrange]), and reported to the
+ * prefetcher so the feed knows the article is readable.
  */
 class ArticleViewModel(
     private val container: AppContainer,
@@ -86,24 +115,26 @@ class ArticleViewModel(
     fun load(refresh: Boolean) {
         job?.cancel()
         job = viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null) }
+            _state.update { it.copy(loading = true, failure = null) }
             val settings = attempt { container.settings.current() }.getOrNull() ?: AppSettings()
             _state.update { s -> s.copy(topic = Topics.resolveOrNeutral(s.item.topicId, settings), showImages = settings.showImages) }
             attempt { container.articles.pruneOnce() }.onFailure { Log.w(TAG, "Could not prune the article cache", it) }
-            val result = attempt { container.articles.load(_state.value.item, refresh) }
+            val item = _state.value.item
+            val result = attempt { container.articles.load(item, refresh, language = settings.edition.language) }
             ensureActive()
             result.fold(
                 onSuccess = { content ->
+                    container.prefetcher.report(item, content)
                     _state.update { s ->
-                        val item = if (s.item.headline.isBlank()) s.item.copy(headline = content.title) else s.item
-                        s.copy(item = item, content = withoutTeaser(content, item.summary), loading = false, error = null, now = clock())
+                        val shown = if (s.item.headline.isBlank()) s.item.copy(headline = content.title) else s.item
+                        val arranged = arrange(content, shown)
+                        s.copy(item = shown, content = arranged.content, teaser = arranged.teaser, loading = false, failure = null, now = clock())
                     }
                 },
                 onFailure = { e ->
                     Log.i(TAG, "Article unavailable: ${e.message}")
-                    _state.update {
-                        it.copy(loading = false, error = (e as? ArticleException)?.reason ?: "Der Artikel ließ sich gerade nicht laden")
-                    }
+                    container.prefetcher.report(item, e)
+                    _state.update { it.copy(loading = false, failure = ArticleFailure.of(e, it.item.source)) }
                 },
             )
         }
@@ -114,24 +145,25 @@ class ArticleViewModel(
     companion object {
         private const val TAG = "ArticleViewModel"
         private const val FALLBACK_TOPIC = "welt"
-        private val NOISE = Regex("[\\s\\p{Punct}…„“”‚‘’«»]+")
 
         /**
-         * The page's lead paragraph is usually the feed's teaser, which the reader already shows
-         * above the body: drop the first paragraph when it says the same (the feed often cuts it
-         * with "…", so a prefix match counts).
+         * [content] arranged under the reader's head for [item]: the teaser is the feed's (else
+         * the page's `og:description`), the hero the feed's picture (else the page's lead picture).
          */
-        internal fun withoutTeaser(content: ArticleContent, summary: String): ArticleContent {
-            val teaser = NOISE.replace(summary, "").lowercase()
-            if (teaser.length < 20) return content
-            val first = content.blocks.indexOfFirst { it.type == ArticleBlock.PARAGRAPH }
-            if (first < 0) return content
-            val paragraph = NOISE.replace(content.blocks[first].text, "").lowercase()
-            val same = paragraph == teaser ||
-                (summary.trimEnd().endsWith("…") && paragraph.startsWith(teaser)) ||
-                (paragraph.length >= 40 && teaser.startsWith(paragraph))
-            return if (same) content.copy(blocks = content.blocks.filterIndexed { i, _ -> i != first }) else content
-        }
+        internal fun arrange(content: ArticleContent, item: NewsItem): ArticleCleaner.Arranged =
+            ArticleCleaner.arrange(
+                content = content,
+                teaser = item.summary.ifBlank { content.description },
+                headline = item.headline,
+                hero = item.image?.url ?: content.image,
+            )
+
+        /**
+         * [content] without the lead paragraph(s) that repeat [summary] (see [ArticleCleaner.arrange]
+         * for the teaser that is shown instead).
+         */
+        internal fun withoutTeaser(content: ArticleContent, summary: String): ArticleContent =
+            ArticleCleaner.arrange(content, summary).content
 
         fun factory(route: ArticleRoute): ViewModelProvider.Factory = viewModelFactory {
             initializer {
