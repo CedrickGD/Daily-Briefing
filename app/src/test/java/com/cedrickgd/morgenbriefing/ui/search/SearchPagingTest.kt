@@ -133,4 +133,31 @@ class SearchPagingTest {
         val page = SearchPage("EU", 0, listOf(item("a"), item("a"), item("b", headline = "Story A")), hasMore = false)
         assertEquals(listOf("a"), SearchPaging.onPage(SearchPaging.start("EU"), page).items.map { it.id })
     }
+
+    @Test
+    fun `a short first page goes on to older weeks while the end is in sight`() {
+        // Two results draw as many rows as the loading skeleton; the paging state decides, not the row count.
+        val loading = SearchPaging.start("Midterms")
+        assertFalse(SearchPaging.shouldLoadMore(loading, nearEnd = true))
+        val two = SearchPaging.onPage(loading, page("Midterms", 0, "a", "b"))
+        assertTrue(SearchPaging.shouldLoadMore(two, nearEnd = true))
+        assertFalse(SearchPaging.shouldLoadMore(two, nearEnd = false))
+        // While a page loads nothing more is asked; once it is in, the trigger is true again.
+        val begun = SearchPaging.beginMore(two)!!
+        assertFalse(SearchPaging.shouldLoadMore(begun, nearEnd = true))
+        val more = SearchPaging.onPage(begun, page("Midterms", 1, "c"))
+        assertTrue(SearchPaging.shouldLoadMore(more, nearEnd = true))
+        // The end of the search: nothing to ask for.
+        assertFalse(SearchPaging.shouldLoadMore(SearchPaging.onPage(SearchPaging.beginMore(more)!!, page("Midterms", 2, "d", hasMore = false)), nearEnd = true))
+    }
+
+    @Test
+    fun `a failed page waits for the retry instead of asking again by itself`() {
+        val two = SearchPaging.onPage(SearchPaging.start("Midterms"), page("Midterms", 0, "a", "b"))
+        val failed = SearchPaging.onPage(SearchPaging.beginMore(two)!!, page("Midterms", 1, failed = true))
+        assertTrue(failed.moreFailed)
+        assertFalse(SearchPaging.shouldLoadMore(failed, nearEnd = true))
+        // "Erneut versuchen" starts the page again.
+        assertNotNull(SearchPaging.beginMore(failed))
+    }
 }

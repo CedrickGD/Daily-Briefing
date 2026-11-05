@@ -37,7 +37,9 @@ import com.cedrickgd.morgenbriefing.ui.today.TodayViewModel
  * the article reader ([ArticleRoute], covers the shared sky with its own opaque page),
  * "Themen entdecken" ([DiscoverRoute]) and the search ([SearchRoute]) – both glass over the
  * sky, so the sky keeps living behind them. Every pushed screen follows the predictive back
- * gesture (its pop transition is seeked by the gesture).
+ * gesture (its pop transition is seeked by the gesture). Their back arrows close only their own
+ * entry ([ShellNavigator.back]); articles open through [ShellNavigator.openArticle], which also
+ * honours "Artikel in der App lesen".
  *
  * @param pagePadding bottom room for the floating chrome, for the pager pages.
  * @param pushedPadding bottom room for pushed screens (navigation bar, mini player).
@@ -77,7 +79,7 @@ internal fun AppNavHost(
             popExitTransition = { slideOutHorizontally(spring(stiffness = Spring.StiffnessMedium)) { it / 3 } + fadeOut() },
         ) { entry ->
             val route = entry.toRoute<ArticleRoute>()
-            ArticleScreen(route = route, onBack = { navController.popBackStack() })
+            ArticleScreen(route = route, onBack = { navigator.back(entry) })
         }
         composable<DiscoverRoute>(
             enterTransition = { pushedEnter() },
@@ -88,7 +90,7 @@ internal fun AppNavHost(
             DiscoverScreen(
                 route = entry.toRoute<DiscoverRoute>(),
                 contentPadding = pushedPadding,
-                onBack = navigator::back,
+                onBack = { navigator.back(entry) },
                 onOpenArticle = { item -> navigator.openArticle(entry, item) },
                 onOpenSearch = { query -> navigator.openSearch(query) },
                 onCreateCustomTopic = {
@@ -106,7 +108,7 @@ internal fun AppNavHost(
             SearchScreen(
                 route = entry.toRoute<SearchRoute>(),
                 contentPadding = pushedPadding,
-                onBack = navigator::back,
+                onBack = { navigator.back(entry) },
                 onOpenArticle = { item -> navigator.openArticle(entry, item) },
                 onOpenDiscover = { navigator.openDiscover() },
             )

@@ -35,6 +35,9 @@ internal val PageSpring: AnimationSpec<Float> = spring(dampingRatio = 0.86f, sti
  * The shell's navigation actions: switching pager pages and pushing the screens that lie over
  * the pager (article reader, "Themen entdecken", search). Event handlers only – nothing here is
  * read during composition.
+ *
+ * Every way into an article goes through [openArticle], so "Artikel in der App lesen" is decided
+ * in one place: [readInApp] says whether the reader opens, otherwise [openInBrowser] gets the link.
  */
 @Stable
 class ShellNavigator internal constructor(
@@ -43,6 +46,8 @@ class ShellNavigator internal constructor(
     private val chrome: ChromeController,
     private val scope: CoroutineScope,
     private val onTodayRequested: () -> Unit,
+    private val readInApp: () -> Boolean,
+    private val openInBrowser: (url: String) -> Unit,
 ) {
     /** No screen is pushed over the pager right now. */
     val isMainOnTop: Boolean
@@ -68,11 +73,16 @@ class ShellNavigator internal constructor(
     }
 
     /**
-     * Opens [item] in the article reader over the pager. [from] is the entry the tap came from:
-     * a tap while that entry is already leaving (double tap, back in flight) is ignored.
+     * Opens [item] in the article reader over the pager – or in the browser when the user reads
+     * articles there. [from] is the entry the tap came from: a tap while that entry is already
+     * leaving (double tap, back in flight) is ignored.
      */
     fun openArticle(from: NavBackStackEntry, item: NewsItem) {
         if (!from.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        if (!readInApp()) {
+            openInBrowser(item.url)
+            return
+        }
         // Items the repository does not keep (search results) reach the reader this way.
         ArticleHandoff.put(item)
         navController.navigate(ArticleRoute(url = item.url, itemId = item.id, topicId = item.topicId))
@@ -88,9 +98,14 @@ class ShellNavigator internal constructor(
     /** Opens the news search over the pager, running [query] at once when given (see [NavPlan]). */
     fun openSearch(query: String? = null) = open(SearchRoute(query?.trim()?.ifEmpty { null }))
 
-    /** Closes the screen on top (the back arrow of a pushed screen). */
-    fun back() {
-        if (!isMainOnTop) navController.popBackStack()
+    /**
+     * Closes [from], the pushed screen whose back arrow was tapped. Only while it is still the
+     * screen on top: a second tap during its exit animation would otherwise close the screen
+     * below as well – or pop the pager itself and leave an empty window.
+     */
+    fun back(from: NavBackStackEntry) {
+        if (from.isMain() || navController.currentBackStackEntry?.id != from.id) return
+        navController.popBackStack()
     }
 
     private inline fun <reified T : Any> open(target: T) {
@@ -114,8 +129,15 @@ class ShellNavigator internal constructor(
     private inline fun <reified T : Any> NavBackStackEntry.routeOrNull(): T? =
         if (destination.hasRoute<T>()) toRoute<T>() else null
 
-    /** Opens the article at [url] (the mini player) unless it is already on top. */
+    /**
+     * Opens the article at [url] (the mini player) unless it is already on top – in the browser
+     * when the user reads articles there.
+     */
     fun openArticle(url: String) {
+        if (!readInApp()) {
+            openInBrowser(url)
+            return
+        }
         val top = navController.currentBackStackEntry ?: return
         if (top.destination.hasRoute<ArticleRoute>() && top.toRoute<ArticleRoute>().url == url) return
         navController.navigate(ArticleRoute(url = url))

@@ -1,6 +1,7 @@
 package com.cedrickgd.morgenbriefing.ui.news
 
 import androidx.compose.runtime.Immutable
+import com.cedrickgd.morgenbriefing.data.NewsRepository
 import com.cedrickgd.morgenbriefing.data.article.KnownWalls
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
@@ -11,9 +12,48 @@ import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 
 /*
  * The feed's decisions as pure functions (unit-tested): what "readable only" hides, which
- * articles are warmed ahead, when an endless list reveals or loads more, and which topics the
- * feed offers to follow.
+ * articles are warmed ahead, when an endless list reveals or loads more, which topics the
+ * feed offers to follow and which teaser a card shows.
  */
+
+/**
+ * The teaser a card shows under [headline]: [summary], unless it only repeats the headline.
+ * Publishers' feeds often put the title into the description as well (tagesschau: the same
+ * sentence twice on the card); compared without case, accents and punctuation.
+ *
+ * - the same text as the headline, or a cut-off part of it: no teaser;
+ * - the headline first, then more: only what follows it ([MIN_TEASER_REST] letters at least,
+ *   else no teaser – "Headline – tagesschau.de" is no teaser either);
+ * - anything else: [summary] as it is.
+ */
+internal fun cardTeaser(headline: String, summary: String): String {
+    val text = summary.trim()
+    if (text.isEmpty()) return ""
+    val head = NewsRepository.normalizeText(headline)
+    if (head.isEmpty()) return text
+    val body = NewsRepository.normalizeText(text)
+    if (body.isEmpty() || head.startsWith(body)) return ""
+    if (!body.startsWith(head)) return text
+    // Find the word that completes the headline and keep what comes after it.
+    val words = text.split(WHITESPACE)
+    var seen = ""
+    for ((index, word) in words.withIndex()) {
+        val normalized = NewsRepository.normalizeText(word)
+        if (normalized.isNotEmpty()) seen = if (seen.isEmpty()) normalized else "$seen $normalized"
+        if (seen == head) {
+            val rest = words.drop(index + 1).joinToString(" ").trimStart { !it.isLetterOrDigit() && it != '„' && it != '"' && it != '(' }
+            return if (NewsRepository.normalizeText(rest).length >= MIN_TEASER_REST) rest else ""
+        }
+        if (!head.startsWith(seen)) break
+    }
+    // The headline ends inside a word ("Midterms" vs. "Midterms-Wahl"): no clean cut, keep it all.
+    return text
+}
+
+/** Letters a teaser must add to the headline it starts with. */
+private const val MIN_TEASER_REST = 20
+
+private val WHITESPACE = Regex("\\s+")
 
 /**
  * What "nur lesbare Artikel" hides, frozen at one moment (a refresh): the sites the reader cannot

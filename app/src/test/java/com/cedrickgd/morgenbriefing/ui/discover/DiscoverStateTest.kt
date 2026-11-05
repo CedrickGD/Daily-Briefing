@@ -190,8 +190,19 @@ class DiscoverStateTest {
         assertEquals("anglais", displayLanguage(us, AppLanguage.FR.locale))
         assertEquals("inglés", displayLanguage(us, AppLanguage.ES.locale))
         assertEquals("inglese", displayLanguage(us, AppLanguage.IT.locale))
-        assertEquals(NewsEdition.forCountry("FR"), placeEdition(paris, settings))
-        assertEquals(NewsEdition.GERMANY, placeEdition(atlantis, settings))
+    }
+
+    @Test
+    fun `a place is labelled with the edition the engine reads it in`() {
+        val withParis = SettingsOps.addLocalPlace(settings, paris).first
+        assertEquals("Französisch", build(s = withParis).places.single().language)
+        // Same country as the main edition: the user's language, not the country's first edition (CH:de).
+        val zurich = Place("Zürich", 47.37, 8.54, "Zürich, Schweiz", "CH")
+        val swissFrench = SettingsOps.addLocalPlace(settings.copy(edition = NewsEdition.fromKey("CH:fr")!!), zurich).first
+        val row = build(s = swissFrench).places.single()
+        assertEquals("Französisch", row.language)
+        assertEquals("Schweiz", row.country)
+        assertEquals("Deutsch", build(s = swissFrench.copy(edition = NewsEdition.fromKey("CH:de")!!)).places.single().language)
     }
 
     @Test

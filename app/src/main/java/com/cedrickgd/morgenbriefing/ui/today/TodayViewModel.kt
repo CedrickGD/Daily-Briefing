@@ -20,12 +20,14 @@ import com.cedrickgd.morgenbriefing.data.SettingsOps
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.news.TopicSources
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.ui.brief.WeatherUi
 import com.cedrickgd.morgenbriefing.ui.brief.toWeatherUi
 import com.cedrickgd.morgenbriefing.ui.news.FeedPrefs
 import com.cedrickgd.morgenbriefing.ui.news.NewsFeed
 import com.cedrickgd.morgenbriefing.ui.news.ReadabilityHides
 import com.cedrickgd.morgenbriefing.ui.news.buildNewsFeed
+import com.cedrickgd.morgenbriefing.ui.news.readsCurrentSources
 import com.cedrickgd.morgenbriefing.util.attempt
 import com.cedrickgd.morgenbriefing.util.flatten
 import com.cedrickgd.morgenbriefing.util.isOlderThan
@@ -97,8 +99,9 @@ data class TodayUiState(
  * Today: shows cached weather and the cached feed instantly, then refreshes both in parallel.
  * Weather is refreshed again on resume once it is older than 10 minutes, the news once they
  * are older than 15 minutes — and whenever the sources of a followed topic change in the
- * settings. Also drives following topics and hiding sources from the feed, the endless topic
- * lists ([loadMore]) and warming the articles on screen ([prefetch]).
+ * settings. The weather texts follow the interface language. Also drives following topics and
+ * hiding sources from the feed, the endless topic lists ([loadMore]) and warming the articles on
+ * screen ([prefetch]).
  */
 class TodayViewModel(
     private val container: AppContainer,
@@ -133,8 +136,8 @@ class TodayViewModel(
     private var lastNewsAttempt: Instant? = null
     private val loadMoreJobs = HashMap<String, Job>()
 
-    /** Articles handed to the prefetcher since the screen was last left (cancelled then). */
-    private val prefetched = LinkedHashSet<String>()
+    /** What the screen asked the prefetcher to warm (cancelled when it is left, renewed when it is back). */
+    private val prefetchSession = PrefetchSession()
 
     init {
         viewModelScope.launch { showCachedWeather() }
@@ -146,6 +149,7 @@ class TodayViewModel(
             refreshNews(force = false)
         }
         observeInputs()
+        observeLanguage()
     }
 
     /** Pull-to-refresh: weather and news in parallel; joins refreshes that are already running. */
@@ -173,6 +177,10 @@ class TodayViewModel(
         if (weatherStale && !isWithin(lastWeatherAttempt, instant, WEATHER_MAX_AGE)) refreshWeather()
 
         if (!isWithin(lastNewsAttempt, instant, NEWS_RETRY_AFTER)) refreshNews(force = false)
+
+        // Leaving the screen cancelled the warm-ups of the articles on screen; the list does not
+        // ask again for the same articles, so the last window is sent once more.
+        sendPrefetch(prefetchSession.resume())
     }
 
     fun retryWeather() {
@@ -260,20 +268,23 @@ class TodayViewModel(
      * (prefetch mode, edition language). Known articles are answered at once.
      */
     fun prefetch(items: List<NewsItem>) {
-        val prefs = _state.value.prefs ?: return
-        if (items.isEmpty()) return
-        items.forEach { prefetched += it.id }
-        while (prefetched.size > MAX_TRACKED_PREFETCH) prefetched.remove(prefetched.first())
-        attempt { container.prefetcher.prefetch(items, prefs.prefetch, prefs.editionLanguage.ifBlank { null }) }
-            .onFailure { Log.w(TAG, "Prefetch failed", it) }
+        if (_state.value.prefs == null || items.isEmpty()) return
+        prefetchSession.request(items)
+        sendPrefetch(items)
     }
 
-    /** The screen was left: stop warming what it asked for. */
+    /** The screen was left: stop warming what it asked for ([onResume] asks again). */
     fun stopPrefetch() {
-        if (prefetched.isEmpty()) return
-        val ids = prefetched.toList()
-        prefetched.clear()
+        val ids = prefetchSession.stop()
+        if (ids.isEmpty()) return
         attempt { container.prefetcher.cancel(ids) }.onFailure { Log.w(TAG, "Prefetch cancel failed", it) }
+    }
+
+    private fun sendPrefetch(items: List<NewsItem>) {
+        val prefs = _state.value.prefs ?: return
+        if (items.isEmpty()) return
+        attempt { container.prefetcher.prefetch(items, prefs.prefetch, prefs.editionLanguage.ifBlank { null }) }
+            .onFailure { Log.w(TAG, "Prefetch failed", it) }
     }
 
     /**
@@ -320,6 +331,7 @@ class TodayViewModel(
             running?.join()
             val settings = attempt { container.settings.current() }.getOrNull() ?: return@launch
             val visible = Topics.visible(settings).map { it.id }
+            // isStale also counts a topic read from other sources (a new edition, a moved region) as stale.
             val wanted = (topicIds?.filter { it in visible } ?: visible)
                 .filter { force || container.news.isStale(it, NEWS_MAX_AGE, settings) }
             if (wanted.isEmpty()) return@launch
@@ -390,6 +402,27 @@ class TodayViewModel(
         }
     }
 
+    /**
+     * Writes the weather texts (warnings, clothing advice, headline) again when the interface
+     * language changes – from the snapshot on screen, without a new fetch. Also catches a fetch
+     * that started before the change and arrives in the old language.
+     */
+    private fun observeLanguage() {
+        val languages = container.settings.settings
+            .map { it.language }
+            .distinctUntilChanged()
+            .catch { e -> Log.w(TAG, "Settings unavailable for the weather language", e) }
+        viewModelScope.launch {
+            combine(_state.map { it.weather }.distinctUntilChanged(), languages) { weather, lang -> weather to lang }
+                .collectLatest { (weather, lang) ->
+                    if (weather == null || weather.language == lang) return@collectLatest
+                    val ui = withContext(Dispatchers.Default) { weather.inLanguage(lang) }
+                    // Only if no newer snapshot arrived meanwhile (that one is checked on its own).
+                    _state.update { if (it.weather === weather) it.copy(weather = ui) else it }
+                }
+        }
+    }
+
     /** Reloads when the user changes places/time window or the sources of a followed topic. */
     private fun observeInputs() {
         viewModelScope.launch {
@@ -425,20 +458,25 @@ class TodayViewModel(
     companion object {
         private const val TAG = "TodayViewModel"
         private const val STOP_TIMEOUT_MS = 5_000L
-        private const val MAX_TRACKED_PREFETCH = 200
         private val WEATHER_MAX_AGE: Duration = Duration.ofMinutes(10)
         private val NEWS_MAX_AGE: Duration = Duration.ofMinutes(15)
         private val NEWS_RETRY_AFTER: Duration = Duration.ofMinutes(3)
 
         /**
-         * What every followed topic reads (source ids and addresses): a new edition, a newly
-         * followed topic or "nur lesbare Artikel" (other exclusions in the search) changes it.
-         * The seed walls keep the signature stable while the phone learns new ones.
+         * What every followed topic reads (source ids and addresses): a new edition or a newly
+         * followed topic changes it. "Nur lesbare Artikel" is part of every topic's signature:
+         * the repository drops the walled sites' articles while fetching, so switching it off
+         * must fetch every topic again – top stories, sections and places too, whose addresses
+         * stay the same either way. The seed walls keep the signature stable while the phone
+         * learns new ones.
          */
         internal fun sourceSignatures(settings: AppSettings): Map<String, List<String>> =
             Topics.visible(settings).map { it.id }.associateWith { id ->
-                TopicSources.resolve(id, settings, KnownWalls.DOMAINS).map { "${it.id} ${it.url}" }
+                TopicSources.resolve(id, settings, KnownWalls.DOMAINS).map { "${it.id} ${it.url}" } +
+                    "$READABLE_ONLY_MARK${settings.readableOnly}"
             }
+
+        private const val READABLE_ONLY_MARK = "readable-only="
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -448,3 +486,7 @@ class TodayViewModel(
         }
     }
 }
+
+/** The same weather in [lang]: the snapshot's texts derived again, or this one when they already are. */
+internal fun WeatherUi.inLanguage(lang: AppLanguage): WeatherUi =
+    if (language == lang) this else snapshot.toWeatherUi(lang)

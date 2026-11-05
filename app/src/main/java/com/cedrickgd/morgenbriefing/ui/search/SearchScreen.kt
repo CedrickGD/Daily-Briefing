@@ -212,15 +212,16 @@ fun SearchScreen(
         }
     }
     // Endless: the next page loads as the end comes near – again after every page that still
-    // leaves the end in sight (the item count is part of the key).
+    // leaves the end in sight (each page ends its loading, which makes the trigger true again).
+    val latestResults by rememberUpdatedState(results)
     LaunchedEffect(listState, viewModel) {
         snapshotFlow {
             val info = listState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            (last >= info.totalItemsCount - 1 - LOAD_AHEAD) to info.totalItemsCount
+            SearchPaging.shouldLoadMore(latestResults, nearEnd = last >= info.totalItemsCount - 1 - LOAD_AHEAD)
         }
             .distinctUntilChanged()
-            .filter { (nearEnd, _) -> nearEnd }
+            .filter { it }
             .collect { viewModel.loadMore() }
     }
     // The visible results are warmed for the reader (and get their pictures).

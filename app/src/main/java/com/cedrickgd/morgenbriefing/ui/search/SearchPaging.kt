@@ -68,6 +68,16 @@ object SearchPaging {
     fun canLoadMore(state: SearchResults): Boolean =
         state.phase == SearchPhase.READY && state.hasMore && !state.loadingMore
 
+    /**
+     * Whether the list should ask for the next page now: its end is in sight ([nearEnd]) and a
+     * page can be requested. Not after a failed page – that one waits for "Erneut versuchen",
+     * so an offline phone does not ask again and again. Decided on the paging state, not on
+     * the list's item count: a first page of two results draws as many rows as the loading
+     * skeleton, so a count-keyed trigger would never fire for it.
+     */
+    fun shouldLoadMore(state: SearchResults, nearEnd: Boolean): Boolean =
+        nearEnd && canLoadMore(state) && !state.moreFailed
+
     /** The next page is requested; null when there is nothing to request (see [canLoadMore]). */
     fun beginMore(state: SearchResults): SearchResults? =
         if (canLoadMore(state)) state.copy(loadingMore = true, moreFailed = false) else null

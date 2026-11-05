@@ -192,6 +192,8 @@ fun FeedEntry(
     }
     val badge by remember(hints, item.id) { derivedStateOf { cardBadge(hints.status(item.id)) } }
     val visualItem = remember(item, hero) { hero?.let { item.copy(image = ArticleImage(it)) } ?: item }
+    // Feeds that repeat the title as their description get no second copy of it.
+    val teaser = remember(item.headline, item.summary) { cardTeaser(item.headline, item.summary) }
 
     Column(modifier.fillMaxWidth()) {
         Column(
@@ -238,9 +240,9 @@ fun FeedEntry(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.semantics { heading() },
             )
-            if (item.summary.isNotBlank()) {
+            if (teaser.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                LeadText(item.summary, more = strings.readMore)
+                LeadText(teaser, more = strings.readMore)
             }
         }
         FeedMetaRow(
