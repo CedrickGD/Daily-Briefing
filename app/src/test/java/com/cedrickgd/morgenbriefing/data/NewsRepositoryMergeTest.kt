@@ -93,14 +93,91 @@ class NewsRepositoryMergeTest {
         assertEquals(1, NewsRepository.readable(listOf(item("x", a, null, url = "https://www.zeit.de/x"), item("y", a, null)), setOf("zeit.de")).size)
     }
 
+    private fun paged(id: String, at: String) =
+        googleItem(id, "Eine ältere Meldung Nummer $id", "a.de", at = at).copy(sourceId = gn.id + NewsRepository.PAGE_SUFFIX)
+
     @Test
     fun `paged articles survive a refresh while their source belongs to the topic`() {
-        val paged = googleItem("old", "Eine Meldung von letzter Woche", "a.de", at = "2026-10-20T10:00:00+01:00").copy(sourceId = gn.id + NewsRepository.PAGE_SUFFIX)
-        val previous = TopicNews("ki", "2026-10-29T08:00:00+01:00", listOf(paged))
-        val kept = NewsRepository.merge("ki", previous, listOf(ok(gn, googleItem("new", "Eine neue Meldung von heute früh", "a.de"))), now)
-        assertEquals(listOf("new", "old"), kept.items.map { it.id })
+        // Yesterday's first page reached back to the 27th, paging went on from there.
+        val previous = TopicNews(
+            "ki", "2026-10-28T20:00:00+01:00",
+            listOf(
+                googleItem("first", "Die Meldung von gestern Abend", "a.de", at = "2026-10-28T19:00:00+01:00"),
+                googleItem("bridge", "Die Meldung von vorgestern früh", "a.de", at = "2026-10-27T08:00:00+01:00"),
+                paged("old", "2026-10-25T10:00:00+01:00"),
+            ),
+        )
+        val fresh = ok(gn, googleItem("new", "Eine neue Meldung von heute früh", "a.de"), googleItem("first", "Die Meldung von gestern Abend", "a.de", at = "2026-10-28T19:00:00+01:00"))
+        val kept = NewsRepository.merge("ki", previous, listOf(fresh), now)
+        assertEquals(listOf("new", "first", "bridge", "old"), kept.items.map { it.id })
+        // The day the fresh page no longer covers joins the paged ones.
+        assertEquals(gn.id + NewsRepository.PAGE_SUFFIX, kept.items.single { it.id == "bridge" }.sourceId)
         val dropped = NewsRepository.merge("ki", previous, listOf(ok(a, item("x", a, "2026-10-29T10:00:00+01:00"))), now)
         assertEquals(listOf("x"), dropped.items.map { it.id })
+        // Google News down: everything stays as it was.
+        assertEquals(listOf("first", "bridge", "old"), NewsRepository.merge("ki", previous, listOf(failed(gn)), now).items.map { it.id })
+    }
+
+    @Test
+    fun `paged articles that no longer reach the fresh first page go, so paging can fill the days in between`() {
+        // Paged back to Nov 1 on Nov 5; the app is opened again on Nov 14.
+        val previous = TopicNews(
+            "ki", "2026-11-05T12:00:00+01:00",
+            listOf(
+                googleItem("nov5", "Meldung vom fünften November", "a.de", at = "2026-11-05T10:00:00+01:00"),
+                googleItem("nov3", "Meldung vom dritten November", "a.de", at = "2026-11-03T10:00:00+01:00"),
+                paged("nov2", "2026-11-02T10:00:00+01:00"),
+                paged("nov1", "2026-11-01T10:00:00+01:00"),
+            ),
+        )
+        val fresh = ok(
+            gn,
+            googleItem("nov14", "Meldung vom vierzehnten November", "a.de", at = "2026-11-14T10:00:00+01:00"),
+            googleItem("nov12", "Meldung vom zwölften November", "a.de", at = "2026-11-12T10:00:00+01:00"),
+        )
+        val merged = NewsRepository.merge("ki", previous, listOf(fresh), Instant.parse("2026-11-14T12:00:00Z"))
+        assertEquals(listOf("nov14", "nov12"), merged.items.map { it.id })
+    }
+
+    @Test
+    fun `the bulk of a first page leaves stray old hits out`() {
+        val november = (1..40).map { googleItem("n$it", "Meldung aus dem November Nummer $it", "a.de", at = "2026-11-0${1 + it % 5}T${10 + it % 10}:00:00+01:00") }
+        val april = (1..5).map { googleItem("a$it", "Meldung aus dem April Nummer $it", "a.de", at = "2026-04-1${it}T10:00:00+02:00") }
+        assertEquals(Instant.parse("2026-11-01T09:00:00Z"), NewsRepository.bulkOldest(november + april))
+        // A quiet place: a story every week or so is its bulk, not a stray.
+        val quiet = listOf("2026-11-05", "2026-10-29", "2026-10-20", "2026-10-14", "2026-10-03").map { googleItem(it, "Meldung aus dem Ort vom $it", "a.de", at = "${it}T10:00:00Z") }
+        assertEquals(Instant.parse("2026-10-03T10:00:00Z"), NewsRepository.bulkOldest(quiet))
+        assertEquals(null, NewsRepository.bulkOldest(listOf(googleItem("u", "Eine Meldung ohne Datum", "a.de", at = null))))
+    }
+
+    @Test
+    fun `feeds the user added keep the articles of walled sites, and statuses count what shows`() {
+        val kicker = FeedSource("custom:k1", "kicker", "https://newsfeed.kicker.de/news/aktuell", "custom:f", builtIn = false)
+        val own = item("k", kicker, "2026-10-29T10:00:00+01:00", "Bundesliga: Das Spiel am Abend", url = "https://www.kicker.de/spiel")
+        val merged = NewsRepository.merge(
+            "custom:f", null,
+            listOf(ok(kicker, own), ok(gn, googleItem("z", "Bei der Zeit hinter der Bezahlschranke", "zeit.de"), googleItem("t", "Bei der Tagesschau frei lesbar heute", "tagesschau.de"))),
+            now,
+            blocked = setOf("kicker.de", "zeit.de"),
+        )
+        assertEquals(setOf("k", "t"), merged.items.map { it.id }.toSet())
+        assertEquals(listOf(1, 1), merged.sources.map { it.count })
+        assertTrue(own.fromUserFeed)
+    }
+
+    @Test
+    fun `cached matches are the newest over all topics`() {
+        val older = TopicNews("a", "2026-10-29T08:00:00+01:00", (1..250).map { item("o$it", a, "2026-10-01T10:00:00+01:00", "Midterms: ältere Meldung Nummer $it") })
+        val newer = TopicNews("b", "2026-10-29T08:00:00+01:00", listOf(item("n", b, "2026-10-29T10:00:00+01:00", "Midterms: die neueste Meldung")))
+        val found = NewsRepository.matching(listOf(older, newer), "midterms")
+        assertEquals(NewsRepository.MAX_CACHED_MATCHES, found.size)
+        assertEquals("n", found.first().id)
+    }
+
+    @Test
+    fun `a paged article belongs to its Google News source`() {
+        assertEquals(gn.id, paged("p", "2026-10-25T10:00:00+01:00").feedSourceId)
+        assertEquals("a", item("1", a, null).feedSourceId)
     }
 
     @Test

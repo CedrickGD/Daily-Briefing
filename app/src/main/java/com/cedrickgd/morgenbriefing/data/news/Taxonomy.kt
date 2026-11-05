@@ -307,7 +307,7 @@ object Taxonomy {
 
         // Tech & KI
         cat(
-            "ki", TopicIcon.LIGHTBULB, 0xFF7B61FF, "🤖", NewsSection.TECHNOLOGY,
+            "ki", TopicIcon.DEVICES, 0xFF7B61FF, "🤖", NewsSection.TECHNOLOGY,
             q(
                 de = "Technik OR KI OR Software OR Smartphone OR Internet OR Digitalisierung",
                 en = "technology OR AI OR software OR smartphone OR internet OR \"big tech\"",

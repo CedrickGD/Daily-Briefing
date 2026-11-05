@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
+import okhttp3.Dispatcher as HttpDispatcher
 import okhttp3.Request
 import java.io.IOException
 import java.security.MessageDigest
@@ -147,6 +148,10 @@ class RssClient(
     private val parser: RssParser,
 ) {
     private val client: OkHttpClient = http.newBuilder()
+        // The news repository limits its fetches itself (a pool for refreshes, one for what the
+        // user waits for). OkHttp's own 5 per host would queue a search behind a refresh's
+        // Google News feeds, since they all go to news.google.com.
+        .dispatcher(HttpDispatcher().apply { maxRequestsPerHost = MAX_REQUESTS_PER_HOST })
         .callTimeout(25, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
@@ -271,6 +276,8 @@ class RssClient(
     }
 
     companion object {
+        /** Above what the news repository runs at once (6 refresh + 2 interactive fetches). */
+        private const val MAX_REQUESTS_PER_HOST = 10
         private const val MAX_SUMMARY = 600
         private const val MAX_HTML_BYTES = 400 * 1024
         private const val ACCEPT = "application/rss+xml, application/atom+xml, application/rdf+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5"

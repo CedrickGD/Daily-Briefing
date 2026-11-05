@@ -208,7 +208,8 @@ class DiscoverViewModel(
 
     private suspend fun refreshIfStale(topicId: String) {
         attempt { container.news.warm() }
-        if (container.news.isStale(topicId, PREVIEW_MAX_AGE)) refresh(topicId)
+        val settings = settingsFlow.value ?: attempt { container.settings.current() }.getOrNull() ?: return
+        if (container.news.isStale(topicId, PREVIEW_MAX_AGE, settings)) refresh(topicId)
     }
 
     private suspend fun refresh(topicId: String) {

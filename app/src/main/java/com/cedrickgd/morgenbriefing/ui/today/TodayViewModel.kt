@@ -321,7 +321,7 @@ class TodayViewModel(
             val settings = attempt { container.settings.current() }.getOrNull() ?: return@launch
             val visible = Topics.visible(settings).map { it.id }
             val wanted = (topicIds?.filter { it in visible } ?: visible)
-                .filter { force || container.news.isStale(it, NEWS_MAX_AGE) }
+                .filter { force || container.news.isStale(it, NEWS_MAX_AGE, settings) }
             if (wanted.isEmpty()) return@launch
             val outcome = attempt { container.news.refresh(wanted, settings) }
                 .onFailure { Log.w(TAG, "News refresh failed", it) }

@@ -17,6 +17,8 @@ enum class TopicIcon {
     GAMEPAD, MOVIE, MUSIC, BOOK, STAR, THEATER,
     CAR, EV, TRAIN,
     LOCATION, SEARCH, TAG, BOOKMARK, LIGHTBULB, PALETTE, TRAVEL, FOOD,
+    /** Screen and phone: technology as a whole (the "Tech & KI" category). */
+    DEVICES,
     ;
 
     companion object {
