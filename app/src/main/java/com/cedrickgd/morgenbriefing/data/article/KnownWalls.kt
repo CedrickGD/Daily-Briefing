@@ -12,6 +12,8 @@ object KnownWalls {
         "youtube.com", "tiktok.com", "instagram.com", "facebook.com", "x.com", "twitter.com",
         // German: bot block, consent or paywall (checked with curl, 30.10.2026)
         "zeit.de", "kicker.de", "faz.net", "golem.de", "bild.de", "welt.de", "nzz.ch", "wiwo.de",
+        // bot checks seen by the reader's live evaluation (05.11.2026): DataDome on lvz.de, AWS WAF on espn.com
+        "lvz.de", "espn.com",
         // English hard paywalls / bot walls
         "nytimes.com", "wsj.com", "washingtonpost.com", "ft.com", "bloomberg.com", "economist.com",
         "barrons.com", "thetimes.co.uk", "telegraph.co.uk", "theathletic.com", "newyorker.com",

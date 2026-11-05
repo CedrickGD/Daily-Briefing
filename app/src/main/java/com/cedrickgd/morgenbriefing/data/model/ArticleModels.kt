@@ -52,6 +52,15 @@ data class ArticleContent(
     val site: String = "",
     /** ISO-8601 with offset: when the page was read. */
     val fetchedAt: String,
+    /** The page's own teaser (`og:description` / `description`), plain text; may be empty. */
+    val description: String = "",
+    /** The page's language (`<html lang>`, ISO 639-1), when it says. */
+    val language: String = "",
+    /**
+     * Version of the extractor that produced this; older cache entries are read again so they
+     * get the current cleanup (duplicates, noise) instead of the old one.
+     */
+    val format: Int = 0,
 ) {
     /** The plain text of the article (paragraphs separated by blank lines), for reading aloud. */
     val text: String
@@ -75,8 +84,74 @@ data class ArticleContent(
     /** Probably only a teaser: a paywall or a page the extractor could not read fully. */
     val looksTruncated: Boolean get() = wordCount < SHORT_WORDS
 
+    /** The first picture of the article: the announced lead picture, else the first one in the text. */
+    val leadImage: String?
+        get() = image ?: blocks.firstOrNull { it.type == ArticleBlock.IMAGE }?.url
+
     companion object {
         /** Below this many words an article is most likely cut off (paywall, teaser page). */
         const val SHORT_WORDS = 120
+
+        /** Current [format]; bump it whenever the extraction or cleanup changes what is stored. */
+        const val FORMAT = 3
+    }
+}
+
+/**
+ * How reading an article went — the reader's typed result, also what the readability
+ * bookkeeping learns per site.
+ */
+enum class ReadOutcome {
+    /** The article's text is here. */
+    OK,
+
+    /** The text is for subscribers (or registered users) only. */
+    PAYWALL,
+
+    /** The site shows the text only after cookie / tracking consent on its own page. */
+    CONSENT,
+
+    /** The site refuses automated readers (403, bot check, redirect loop). */
+    BLOCKED,
+
+    /** The page holds no article: a video, audio or overview page, or it is gone (404). */
+    NOT_ARTICLE,
+
+    /** No connection, timeout, server error: worth trying again later. */
+    NETWORK,
+    ;
+
+    /** The site keeps its text away from the reader (paywall, consent wall, bot block). */
+    val isWall: Boolean get() = this == PAYWALL || this == CONSENT || this == BLOCKED
+}
+
+/** What the feed knows about an article's readability in the app (for badges, filters, prefetch). */
+enum class ArticleStatus {
+    /** Not checked yet. */
+    UNKNOWN,
+
+    /** Being loaded ahead of time right now. */
+    LOADING,
+
+    /** Loaded (cached): opens instantly and offline. */
+    READABLE,
+
+    /** Only for subscribers. */
+    PAYWALL,
+
+    /** The site keeps automated readers out (bot block, consent wall). */
+    BLOCKED,
+
+    /** Could not be read (no article on the page, network); may work later. */
+    FAILED,
+    ;
+
+    companion object {
+        fun of(outcome: ReadOutcome): ArticleStatus = when (outcome) {
+            ReadOutcome.OK -> READABLE
+            ReadOutcome.PAYWALL -> PAYWALL
+            ReadOutcome.CONSENT, ReadOutcome.BLOCKED -> BLOCKED
+            ReadOutcome.NOT_ARTICLE, ReadOutcome.NETWORK -> FAILED
+        }
     }
 }

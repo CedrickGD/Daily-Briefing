@@ -6,7 +6,10 @@ import com.cedrickgd.morgenbriefing.data.AppJson
 import com.cedrickgd.morgenbriefing.data.NewsRepository
 import com.cedrickgd.morgenbriefing.data.SettingsRepository
 import com.cedrickgd.morgenbriefing.data.WeatherRepository
+import com.cedrickgd.morgenbriefing.data.article.AndroidNetworkMeter
+import com.cedrickgd.morgenbriefing.data.article.ArticlePrefetcher
 import com.cedrickgd.morgenbriefing.data.article.ArticleRepository
+import com.cedrickgd.morgenbriefing.data.article.ReadabilityStore
 import com.cedrickgd.morgenbriefing.data.local.NewsCache
 import com.cedrickgd.morgenbriefing.data.local.WeatherStore
 import com.cedrickgd.morgenbriefing.data.news.RssParser
@@ -39,7 +42,9 @@ class AppContainer(context: Context) {
     val weather = WeatherRepository(openMeteo, weatherStore)
     val rss = RssClient(http, RssParser { Xml.newPullParser() })
     val news = NewsRepository(rss, newsCache)
-    val articles = ArticleRepository(http, storeDir, json)
+    val readability = ReadabilityStore(File(storeDir, "readability.json"), json)
+    val articles = ArticleRepository(http, storeDir, json, readability = readability)
+    val prefetcher = ArticlePrefetcher(articles, AndroidNetworkMeter(app))
     val location = LocationFinder(app)
 }
 

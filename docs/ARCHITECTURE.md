@@ -66,7 +66,7 @@ keine KI.
 | `ui/theme` | Theme, Akzent-Schemata, Typografie, `Reading` (Serif-Lesestile) |
 | `ui/nav` | `MainRoute` (der Pager) und `ArticleRoute` (der Artikel-Reader darüber) |
 | `ui/article` | `ArticleScreen` + `ArticleViewModel`: der Lesemodus (Bild, Überschrift, Teaser, Textblöcke, Zuhören, Teilen, Browser als Ausweg) |
-| `data/article` | `ArticleExtractor` (Readability4J + jsoup → `ArticleBlock`s), `ArticleRepository` (Seite laden, extrahieren, Cache `store/articles/<id>.json`, 7 Tage) |
+| `data/article` | `ArticleExtractor` (Readability4J + jsoup → `ArticleBlock`s; Rückfall auf den Container mit den meisten Absätzen und auf offenes JSON-LD-`articleBody`; Urteil OK/PAYWALL/CONSENT/BLOCKED/NOT_ARTICLE), `ArticleCleaner` (Doppeltes raus: Überschrift, Teaser, Titelbild, Pull-Quotes, Meta-Zeilen), `ArticleRepository` (Google-News-Links über `LinkResolver`, Weiterleitungen mit eigenem Cookie-Glas je Artikel, `Accept-Language`, AMP als zweiter Versuch, Cache `store/articles/<id>.json`, 7 Tage), `ReadabilityStore` (`store/readability.json`: welche Seiten lesbar sind, Startliste `KnownWalls`), `ArticlePrefetcher` (Artikel vorab laden, Status + Bild je Meldung). Prüfung gegen echte Seiten: `ArticleLiveEvaluation` (`MB_LIVE=1`) |
 
 Kein DI-Framework: `AppContainer` (ein Objekt pro Prozess) wird über `context.container`
 erreicht, Vorlesen über `context.listen`. ViewModels über `viewModelFactory { initializer { … } }`.
