@@ -99,6 +99,13 @@ class ArticleLiveEvaluation {
         Feed("CBS via Google", gn("site:cbsnews.com when:1d"), take = 2, google = true),
         Feed("Midterms via Google", gn("midterms when:1d"), take = 8, google = true),
         Feed("Börse via Google", gn("DAX Börse when:1d", de = true), take = 6, google = true),
+        // Mixed free and paid German newsrooms (regional papers, Plus articles): for the completeness judgement
+        Feed("Rheinmetall via Google", gn("Rheinmetall when:1d", de = true), take = 8, google = true),
+        Feed("Bundesliga via Google", gn("Bundesliga when:1d", de = true), take = 8, google = true),
+        Feed("Silber ETF via Google", gn("Silber ETF when:3d", de = true), take = 6, google = true),
+        Feed("Stern", "https://www.stern.de/feed/standard/alle-nachrichten/"),
+        Feed("n-tv", "https://www.n-tv.de/rss", take = 3),
+        Feed("RP Online", "https://rp-online.de/feed.rss", take = 3),
     )
 
     private fun gn(query: String, de: Boolean = false): String {
@@ -172,7 +179,9 @@ class ArticleLiveEvaluation {
                 c.blocks.forEachIndexed { i, b -> out.append("[%02d] %-7s %s\n".format(i, b.type, (if (b.type == ArticleBlock.IMAGE) b.url + "  alt=" + b.alt else b.text + b.items.joinToString(" | ")).take(240))) }
             }
             File("build/live/page-${file.name.removeSuffix(".html")}.txt").writeText(out.toString())
-            summary.append("${file.name}: ${page.outcome} words=${page.content?.wordCount} blocks=${page.content?.blocks?.size}\n")
+            val verdict = page.content?.let { ArticleCompleteness.gap(it, headline = it.title)?.name ?: "COMPLETE" }
+            summary.append("${file.name}: ${page.outcome} words=${page.content?.wordCount} blocks=${page.content?.blocks?.size} verdict=$verdict ")
+                .append("free=${page.content?.free} declared=${page.content?.declaredWords} hints=${page.content?.paywallHints} $url\n")
         }
         File("build/live/pages.txt").writeText(summary.toString())
     }
@@ -224,11 +233,13 @@ class ArticleLiveEvaluation {
         val hero = item.image?.url ?: content.image
         val findings = LiveDuplicates.find(item.headline, content.title, teaser, hero, shown)
         val words = shown.wordCount
-        val truncated = shown.looksTruncated
+        val gap = ArticleCompleteness.gap(content, item.summary, item.headline)
+        val truncated = gap != null
         val line = buildString {
             append(feed.name.padEnd(22)).append(" OK    ")
             append("blocks=%3d words=%5d ".format(shown.blocks.size, words))
-            if (truncated) append("TRUNC ")
+            append(gap?.let { "TEASER:${it.name} " } ?: "COMPLETE ")
+            append("free=${content.free} declared=${content.declaredWords} ")
             if (findings.isNotEmpty()) append(findings.joinToString(" ", prefix = "DUP[", postfix = "] ") { it.substringBefore(':') })
             append(readable.url)
         }
@@ -261,7 +272,7 @@ class ArticleLiveEvaluation {
 
     private fun summary(results: List<Result>): String = buildString {
         val ok = results.filter { it.ok }
-        append("articles: ${results.size}, readable: ${ok.size}, truncated: ${ok.count { it.truncated }}, ")
+        append("articles: ${results.size}, readable: ${ok.size}, teasers (not complete): ${ok.count { it.truncated }}, ")
         append("with duplicates: ${ok.count { it.findings.isNotEmpty() }}\n")
         val kinds = ok.flatMap { r -> r.findings.map { it.substringBefore(':') }.distinct() }.groupingBy { it }.eachCount()
         append("duplicate kinds (articles): ").append(kinds.entries.sortedByDescending { it.value }.joinToString { "${it.key}=${it.value}" }).append('\n')

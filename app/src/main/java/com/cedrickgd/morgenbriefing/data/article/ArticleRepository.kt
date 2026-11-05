@@ -106,7 +106,9 @@ class ArticleRepository(
                 readability?.record(host, e.outcome, article = url)
                 throw e
             }
-            readability?.record(host, ReadOutcome.OK, article = url)
+            // Only the free lead of the article counts like a paywall for the site's bookkeeping.
+            val complete = ArticleCompleteness.isComplete(fresh, item)
+            readability?.record(host, if (complete) ReadOutcome.OK else ReadOutcome.PAYWALL, article = url)
             fresh
         } catch (e: ArticleException) {
             // A copy read before (by an older extractor, or before this refresh) beats an error:

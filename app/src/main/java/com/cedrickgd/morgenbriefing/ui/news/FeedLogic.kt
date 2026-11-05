@@ -169,19 +169,56 @@ enum class EndAction {
  * no load is running ([loadingMore]) and the last load did not come back empty ([stalled]; then
  * the user asks again by tapping, so a dead network is never hammered). An empty list waits for
  * its refresh instead of paging.
+ *
+ * With "nur vollständige Artikel" [total] counts the verified articles, [waiting] the candidates
+ * still to check and [candidates] all of them: older articles are asked for once fewer than
+ * [VERIFY_LOW_WATER] candidates are left to check (the verified count runs low) – also when not
+ * one candidate was complete.
  */
-internal fun endAction(revealed: Int, total: Int, canLoadMore: Boolean, loadingMore: Boolean, stalled: Boolean): EndAction = when {
+internal fun endAction(
+    revealed: Int,
+    total: Int,
+    canLoadMore: Boolean,
+    loadingMore: Boolean,
+    stalled: Boolean,
+    waiting: Int = 0,
+    candidates: Int = total,
+): EndAction = when {
     revealed < total -> EndAction.REVEAL
-    total > 0 && canLoadMore && !loadingMore && !stalled -> EndAction.LOAD_MORE
+    candidates > 0 && canLoadMore && !loadingMore && !stalled && waiting < VERIFY_LOW_WATER -> EndAction.LOAD_MORE
     else -> EndAction.NONE
 }
 
 /** What the end of a topic's list shows. */
-enum class ListTail { REVEALING, LOADING_OLDER, STALLED, END }
+enum class ListTail {
+    REVEALING,
 
-/** The tail of a topic list: still revealing, loading older articles, a retry after an empty load, or the end. */
-internal fun listTail(revealed: Int, total: Int, canLoadMore: Boolean, loadingMore: Boolean, stalled: Boolean): ListTail = when {
+    /** "Weitere Artikel werden geprüft …": candidates below are being verified. */
+    VERIFYING,
+
+    /** Candidates are left to verify, but the phone is offline. */
+    VERIFY_OFFLINE,
+    LOADING_OLDER,
+    STALLED,
+    END,
+}
+
+/**
+ * The tail of a topic list: still revealing, verifying the next candidates ([checking]; offline:
+ * waiting for the network), loading older articles, a retry after an empty load, or the end.
+ */
+internal fun listTail(
+    revealed: Int,
+    total: Int,
+    canLoadMore: Boolean,
+    loadingMore: Boolean,
+    stalled: Boolean,
+    checking: Boolean = false,
+    offline: Boolean = false,
+): ListTail = when {
     revealed < total -> ListTail.REVEALING
+    checking && offline -> ListTail.VERIFY_OFFLINE
+    checking -> ListTail.VERIFYING
     loadingMore -> ListTail.LOADING_OLDER
     canLoadMore && stalled -> ListTail.STALLED
     canLoadMore -> ListTail.LOADING_OLDER

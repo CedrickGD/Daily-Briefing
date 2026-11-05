@@ -342,7 +342,7 @@ private fun EndNote(state: ArticleUiState, content: ArticleContent, onOpenExtern
     val colors = MaterialTheme.colorScheme
     val reader = readerStrings()
     Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp)) {
-        if (content.looksTruncated) {
+        if (state.partial) {
             Text(
                 text = reader.truncatedNote,
                 style = MaterialTheme.typography.bodyMedium,

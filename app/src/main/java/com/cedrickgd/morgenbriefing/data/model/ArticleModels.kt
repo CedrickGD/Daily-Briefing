@@ -61,6 +61,16 @@ data class ArticleContent(
      * get the current cleanup (duplicates, noise) instead of the old one.
      */
     val format: Int = 0,
+    /** The publisher's own `isAccessibleForFree` (schema.org JSON-LD); null = not stated. */
+    val free: Boolean? = null,
+    /** The article's length as the publisher declares it (JSON-LD `wordCount`); 0 = not declared. */
+    val declaredWords: Int = 0,
+    /**
+     * The page shows subscriber marks (paywall wording at the end of the text, a paid brand mark,
+     * a paywall box) although the extractor still found a readable text: probably only the free
+     * part. Judged by [com.cedrickgd.morgenbriefing.data.article.ArticleCompleteness].
+     */
+    val paywallHints: Boolean = false,
 ) {
     /** The plain text of the article (paragraphs separated by blank lines), for reading aloud. */
     val text: String
@@ -93,7 +103,7 @@ data class ArticleContent(
         const val SHORT_WORDS = 120
 
         /** Current [format]; bump it whenever the extraction or cleanup changes what is stored. */
-        const val FORMAT = 3
+        const val FORMAT = 4
     }
 }
 
@@ -133,10 +143,13 @@ enum class ArticleStatus {
     /** Being loaded ahead of time right now. */
     LOADING,
 
-    /** Loaded (cached): opens instantly and offline. */
+    /**
+     * Verified: loaded, extracted and judged a complete article (not a wall, not a teaser), and
+     * cached – opens instantly and offline. With "nur vollständige Artikel" only these show.
+     */
     READABLE,
 
-    /** Only for subscribers. */
+    /** Only for subscribers – also a page that shows just the free lead of the article (a teaser). */
     PAYWALL,
 
     /** The site keeps automated readers out (bot block, consent wall). */

@@ -20,12 +20,14 @@ data class Notice(
 )
 
 /**
- * The hint above the feed, if any: offline, no topic followed, every source off, or some
- * newsrooms not answering. Null while loading or when all is well. Pure, unit-tested.
+ * The hint above the feed, if any: offline, no topic followed, every source off, not one
+ * complete article ("nur vollständige Artikel"), or some newsrooms not answering. Null while
+ * loading, while articles are still being checked, or when all is well. Pure, unit-tested.
  *
  * @param feed the feed on screen; null until settings are known.
  * @param loading a refresh is running.
  * @param warmed the cache was read.
+ * @param verifyOffline "nur vollständige Artikel" has candidates to check, but the phone is offline.
  */
 internal fun newsNotice(
     feed: NewsFeed?,
@@ -35,6 +37,7 @@ internal fun newsNotice(
     attempted: Boolean,
     strings: FeedStrings,
     common: CommonStrings,
+    verifyOffline: Boolean = false,
 ): Notice? {
     if (feed == null || !warmed) return null
     if (feed.sections.isEmpty()) {
@@ -65,8 +68,31 @@ internal fun newsNotice(
             )
         }
     }
+    // The news arrived, but the articles cannot be checked: one clear note instead of one per section.
+    if (verifyOffline && feed.verifying && feed.checking) {
+        return Notice(
+            emoji = "📡",
+            title = strings.verifyOfflineTitle,
+            text = strings.verifyOfflineText,
+            actionLabel = common.retry,
+            action = NoticeAction.RETRY,
+        )
+    }
     if (loading) return null
     val failed = feed.sections.flatMap { it.failedSources }.distinct()
+    if (feed.isEmpty && feed.verifying) {
+        // "Nur vollständige Artikel": the lists say "Weitere Artikel werden geprüft …" themselves.
+        if (feed.checking) return null
+        if (feed.noneComplete) {
+            return Notice(
+                emoji = "🔍",
+                title = strings.noCompleteTitle,
+                text = strings.noCompleteText,
+                actionLabel = common.retry,
+                action = NoticeAction.RETRY,
+            )
+        }
+    }
     if (feed.isEmpty && attempted) {
         return Notice(
             emoji = "📭",

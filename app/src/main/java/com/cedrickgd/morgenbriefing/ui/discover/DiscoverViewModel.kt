@@ -16,8 +16,10 @@ import com.cedrickgd.morgenbriefing.data.SettingsOps
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.news.Taxonomy
+import com.cedrickgd.morgenbriefing.ui.news.Verification
 import com.cedrickgd.morgenbriefing.util.attempt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
@@ -32,6 +34,8 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -93,16 +97,35 @@ class DiscoverViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /** "Nur vollständige Artikel": the final verdicts (none while the setting is off) and whether the phone is offline. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val verification = settingsFlow.filterNotNull()
+        .map { it.readableOnly }
+        .distinctUntilChanged()
+        .flatMapLatest { on ->
+            if (!on) {
+                flowOf(Verification.OFF to false)
+            } else {
+                combine(container.prefetcher.status.map(Verification::settled).distinctUntilChanged(), container.prefetcher.waitingForNetwork) { statuses, offline ->
+                    Verification(enabled = true, statuses = statuses) to offline
+                }
+            }
+        }
+
     val state: StateFlow<DiscoverUiState> = combine(
         settingsFlow.filterNotNull(),
         container.news.state,
         selection,
         failed,
-    ) { settings, news, picked, failedIds ->
-        buildDiscoverState(settings, settings.language, news.topics, news.loading, failedIds, picked)
+        verification,
+    ) { settings, news, picked, failedIds, (verdicts, offline) ->
+        buildDiscoverState(settings, settings.language, news.topics, news.loading, failedIds, picked, verdicts, offline)
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), DiscoverUiState())
+
+    /** Articles this screen asked the prefetcher to verify (cancelled when it goes). */
+    private val requested = LinkedHashSet<String>()
 
     private val _events = MutableSharedFlow<DiscoverEvent>(extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val events: SharedFlow<DiscoverEvent> = _events.asSharedFlow()
@@ -117,6 +140,20 @@ class DiscoverViewModel(
         viewModelScope.launch {
             selection.map(::previewTarget).distinctUntilChanged().collect { id -> if (id != null) refreshIfStale(id) }
         }
+        // "Nur vollständige Artikel": verify the candidates the open previews still need.
+        viewModelScope.launch {
+            state.map { it.previewsToVerify() }.distinctUntilChanged().collect { items ->
+                if (items.isEmpty()) return@collect
+                val settings = currentSettings() ?: return@collect
+                items.forEach { requested += it.id }
+                attempt { container.prefetcher.prefetch(items, settings) }.onFailure { Log.w(TAG, "Verifying the previews failed", it) }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        if (requested.isNotEmpty()) attempt { container.prefetcher.cancel(requested.toList()) }
+        super.onCleared()
     }
 
     /** Opens a category (null: back to the grid). */

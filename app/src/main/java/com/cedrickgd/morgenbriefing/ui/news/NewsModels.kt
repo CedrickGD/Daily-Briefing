@@ -117,11 +117,26 @@ data class SectionUi(
     val subtitle: String = "",
     /** A category with sub-topics ("Unterthemen" lead to the discover screen). */
     val browsable: Boolean = false,
+    /**
+     * "Nur vollständige Artikel": the topic's candidates still waiting for their check, in list
+     * order ([verifiedList]) – what its own endless list verifies next.
+     */
+    val waiting: List<NewsItem> = emptyList(),
+    /** Of [waiting], the ones that could still fill [top] ("Für dich" verifies these). */
+    val topWaiting: List<NewsItem> = emptyList(),
+    /** Articles the topic has before verification (minus switched-off sources and walled sites). */
+    val candidates: Int = all.size,
 ) {
     val id: String get() = topic.id
     val count: Int get() = all.size
     val hasMore: Boolean get() = all.size > top.size
     val isEmpty: Boolean get() = all.isEmpty()
+
+    /** [top] is not full yet and candidates for it are being checked. */
+    val checking: Boolean get() = topWaiting.isNotEmpty()
+
+    /** Candidates were there, none of them is a complete article (and none is left to check). */
+    val noneComplete: Boolean get() = all.isEmpty() && waiting.isEmpty() && candidates > 0
 }
 
 /** Everything the news part of "Heute" shows. */
@@ -133,12 +148,24 @@ data class NewsFeed(
     val latest: List<FeedArticle>,
     /** The newest fetch time over all followed topics. */
     val fetchedAt: Instant?,
+    /** "Nur vollständige Artikel" is on: the lists show verified articles only. */
+    val verifying: Boolean = false,
+    /** "Neueste" candidates still waiting for their check, in list order. */
+    val latestWaiting: List<NewsItem> = emptyList(),
+    /** "Neueste" candidates before verification. */
+    val latestCandidates: Int = latest.size,
 ) {
     val isEmpty: Boolean get() = latest.isEmpty()
     val articleCount: Int get() = latest.size
 
     /** Topics that have something to show. */
     val filledSections: List<SectionUi> get() = sections.filter { !it.isEmpty }
+
+    /** Some list still has candidates waiting for their check. */
+    val checking: Boolean get() = latestWaiting.isNotEmpty() || sections.any { it.waiting.isNotEmpty() }
+
+    /** There were articles, but not one of them is complete (and nothing is left to check). */
+    val noneComplete: Boolean get() = verifying && latest.isEmpty() && !checking && (latestCandidates > 0 || sections.any { it.candidates > 0 })
 }
 
 /**
@@ -151,31 +178,48 @@ data class NewsFeed(
  *   sub-topics' feeds): "Für dich" shows it in the first section only, "Neueste" once, under the
  *   most specific topic (its own topic, else the sub-topic rather than its category).
  *
+ * - With [FeedPrefs.readableOnly] every list shows only the articles [verification] says are
+ *   verified complete ([verifiedList]): appended in list order as they are judged, never taken
+ *   away before the next build. Section sizes count verified articles; what still waits for its
+ *   check is listed per topic ([SectionUi.waiting], [SectionUi.topWaiting]) and for "Neueste"
+ *   ([NewsFeed.latestWaiting]).
+ *
  * @param now reference for the age filter.
  * @param hides the readable-only snapshot of the last refresh.
+ * @param verification the verdicts, and what each list showed since the last build.
  */
 internal fun buildNewsFeed(
     news: Map<String, TopicNews>,
     prefs: FeedPrefs,
     now: ZonedDateTime,
     hides: ReadabilityHides = ReadabilityHides.NONE,
+    verification: Verification = Verification.OFF,
 ): NewsFeed {
     val reference = now.toInstant()
     val size = prefs.sectionSize.coerceAtLeast(1)
+    val verify = if (prefs.readableOnly && verification.enabled) verification else Verification.OFF
     val onTop = HashSet<String>()
     val fresh = ArrayList<Pair<Topic, List<NewsItem>>>(prefs.topics.size)
     val sections = prefs.topics.mapIndexed { index, topic ->
         val topicNews = news[topic.id]
-        val items = readableItems(
+        val candidates = readableItems(
             topicNews?.items.orEmpty().filter { it.feedSourceId !in prefs.disabledFeeds },
             hides,
             prefs.readableOnly,
         )
+        val checked = verifiedList(candidates, topic.id, verify, NewsItem::id)
+        val items = checked.shown
         val recent = filterByAge(items, prefs.newsAge, reference)
-        fresh += topic to recent
+        fresh += topic to filterByAge(candidates, prefs.newsAge, reference)
         // A section whose stories all opened earlier sections still shows them: never empty-looking.
         val top = recent.filter { it.id !in onTop }.ifEmpty { recent }.take(size)
         top.forEach { onTop += it.id }
+        // Candidates that can still fill the section: within the age window (any age while it has fewer than the minimum).
+        val topWaiting = if (top.size >= size) {
+            emptyList()
+        } else {
+            checked.waiting.filter { top.size < MIN_PER_TOPIC || isWithinAge(it, prefs.newsAge, reference) }
+        }
         SectionUi(
             index = index,
             topic = topic,
@@ -185,13 +229,28 @@ internal fun buildNewsFeed(
             failedSources = topicNews?.failedSources?.map { it.name }.orEmpty(),
             subtitle = prefs.subtitles[topic.id].orEmpty(),
             browsable = topic.parentId == null && !topic.custom && Taxonomy.children(topic.id).isNotEmpty(),
+            waiting = checked.waiting,
+            topWaiting = topWaiting,
+            candidates = candidates.size,
         )
     }
+    val latestCandidates = latestOf(fresh)
+    val latest = verifiedList(latestCandidates, LATEST_LIST, verify) { it.item.id }
     return NewsFeed(
         sections = sections,
-        latest = latestOf(fresh),
+        latest = latest.shown,
         fetchedAt = sections.mapNotNull { it.fetchedAt?.let(::parseInstantOrNull) }.maxOrNull(),
+        verifying = verify.enabled,
+        latestWaiting = latest.waiting.map { it.item },
+        latestCandidates = latestCandidates.size,
     )
+}
+
+/** True when [item] is within [age] of [now]; undated articles count as fresh. */
+private fun isWithinAge(item: NewsItem, age: NewsAge, now: Instant): Boolean {
+    if (age.hours <= 0) return true
+    val at = parseInstantOrNull(item.publishedAt) ?: return true
+    return Duration.between(at, now) <= Duration.ofHours(age.hours.toLong())
 }
 
 /**

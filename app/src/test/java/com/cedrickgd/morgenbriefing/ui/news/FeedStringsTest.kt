@@ -44,6 +44,9 @@ class FeedStringsTest {
             "weatherCreditOffline" to weatherCreditOffline, "headlineLoading" to headlineLoading,
             "headlineFallback" to headlineFallback, "weatherUnavailableTitle" to weatherUnavailableTitle,
             "weatherUnavailableText" to weatherUnavailableText,
+            "verifying" to verifying, "verifyOffline" to verifyOffline, "noneComplete" to noneComplete,
+            "noCompleteTitle" to noCompleteTitle, "noCompleteText" to noCompleteText,
+            "verifyOfflineTitle" to verifyOfflineTitle, "verifyOfflineText" to verifyOfflineText,
         )
     }
 

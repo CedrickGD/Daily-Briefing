@@ -23,15 +23,20 @@ import com.cedrickgd.morgenbriefing.data.news.TopicSources
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.ui.brief.WeatherUi
 import com.cedrickgd.morgenbriefing.ui.brief.toWeatherUi
+import com.cedrickgd.morgenbriefing.data.NewsRepository
 import com.cedrickgd.morgenbriefing.ui.news.FeedPrefs
 import com.cedrickgd.morgenbriefing.ui.news.NewsFeed
 import com.cedrickgd.morgenbriefing.ui.news.ReadabilityHides
+import com.cedrickgd.morgenbriefing.ui.news.Verification
 import com.cedrickgd.morgenbriefing.ui.news.buildNewsFeed
+import com.cedrickgd.morgenbriefing.ui.news.keptAfter
+import com.cedrickgd.morgenbriefing.ui.news.keptForBuild
 import com.cedrickgd.morgenbriefing.util.attempt
 import com.cedrickgd.morgenbriefing.util.flatten
 import com.cedrickgd.morgenbriefing.util.isOlderThan
 import com.cedrickgd.morgenbriefing.util.isWithin
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +48,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -86,6 +93,8 @@ data class TodayUiState(
     val endReached: Set<String> = emptySet(),
     /** Topic ids whose last load of older articles brought nothing (the user may ask again). */
     val stalled: Set<String> = emptySet(),
+    /** "Nur vollständige Artikel" wants to check articles, but the phone is offline: only verified ones show. */
+    val verifyOffline: Boolean = false,
 ) {
     val today: LocalDate get() = now.toLocalDate()
     val newsLoading: Boolean get() = loadingTopics.isNotEmpty()
@@ -282,7 +291,8 @@ class TodayViewModel(
     private fun sendPrefetch(items: List<NewsItem>) {
         val prefs = _state.value.prefs ?: return
         if (items.isEmpty()) return
-        attempt { container.prefetcher.prefetch(items, prefs.prefetch, prefs.editionLanguage.ifBlank { null }) }
+        // "Nur vollständige Artikel": verified on any connection, whatever "Artikel vorladen" says.
+        attempt { container.prefetcher.prefetch(items, prefs.prefetch, prefs.editionLanguage.ifBlank { null }, verify = prefs.readableOnly) }
             .onFailure { Log.w(TAG, "Prefetch failed", it) }
     }
 
@@ -375,31 +385,69 @@ class TodayViewModel(
         _state.update { if (it.weather == null) it.copy(weather = ui) else it }
     }
 
-    /** The feed on screen: repository state × feed settings × readable-only snapshot, rebuilt off the main thread. */
+    /**
+     * The feed on screen: repository state × feed settings × readable-only snapshot × the
+     * verdicts of "nur vollständige Artikel", rebuilt off the main thread.
+     *
+     * A build (new news, other settings, a new snapshot) applies removals; between builds new
+     * verdicts only append articles, and what a list showed once stays ([keptAfter]).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeFeed() {
         val prefs = container.settings.settings
             .map { FeedPrefs(it) to it.weatherCards }
             .distinctUntilChanged()
             .catch { e -> Log.w(TAG, "Settings unavailable for the feed", e) }
+        // Only final verdicts matter for the lists; none at all while the setting is off (no rebuilds).
+        val verdicts = container.settings.settings
+            .map { it.readableOnly }
+            .distinctUntilChanged()
+            .flatMapLatest { on ->
+                if (on) container.prefetcher.status.map(Verification::settled).distinctUntilChanged() else flowOf(emptyMap())
+            }
+            .catch { e -> Log.w(TAG, "Article verdicts unavailable", e) }
         viewModelScope.launch {
-            combine(container.news.state, prefs, hides) { news, p, h -> Triple(news, p, h) }
-                .collectLatest { (news, p, h) ->
-                    val (feedPrefs, cards) = p
-                    val feed = withContext(Dispatchers.Default) { buildNewsFeed(news.topics, feedPrefs, clock(), h) }
-                    _state.update {
-                        it.copy(
-                            prefs = feedPrefs,
-                            weatherCards = cards,
-                            feed = feed,
-                            loadingTopics = news.loading,
-                            newsWarmed = news.warmed,
-                            loadingMore = news.loadingMore,
-                            endReached = news.endReached,
-                        )
-                    }
+            var kept = emptyMap<String, Set<String>>()
+            var built: Triple<Any?, FeedPrefs?, ReadabilityHides?>? = null
+            combine(container.news.state, prefs, hides, verdicts, container.prefetcher.waitingForNetwork) { news, p, h, v, off ->
+                FeedInputs(news, p.first, p.second, h, v, off)
+            }.collectLatest { inputs ->
+                val news = inputs.news
+                val feedPrefs = inputs.prefs
+                val build = Triple<Any?, FeedPrefs?, ReadabilityHides?>(news.topics, feedPrefs, inputs.hides)
+                val before = built
+                if (before == null || before.first !== build.first || before.second != build.second || before.third != build.third) {
+                    kept = keptForBuild(kept, inputs.verdicts)
+                    built = build
                 }
+                val verification = Verification(feedPrefs.readableOnly, inputs.verdicts, kept)
+                val feed = withContext(Dispatchers.Default) { buildNewsFeed(news.topics, feedPrefs, clock(), inputs.hides, verification) }
+                if (feedPrefs.readableOnly) kept = keptAfter(kept, feed)
+                _state.update {
+                    it.copy(
+                        prefs = feedPrefs,
+                        weatherCards = inputs.cards,
+                        feed = feed,
+                        loadingTopics = news.loading,
+                        newsWarmed = news.warmed,
+                        loadingMore = news.loadingMore,
+                        endReached = news.endReached,
+                        verifyOffline = feedPrefs.readableOnly && inputs.offline,
+                    )
+                }
+            }
         }
     }
+
+    /** What the feed is built from. */
+    private class FeedInputs(
+        val news: NewsRepository.State,
+        val prefs: FeedPrefs,
+        val cards: Set<WeatherCard>,
+        val hides: ReadabilityHides,
+        val verdicts: Map<String, ArticleStatus>,
+        val offline: Boolean,
+    )
 
     /**
      * Writes the weather texts (warnings, clothing advice, headline) again when the interface

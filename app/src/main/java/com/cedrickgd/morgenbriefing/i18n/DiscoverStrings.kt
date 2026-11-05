@@ -59,6 +59,11 @@ interface DiscoverStrings {
     val previewEmpty: String
     val previewFailed: String
 
+    // "Nur vollständige Artikel": the preview shows verified headlines only
+    val previewChecking: String
+    val previewNoneComplete: String
+    val previewOffline: String
+
     /** "Alle Meldungen im Feed" hint under the preview once the topic is followed. */
     val previewInFeed: String
 
@@ -141,6 +146,9 @@ interface DiscoverStrings {
         override val showPreview = "Meldungen zeigen"
         override val previewEmpty = "Gerade keine Meldungen zu diesem Thema."
         override val previewFailed = "Die Meldungen ließen sich gerade nicht laden."
+        override val previewChecking = "Weitere Artikel werden geprüft …"
+        override val previewNoneComplete = "Gerade ist hier kein Artikel vollständig in der App lesbar."
+        override val previewOffline = "Offline – geprüft wird, sobald du wieder online bist."
         override val previewInFeed = "Mehr davon findest du in deinem Feed."
         override val localOverline = "Lokal"
         override val localTitle = "Nachrichten aus deinen Orten"
@@ -201,6 +209,9 @@ interface DiscoverStrings {
         override val showPreview = "Show stories"
         override val previewEmpty = "No stories on this topic right now."
         override val previewFailed = "The stories couldn’t be loaded just now."
+        override val previewChecking = "Checking more articles …"
+        override val previewNoneComplete = "Right now no article here can be read in full in the app."
+        override val previewOffline = "Offline – articles are checked once you're back online."
         override val previewInFeed = "You’ll find more of these in your feed."
         override val localOverline = "Local"
         override val localTitle = "News from your places"
@@ -261,6 +272,9 @@ interface DiscoverStrings {
         override val showPreview = "Afficher les infos"
         override val previewEmpty = "Aucune info sur ce thème pour le moment."
         override val previewFailed = "Impossible de charger les infos pour le moment."
+        override val previewChecking = "Vérification d'autres articles …"
+        override val previewNoneComplete = "Pour l'instant, aucun article ici ne se lit en entier dans l'appli."
+        override val previewOffline = "Hors ligne – la vérification reprend dès que tu es de nouveau en ligne."
         override val previewInFeed = "Tu en trouveras davantage dans ton fil."
         override val localOverline = "Local"
         override val localTitle = "L’actu de tes lieux"
@@ -321,6 +335,9 @@ interface DiscoverStrings {
         override val showPreview = "Mostrar noticias"
         override val previewEmpty = "Ahora mismo no hay noticias de este tema."
         override val previewFailed = "No se pudieron cargar las noticias."
+        override val previewChecking = "Comprobando más artículos …"
+        override val previewNoneComplete = "Ahora mismo ningún artículo de aquí se puede leer completo en la app."
+        override val previewOffline = "Sin conexión – se comprobará cuando vuelvas a estar en línea."
         override val previewInFeed = "Encontrarás más en tu feed."
         override val localOverline = "Local"
         override val localTitle = "Noticias de tus lugares"
@@ -381,6 +398,9 @@ interface DiscoverStrings {
         override val showPreview = "Mostra notizie"
         override val previewEmpty = "Al momento nessuna notizia su questo tema."
         override val previewFailed = "Non è stato possibile caricare le notizie."
+        override val previewChecking = "Verifico altri articoli …"
+        override val previewNoneComplete = "Al momento nessun articolo qui si legge per intero nell'app."
+        override val previewOffline = "Offline – la verifica riprende appena torni online."
         override val previewInFeed = "Ne trovi altre nel tuo feed."
         override val localOverline = "Locale"
         override val localTitle = "Notizie dai tuoi luoghi"

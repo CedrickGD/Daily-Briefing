@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -342,8 +343,27 @@ internal fun PreviewBlock(
     ) { p ->
         Column(Modifier.fillMaxWidth()) {
             when {
-                p.items.isNotEmpty() -> p.items.forEach { item ->
-                    HeadlineRow(item = item, accent = accent, now = now, onOpen = onOpen)
+                p.items.isNotEmpty() -> {
+                    p.items.forEach { item ->
+                        HeadlineRow(item = item, accent = accent, now = now, onOpen = onOpen)
+                    }
+                    // "Nur vollständige Artikel": fewer than three verified yet.
+                    if (p.checking || (p.offline && p.toVerify.isNotEmpty())) {
+                        Row(
+                            Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (p.checking) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = accent)
+                                Spacer(Modifier.width(10.dp))
+                            }
+                            Text(
+                                text = if (p.checking) strings.previewChecking else strings.previewOffline,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
 
                 p.waiting -> Column(
@@ -366,7 +386,11 @@ internal fun PreviewBlock(
                 }
 
                 else -> Text(
-                    text = strings.previewEmpty,
+                    text = when {
+                        p.offline && p.toVerify.isNotEmpty() -> strings.previewOffline
+                        p.noneComplete -> strings.previewNoneComplete
+                        else -> strings.previewEmpty
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),

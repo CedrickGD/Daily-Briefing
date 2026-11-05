@@ -11,6 +11,8 @@ import com.cedrickgd.morgenbriefing.data.model.TopicNews
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.news.TopicSources
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.ui.news.Verification
+import com.cedrickgd.morgenbriefing.ui.news.verifiedList
 import java.util.Locale
 
 /** Headlines shown under a category, a sub-topic or a place. */
@@ -49,12 +51,21 @@ data class PreviewUi(
     val failed: Boolean,
     /** The topic was fetched at least once (else nothing can be said about it yet). */
     val fetched: Boolean,
+    /** "Nur vollständige Artikel": candidates to verify so that [items] can fill up, in order. */
+    val toVerify: List<NewsItem> = emptyList(),
+    /** "Nur vollständige Artikel": there were candidates, not one of them is complete. */
+    val noneComplete: Boolean = false,
+    /** Candidates wait for their check, but the phone is offline. */
+    val offline: Boolean = false,
 ) {
+    /** More headlines are being checked right now. */
+    val checking: Boolean get() = toVerify.isNotEmpty() && !offline
+
     /** Nothing to show yet, but something is coming: skeleton lines. */
-    val waiting: Boolean get() = items.isEmpty() && !failed && (loading || !fetched)
+    val waiting: Boolean get() = items.isEmpty() && !failed && (loading || !fetched || checking)
 
     /** Fetched, nothing there. */
-    val empty: Boolean get() = items.isEmpty() && !failed && !loading && fetched
+    val empty: Boolean get() = items.isEmpty() && !failed && !loading && fetched && !checking
 }
 
 /** A category opened from the grid. */
@@ -111,8 +122,13 @@ data class DiscoverSelection(
  * Builds the discover screen from the settings, the repository's news and the user's
  * [selection]. Pure (unit-tested); runs off the main thread in the view model.
  *
+ * With "nur vollständige Artikel" ([AppSettings.readableOnly], [verification]) a preview shows
+ * verified headlines only ([verifiedList]) and names the candidates to check next
+ * ([PreviewUi.toVerify]).
+ *
  * @param loading topics being refreshed right now.
  * @param failed topics whose last refresh failed.
+ * @param verifyOffline candidates wait for their check, but the phone is offline.
  */
 internal fun buildDiscoverState(
     settings: AppSettings,
@@ -121,7 +137,10 @@ internal fun buildDiscoverState(
     loading: Set<String>,
     failed: Set<String>,
     selection: DiscoverSelection,
+    verification: Verification = Verification.OFF,
+    verifyOffline: Boolean = false,
 ): DiscoverUiState {
+    val verify = if (settings.readableOnly) verification else Verification.OFF
     val followedIds = Topics.followedIds(settings)
     val followed = followedIds.toSet()
 
@@ -132,16 +151,21 @@ internal fun buildDiscoverState(
         canToggle = SettingsOps.canUnfollow(settings, topic.id),
     )
 
-    fun preview(id: String) = PreviewUi(
-        topicId = id,
-        items = news[id]?.items.orEmpty().asSequence()
-            .filter { it.feedSourceId !in settings.disabledFeeds }
-            .take(PREVIEW_SIZE)
-            .toList(),
-        loading = id in loading,
-        failed = id in failed && news[id]?.items.isNullOrEmpty(),
-        fetched = news[id] != null,
-    )
+    fun preview(id: String): PreviewUi {
+        val candidates = news[id]?.items.orEmpty().filter { it.feedSourceId !in settings.disabledFeeds }
+        val checked = verifiedList(candidates, PREVIEW_LIST_PREFIX + id, verify, NewsItem::id)
+        val items = checked.shown.take(PREVIEW_SIZE)
+        return PreviewUi(
+            topicId = id,
+            items = items,
+            loading = id in loading,
+            failed = id in failed && news[id]?.items.isNullOrEmpty(),
+            fetched = news[id] != null,
+            toVerify = if (items.size >= PREVIEW_SIZE) emptyList() else checked.waiting.take(PREVIEW_SIZE - items.size + 1),
+            noneComplete = verify.enabled && items.isEmpty() && checked.waiting.isEmpty() && candidates.isNotEmpty(),
+            offline = verify.enabled && verifyOffline,
+        )
+    }
 
     val categories = Topics.categories(lang).map { generic ->
         val topic = Topics.resolve(generic.id, settings, lang) ?: generic
@@ -198,6 +222,15 @@ internal fun buildDiscoverState(
         showImages = settings.showImages,
     )
 }
+
+/** List keys of previews ([verifiedList]). */
+private const val PREVIEW_LIST_PREFIX = "preview:"
+
+/** The candidates the open previews want verified, in screen order (category, open sub-topic, open place), each once. */
+internal fun DiscoverUiState.previewsToVerify(): List<NewsItem> =
+    (listOfNotNull(detail?.preview, detail?.subPreview) + places.mapNotNull { it.preview })
+        .flatMap { it.toVerify }
+        .distinctBy { it.id }
 
 /** The topic whose headlines the screen should keep fresh for [selection]; null when none is shown. */
 internal fun previewTarget(selection: DiscoverSelection): String? =

@@ -70,11 +70,26 @@ class SettingsStringsTest {
         assertEquals("Alles, was die Quellen liefern", de.newsAge(NewsAge.ALL))
         assertEquals("Glätte, Sturm, Hitze – wenn etwas ansteht", de.weatherCardText(WeatherCard.WARNINGS))
         assertEquals("Artikel in der App lesen", de.readInApp)
-        assertEquals("Nur in der App lesbare Artikel", de.readableOnly)
+        assertEquals("Nur vollständige Artikel", de.readableOnly)
         assertEquals("Nur im WLAN", de.prefetchMode(PrefetchMode.WIFI_ONLY))
         assertEquals("Themen entdecken", SourcesStrings.of(AppLanguage.DE).discover)
         assertEquals("Sprache & Region", de.languageTitle)
         assertEquals("Wie das Handy", RegionStrings.of(AppLanguage.DE).followPhone)
+    }
+
+    @Test
+    fun `the readable-only setting says what it does, in every language`() {
+        for (lang in AppLanguage.entries) {
+            val s = SettingsStrings.of(lang)
+            listOf(s.readableOnly, s.readableOnlyOn, s.readableOnlyOff, s.prefetchWhileReadableOnly).forEach { assertTrue("$lang: \"$it\"", it.isNotBlank()) }
+            // The hint names the price: articles are loaded ahead, on mobile data too.
+            assertTrue("$lang mentions the data use", s.readableOnlyOn.length > 120)
+        }
+        val de = SettingsStrings.of(AppLanguage.DE)
+        assertTrue(de.readableOnlyOn.contains("mobile Daten"))
+        assertTrue(de.readableOnlyOn.contains("Anriss"))
+        assertTrue(SettingsStrings.of(AppLanguage.EN).readableOnlyOn.contains("mobile data"))
+        assertTrue(SettingsStrings.of(AppLanguage.FR).readableOnlyOn.contains("tu ne vois"))
     }
 
     @Test

@@ -6,6 +6,8 @@ import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.TopicNews
 import com.cedrickgd.morgenbriefing.domain.WeatherFixtures
 import com.cedrickgd.morgenbriefing.i18n.NotifyStrings
+import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -30,6 +32,32 @@ class MorningContentTest {
         assertEquals(listOf("Sport eins", "KI eins", "Welt eins"), topHeadlines(repo, settings))
         assertEquals(listOf("Sport eins"), topHeadlines(repo, settings, count = 1))
         assertTrue(topHeadlines(emptyMap(), settings).isEmpty())
+    }
+
+    @Test
+    fun `with nur vollstaendige Artikel only verified headlines go out, the next article stands in`() = runTest {
+        val settings = AppSettings(topicOrder = listOf("sport", "politik", "ki"), readableOnly = true)
+        val repo = mapOf(
+            "ki" to news("ki", "KI eins", "KI zwei", "KI drei", "KI vier"),
+            "politik" to news("politik", "Politik eins", "Politik zwei"),
+            "sport" to news("sport", "Sport eins"),
+            "welt" to news("welt", "Welt eins", "Welt zwei"),
+        )
+        val candidates = headlineCandidates(repo, settings, count = 3)
+        assertEquals("the first count + 2 topics, three articles each", listOf(listOf("sport-0"), listOf("politik-0", "politik-1"), listOf("ki-0", "ki-1", "ki-2"), listOf("welt-0", "welt-1")), candidates.map { list -> list.map { it.id } })
+
+        // sport-0 is a teaser, politik-0 is complete, the KI ones are walled until ki-2.
+        val verdicts = mapOf("sport-0" to ArticleStatus.PAYWALL, "politik-0" to ArticleStatus.READABLE, "ki-0" to ArticleStatus.BLOCKED, "ki-1" to ArticleStatus.PAYWALL, "ki-2" to ArticleStatus.READABLE, "welt-0" to ArticleStatus.READABLE)
+        val checked = ArrayList<String>()
+        verifyHeadlineCandidates(candidates) { item ->
+            checked += item.id
+            verdicts[item.id] ?: ArticleStatus.FAILED
+        }
+        assertEquals("a topic stops at its first complete article", setOf("sport-0", "politik-0", "ki-0", "ki-1", "ki-2", "welt-0"), checked.toSet())
+        val status = { id: String -> verdicts[id] ?: ArticleStatus.UNKNOWN }
+        assertEquals(listOf("Politik eins", "KI drei", "Welt eins"), verifiedHeadlines(candidates, status))
+        // Nothing verified (offline, time up): no unverified headline sneaks in.
+        assertTrue(verifiedHeadlines(candidates, { ArticleStatus.UNKNOWN }).isEmpty())
     }
 
     @Test

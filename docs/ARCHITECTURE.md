@@ -33,7 +33,16 @@ Artikel öffnen / vorladen
      → Seite der Redaktion (eigene Cookies je Artikel, Accept-Language der Ausgabe)
      → ArticleExtractor (Readability4J + jsoup, JSON-LD-Rückfall) → ArticleCleaner (Doppeltes raus)
      → Urteil OK / PAYWALL / CONSENT / BLOCKED / NOT_ARTICLE → ReadabilityStore lernt je Seite
-     → Cache store/articles/<id>.json (7 Tage)
+     → ArticleCompleteness: vollständig oder nur Anriss (Abo-Hinweise, erklärte Länge, nur der
+       Vorspann, abgeschnitten, Video-/Start-/Kursseite) → Status READABLE = „geprüft“
+     → Cache store/articles/<id>.json (7 Tage), Urteil je Artikel store/verdicts.json (7 Tage)
+
+„Nur vollständige Artikel“ (AppSettings.readableOnly)
+  Listen (Für dich, Neueste, Themen, Entdecken) zeigen nur READABLE-Meldungen (VerifiedLists):
+  geprüfte hinten angehängt, erste ungeprüfte hält die Liste an, Gezeigtes bleibt bis zum
+  nächsten Aufbau; die nächsten ~20 Kandidaten (Für dich: was die Abschnitte füllt) prüft der
+  ArticlePrefetcher vorab – 3 parallel, auch mobil, offline nichts (Hinweis, später weiter).
+  Die Morgen-Benachrichtigung prüft je Thema die neuesten Kandidaten (höchstens 20 s).
 ```
 
 * **Sprachen**: die Oberfläche spricht `AppLanguage` (DE, EN, FR, ES, IT; Standard: wie das
@@ -55,10 +64,13 @@ Artikel öffnen / vorladen
   sind ein Hash des normalisierten Links.
 * **Feed-Logik** (`ui/news/FeedLogic.kt`, `NewsModels.kt`): pro gefolgtem Thema eine Sektion
   („Für dich“), „Neueste“ über alle Themen ohne Doppelte, je Thema eine endlose Liste mit
-  `loadMore` am Ende; „nur lesbar“ filtert Meldungen gesperrter Seiten; sichtbare Meldungen
-  gehen an den `ArticlePrefetcher` (Status „Volltext“/„Bezahlinhalt“, Bild für Google-News-Karten).
+  `loadMore` am Ende; „nur vollständige Artikel“ filtert Meldungen gesperrter Seiten und zeigt
+  nur vom `ArticlePrefetcher` geprüfte (`VerifiedLists.kt`, `ui/today/TodayWindows.kt`: was als
+  Nächstes geprüft wird); ohne die Einstellung gehen sichtbare Meldungen zum Vorladen an den
+  Prefetcher (Status „Volltext“/„Bezahlinhalt“, Bild für Google-News-Karten).
 * **Benachrichtigung**: `MorningWorker` holt Wetter und Feeds, je gefolgtem Thema die neueste
-  Schlagzeile, `WeatherInsights.notification` baut den Text in der App-Sprache.
+  Schlagzeile (mit „nur vollständige Artikel“ die neueste geprüfte), `WeatherInsights.notification`
+  baut den Text in der App-Sprache.
 * **Updates**: die App prüft GitHub Releases von `CedrickGD/Daily-Briefing` ohne Token (der alte
   Repo-Name leitet weiter), lädt die APK, prüft die Signatur und übergibt sie dem Installer.
 * **Standort**: `LocationFinder` holt einen groben Fix über `LocationManager` (ohne Play
@@ -74,7 +86,7 @@ Artikel öffnen / vorladen
 | `data/remote` | `OpenMeteoClient`, `RssClient` (Feeds lesen, Feed hinter einer Website finden), `GoogleNewsDecoder` (Google-News-Link → Artikel-URL) |
 | `data/local` | `WeatherStore`, `NewsCache` (JSON-Dateien, atomar geschrieben) |
 | `data` | `SettingsRepository` (DataStore) + `SettingsOps` (folgen, sortieren, Orte, Suchen) + `SettingsMigration`, `WeatherRepository`, `NewsRepository` |
-| `data/article` | `ArticleExtractor`, `ArticleCleaner`, `PageSignals` (Bezahlschranke/Cookie-Wand), `ArticleRepository`, `ReadabilityStore` (`store/readability.json`, Startliste `KnownWalls`), `ArticlePrefetcher` + `NetworkMeter`, `LinkResolver`, `SessionCookies`. Prüfung gegen echte Seiten: `ArticleLiveEvaluation` (`MB_LIVE=1`) |
+| `data/article` | `ArticleExtractor`, `ArticleCleaner`, `PageSignals` (Bezahlschranke/Cookie-Wand), `ArticleCompleteness` (vollständig oder Anriss), `ArticleRepository`, `ReadabilityStore` (`store/readability.json`, Startliste `KnownWalls`), `ArticlePrefetcher` + `NetworkMeter` + `VerdictStore` (`store/verdicts.json`), `LinkResolver`, `SessionCookies`. Prüfung gegen echte Seiten: `ArticleLiveEvaluation` (`MB_LIVE=1`) |
 | `domain` | `Condition`, `WeatherInsights`, `ClothingAdvisor` (Headline, Kleidung, Warnungen, Notification-Text in jeder Sprache), `Fmt` |
 | `location` | `LocationFinder` („Mein Standort“) |
 | `notify` | `AlarmScheduler`, `MorningAlarmReceiver`, `SystemEventsReceiver`, `MorningWorker`, `Notifications` |

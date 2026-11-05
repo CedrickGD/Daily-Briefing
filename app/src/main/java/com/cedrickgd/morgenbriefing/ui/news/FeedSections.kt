@@ -340,6 +340,11 @@ fun LoadOlderRow(onLoadOlder: () -> Unit, modifier: Modifier = Modifier) {
  * "Für dich": every followed topic with its header, its first articles as editorial entries
  * and the "Alle … Meldungen" pill that opens the topic's own chip.
  *
+ * With "nur vollständige Artikel" a section shows its verified articles only; while candidates
+ * for it are still being checked a quiet "Weitere Artikel werden geprüft …" row follows them
+ * ([verifyOffline]: offline, only articles checked before), and a section whose candidates all
+ * turned out incomplete says so.
+ *
  * @param loadingTopics topics whose refresh is running (empty sections say "lade …").
  * @param keyPrefix keeps keys unique when several feeds share a list.
  */
@@ -353,6 +358,7 @@ internal fun LazyListScope.forYouItems(
     showImages: Boolean,
     onShowAll: (SectionUi) -> Unit,
     keyPrefix: String,
+    verifyOffline: Boolean = false,
 ) {
     sections.forEach { section ->
         val sectionKey = "$keyPrefix-s${section.index}-${section.id}"
@@ -361,7 +367,7 @@ internal fun LazyListScope.forYouItems(
                 topic = section.topic,
                 count = section.count,
                 subtitle = section.subtitle,
-                onOpen = if (section.isEmpty) null else ({ onShowAll(section) }),
+                onOpen = if (section.isEmpty && section.waiting.isEmpty()) null else ({ onShowAll(section) }),
                 modifier = Modifier
                     .animateItem()
                     .padding(horizontal = FeedGutter)
@@ -372,14 +378,18 @@ internal fun LazyListScope.forYouItems(
             item(key = "$sectionKey-empty", contentType = "feed-empty") {
                 val strings = feedStrings()
                 val loading = section.id in loadingTopics
+                val checking = section.checking || section.waiting.isNotEmpty()
                 EmptySectionNote(
                     text = when {
                         loading -> strings.loadingArticles
+                        checking && verifyOffline -> strings.verifyOffline
+                        checking -> strings.verifying
+                        section.noneComplete -> strings.noneComplete
                         section.failedSources.isNotEmpty() -> strings.unreachable(section.failedSources.joinToString(", "))
                         section.fetchedAt == null -> strings.nothingLoadedYet
                         else -> strings.nothingNewToday
                     },
-                    loading = loading,
+                    loading = loading || (checking && !verifyOffline),
                     modifier = Modifier.animateItem().padding(horizontal = FeedGutter),
                 )
             }
@@ -389,6 +399,16 @@ internal fun LazyListScope.forYouItems(
             item(key = entryKey(sectionKey, index, item.key), contentType = "feed-entry") {
                 val article = remember(item, section.topic) { FeedArticle(item, section.topic) }
                 AnimatedFeedEntry(article, now, listening.reading(item.key), listening.pausedOn(item.key), actions, hints, showImages)
+            }
+        }
+        // Offline the note above the feed says it once; here only while the check runs.
+        if (section.checking && !verifyOffline) {
+            item(key = "$sectionKey-checking", contentType = "feed-empty") {
+                EmptySectionNote(
+                    text = feedStrings().verifying,
+                    loading = true,
+                    modifier = Modifier.animateItem().padding(horizontal = FeedGutter).padding(bottom = EntryGap),
+                )
             }
         }
         if (section.hasMore) {

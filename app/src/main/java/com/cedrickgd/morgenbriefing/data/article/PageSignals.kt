@@ -27,6 +27,8 @@ internal object PageSignals {
         val description: String = "",
         /** `isAccessibleForFree` as the publisher states it (also on `hasPart`); null = not stated. */
         val free: Boolean? = null,
+        /** The article's `wordCount` as the publisher declares it; 0 = not declared. */
+        val wordCount: Int = 0,
     )
 
     private val json = Json { isLenient = true; ignoreUnknownKeys = true }
@@ -58,6 +60,7 @@ internal object PageSignals {
             body = article?.string("articleBody").orEmpty(),
             description = article?.string("description").orEmpty(),
             free = free,
+            wordCount = article?.int("wordCount") ?: 0,
         )
     }
 
@@ -95,6 +98,10 @@ internal object PageSignals {
     }
 
     private fun JsonObject.string(key: String): String = (this[key] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
+
+    /** A positive whole number (`"wordCount": 812` or `"812"`), else null. */
+    private fun JsonObject.int(key: String): Int? =
+        (this[key] as? JsonPrimitive)?.contentOrNull?.trim()?.toDoubleOrNull()?.takeIf { it >= 1 && it < 1_000_000 }?.toInt()
 
     // ------------------------------------------------------------------------------ paywalls
 
@@ -135,6 +142,22 @@ internal object PageSignals {
         if (notices.any { el -> el.text().let { PAYWALL_PHRASES.containsMatchIn(it) || PAYWALL_BRANDS.containsMatchIn(it) } }) return true
         return PAYWALL_PHRASES.containsMatchIn(visibleText(body))
     }
+
+    /**
+     * True when the end of [articleText] – where a newsroom cuts its free part off – carries
+     * paywall wording ([PAYWALL_PHRASES], at any length) or, for a text of at most
+     * [BRAND_TAIL_WORDS] words, a paid brand mark ([PAYWALL_BRANDS]). Stricter than
+     * [hasPaywallMarks] (which only judges short texts) and blind to the rest of the page: for
+     * "nur vollständige Artikel", where a long free article that mentions "SPIEGEL+" in the
+     * middle stays complete.
+     */
+    fun endsInPaywall(articleText: String, words: Int): Boolean {
+        val tail = articleText.takeLast(TAIL_CHARS)
+        return PAYWALL_PHRASES.containsMatchIn(tail) || (words <= BRAND_TAIL_WORDS && PAYWALL_BRANDS.containsMatchIn(tail))
+    }
+
+    private const val TAIL_CHARS = 400
+    private const val BRAND_TAIL_WORDS = 400
 
     /** The body's text without navigation, header, footer and menus (where "Jetzt abonnieren" is just a link). */
     private fun visibleText(body: Element): String {

@@ -45,6 +45,15 @@ interface FeedStrings {
     val nothingLoadedYet: String
     val nothingNewToday: String
     val nothingHereRightNow: String
+
+    // "Nur vollständige Artikel": checking candidates before they show
+    val verifying: String
+    val verifyOffline: String
+    val verifyOfflineTitle: String
+    val verifyOfflineText: String
+    val noneComplete: String
+    val noCompleteTitle: String
+    val noCompleteText: String
     val backToTop: String
 
     // Snackbars
@@ -170,6 +179,13 @@ interface FeedStrings {
         override val nothingLoadedYet = "Noch nichts geladen – zieh nach unten zum Aktualisieren."
         override val nothingNewToday = "Heute noch nichts Neues."
         override val nothingHereRightNow = "Hier ist gerade nichts – schau später nochmal rein."
+        override val verifying = "Weitere Artikel werden geprüft …"
+        override val verifyOffline = "Offline – hier stehen nur schon geprüfte Artikel. Weitere prüft die App, sobald du wieder online bist."
+        override val verifyOfflineTitle = "Offline – nur geprüfte Artikel"
+        override val verifyOfflineText = "Weitere Artikel prüft die App, sobald du wieder online bist."
+        override val noneComplete = "Gerade ist hier kein Artikel vollständig in der App lesbar."
+        override val noCompleteTitle = "Kein vollständiger Artikel"
+        override val noCompleteText = "Die neuesten Meldungen lassen sich gerade nur bei den Redaktionen ganz lesen. Alle zeigt die App, wenn du „Nur vollständige Artikel“ in den Einstellungen ausschaltest."
         override val backToTop = "Nach oben"
 
         override val lastTopicStays = "Einem Thema folgst du immer."
@@ -277,6 +293,13 @@ interface FeedStrings {
         override val nothingLoadedYet = "Nothing loaded yet – pull down to refresh."
         override val nothingNewToday = "Nothing new today yet."
         override val nothingHereRightNow = "Nothing here right now – check back later."
+        override val verifying = "Checking more articles …"
+        override val verifyOffline = "Offline – only articles checked before are shown. The app checks more once you're back online."
+        override val verifyOfflineTitle = "Offline – checked articles only"
+        override val verifyOfflineText = "The app checks more articles once you're back online."
+        override val noneComplete = "Right now no article here can be read in full in the app."
+        override val noCompleteTitle = "No complete article"
+        override val noCompleteText = "The latest stories can only be read in full on the publishers' sites right now. To see them all, switch off “Only complete articles” in the settings."
         override val backToTop = "Back to top"
 
         override val lastTopicStays = "You always follow at least one topic."
@@ -384,6 +407,13 @@ interface FeedStrings {
         override val nothingLoadedYet = "Rien de chargé – tire vers le bas pour actualiser."
         override val nothingNewToday = "Rien de neuf aujourd'hui pour l'instant."
         override val nothingHereRightNow = "Rien ici pour le moment – repasse plus tard."
+        override val verifying = "Vérification d'autres articles …"
+        override val verifyOffline = "Hors ligne – seuls les articles déjà vérifiés s'affichent. L'appli en vérifie d'autres dès que tu es de nouveau en ligne."
+        override val verifyOfflineTitle = "Hors ligne – articles vérifiés seulement"
+        override val verifyOfflineText = "L'appli vérifie d'autres articles dès que tu es de nouveau en ligne."
+        override val noneComplete = "Pour l'instant, aucun article ici ne se lit en entier dans l'appli."
+        override val noCompleteTitle = "Aucun article complet"
+        override val noCompleteText = "Les derniers articles ne se lisent en entier que sur les sites des rédactions pour le moment. Pour tout voir, désactive « Articles complets uniquement » dans les réglages."
         override val backToTop = "Revenir en haut"
 
         override val lastTopicStays = "Tu suis toujours au moins un thème."
@@ -491,6 +521,13 @@ interface FeedStrings {
         override val nothingLoadedYet = "Aún no hay nada – desliza hacia abajo para actualizar."
         override val nothingNewToday = "Hoy todavía no hay nada nuevo."
         override val nothingHereRightNow = "Ahora mismo no hay nada aquí – vuelve más tarde."
+        override val verifying = "Comprobando más artículos …"
+        override val verifyOffline = "Sin conexión – solo ves artículos ya comprobados. La app comprobará más cuando vuelvas a estar en línea."
+        override val verifyOfflineTitle = "Sin conexión – solo artículos comprobados"
+        override val verifyOfflineText = "La app comprobará más artículos cuando vuelvas a estar en línea."
+        override val noneComplete = "Ahora mismo ningún artículo de aquí se puede leer completo en la app."
+        override val noCompleteTitle = "Ningún artículo completo"
+        override val noCompleteText = "Las últimas noticias solo se pueden leer completas en las webs de los medios. Para verlas todas, desactiva «Solo artículos completos» en los ajustes."
         override val backToTop = "Volver arriba"
 
         override val lastTopicStays = "Siempre sigues al menos un tema."
@@ -598,6 +635,13 @@ interface FeedStrings {
         override val nothingLoadedYet = "Ancora niente – trascina verso il basso per aggiornare."
         override val nothingNewToday = "Oggi ancora niente di nuovo."
         override val nothingHereRightNow = "Qui per ora non c'è niente – ripassa più tardi."
+        override val verifying = "Verifico altri articoli …"
+        override val verifyOffline = "Offline – vedi solo articoli già verificati. L'app ne verifica altri appena torni online."
+        override val verifyOfflineTitle = "Offline – solo articoli verificati"
+        override val verifyOfflineText = "L'app verifica altri articoli appena torni online."
+        override val noneComplete = "Al momento nessun articolo qui si legge per intero nell'app."
+        override val noCompleteTitle = "Nessun articolo completo"
+        override val noCompleteText = "Le ultime notizie si leggono per intero solo sui siti delle testate. Per vederle tutte, disattiva «Solo articoli completi» nelle impostazioni."
         override val backToTop = "Torna su"
 
         override val lastTopicStays = "Segui sempre almeno un tema."

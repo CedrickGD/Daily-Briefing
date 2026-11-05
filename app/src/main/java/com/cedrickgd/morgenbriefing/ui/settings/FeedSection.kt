@@ -179,12 +179,13 @@ internal fun FeedCard(settings: AppSettings, actions: FeedCardActions, modifier:
                     }
                 }
                 AnimatedContent(
-                    targetState = settings.prefetch,
+                    targetState = settings.prefetch to settings.readableOnly,
                     transitionSpec = { fadeIn() togetherWith fadeOut() },
                     label = "prefetchHint",
-                ) { mode ->
+                ) { (mode, verified) ->
+                    // "Nur vollständige Artikel" verifies (and so loads) ahead on any connection: say so.
                     Text(
-                        text = strings.prefetchHint(mode),
+                        text = if (verified) strings.prefetchWhileReadableOnly else strings.prefetchHint(mode),
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),

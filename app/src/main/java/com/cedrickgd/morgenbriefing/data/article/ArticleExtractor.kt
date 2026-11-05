@@ -95,9 +95,15 @@ object ArticleExtractor {
                 description = description,
                 language = meta.language,
                 format = ArticleContent.FORMAT,
+                free = structured?.free,
+                declaredWords = structured?.wordCount ?: 0,
             )
         }
         val text = content?.text.orEmpty()
+        // Subscriber marks on a page that still gave a text: for the strict "complete" judgement.
+        val hints = content != null && structured?.free != true &&
+            (PageSignals.endsInPaywall(text, wordCount) || (wordCount < HINT_CHECK_WORDS && PageSignals.hasPaywallMarks(document, text)))
+        val judged = if (hints) content?.copy(paywallHints = true) else content
         val outcome = when {
             structured?.free == false -> ReadOutcome.PAYWALL
             content != null && looksLikeConsentWall(content) -> ReadOutcome.CONSENT
@@ -106,7 +112,7 @@ object ArticleExtractor {
             content == null -> ReadOutcome.NOT_ARTICLE
             else -> ReadOutcome.OK
         }
-        return Page(content, outcome, meta.amp)
+        return Page(judged, outcome, meta.amp)
     }
 
     /**
@@ -149,6 +155,9 @@ object ArticleExtractor {
     private const val MIN_WORDS = 20
     private const val FALLBACK_WORDS = 150
     private const val PAYWALL_CHECK_WORDS = 250
+
+    /** Up to this many words, subscriber marks anywhere on the page make the text a likely teaser ([ArticleContent.paywallHints]). */
+    private const val HINT_CHECK_WORDS = 400
     private const val MIN_PARAGRAPH_CHARS = 2
     private const val SHORT_PARAGRAPH = 90
     private const val MIN_IMAGE_WIDTH = 200

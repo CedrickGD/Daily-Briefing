@@ -118,6 +118,9 @@ interface SettingsStrings {
     val readableOnly: String
     val readableOnlyOn: String
     val readableOnlyOff: String
+
+    /** Under "Artikel vorladen" while [readableOnly] is on: it checks and loads ahead anyway. */
+    val prefetchWhileReadableOnly: String
     val prefetch: String
     fun prefetchMode(mode: PrefetchMode): String
     fun prefetchHint(mode: PrefetchMode): String
@@ -288,9 +291,12 @@ interface SettingsStrings {
         override val readInApp = "Artikel in der App lesen"
         override val readInAppOn = "Volltext mit Bildern – ohne Werbung und Cookie-Banner"
         override val readInAppOff = "Jeder Artikel öffnet im Browser"
-        override val readableOnly = "Nur in der App lesbare Artikel"
-        override val readableOnlyOn = "Seiten mit Bezahl- oder Cookie-Schranke bleiben draußen"
-        override val readableOnlyOff = "Alle Meldungen – manche lassen sich nur bei der Redaktion lesen"
+        override val readableOnly = "Nur vollständige Artikel"
+        override val readableOnlyOn =
+            "Die App prüft jeden Artikel, bevor sie ihn zeigt: Du siehst nur Meldungen, die komplett in der App lesbar sind – keine Bezahlschranke, kein bloßer Anriss, keine Cookie-Wand. Dafür lädt sie Artikel vorab, auch über mobile Daten (etwas Datenvolumen); offline zeigt sie nur schon geprüfte."
+        override val readableOnlyOff = "Alle Meldungen – manche lassen sich nur bei der Redaktion ganz lesen"
+        override val prefetchWhileReadableOnly =
+            "„Nur vollständige Artikel“ ist an: Die App prüft und lädt die Artikel ohnehin vorab. Diese Wahl gilt, wenn du das ausschaltest."
         override val prefetch = "Artikel vorladen"
         override fun prefetchMode(mode: PrefetchMode) = when (mode) {
             PrefetchMode.OFF -> "Aus"
@@ -476,9 +482,12 @@ interface SettingsStrings {
         override val readInApp = "Read articles in the app"
         override val readInAppOn = "Full text with pictures – no ads, no cookie banners"
         override val readInAppOff = "Every article opens in the browser"
-        override val readableOnly = "Only articles the app can show"
-        override val readableOnlyOn = "Sites behind a paywall or cookie wall stay out"
-        override val readableOnlyOff = "All stories – some can only be read on the publisher's site"
+        override val readableOnly = "Only complete articles"
+        override val readableOnlyOn =
+            "The app checks every article before showing it: you only see stories that can be read in full in the app – no paywall, no mere teaser, no cookie wall. For that it loads articles in advance, on mobile data too (uses some data); offline it shows only articles checked before."
+        override val readableOnlyOff = "All stories – some can only be read in full on the publisher's site"
+        override val prefetchWhileReadableOnly =
+            "“Only complete articles” is on: the app checks and loads articles in advance anyway. This choice applies when you switch that off."
         override val prefetch = "Preload articles"
         override fun prefetchMode(mode: PrefetchMode) = when (mode) {
             PrefetchMode.OFF -> "Off"
@@ -664,9 +673,12 @@ interface SettingsStrings {
         override val readInApp = "Lire les articles dans l'appli"
         override val readInAppOn = "Texte intégral avec images – sans pub ni bandeau de cookies"
         override val readInAppOff = "Chaque article s'ouvre dans le navigateur"
-        override val readableOnly = "Seulement les articles lisibles dans l'appli"
-        override val readableOnlyOn = "Les sites derrière un paywall ou un mur de cookies restent dehors"
-        override val readableOnlyOff = "Tous les articles – certains ne se lisent que sur le site de l'éditeur"
+        override val readableOnly = "Articles complets uniquement"
+        override val readableOnlyOn =
+            "L'appli vérifie chaque article avant de l'afficher : tu ne vois que des articles lisibles en entier dans l'appli – pas de paywall, pas de simple accroche, pas de mur de cookies. Pour cela, elle charge les articles à l'avance, aussi en données mobiles (consomme un peu de données) ; hors ligne, elle n'affiche que ceux déjà vérifiés."
+        override val readableOnlyOff = "Tous les articles – certains ne se lisent en entier que sur le site de l'éditeur"
+        override val prefetchWhileReadableOnly =
+            "« Articles complets uniquement » est activé : l'appli vérifie et précharge déjà les articles. Ce choix s'applique si tu le désactives."
         override val prefetch = "Précharger les articles"
         override fun prefetchMode(mode: PrefetchMode) = when (mode) {
             PrefetchMode.OFF -> "Non"
@@ -852,9 +864,12 @@ interface SettingsStrings {
         override val readInApp = "Leer artículos en la app"
         override val readInAppOn = "Texto completo con imágenes – sin anuncios ni avisos de cookies"
         override val readInAppOff = "Cada artículo se abre en el navegador"
-        override val readableOnly = "Solo artículos legibles en la app"
-        override val readableOnlyOn = "Las webs con muro de pago o de cookies se quedan fuera"
-        override val readableOnlyOff = "Todas las noticias – algunas solo se leen en la web del medio"
+        override val readableOnly = "Solo artículos completos"
+        override val readableOnlyOn =
+            "La app comprueba cada artículo antes de mostrarlo: solo ves noticias que se pueden leer completas en la app – sin muro de pago, sin un simple adelanto, sin muro de cookies. Para ello carga los artículos por adelantado, también con datos móviles (gasta algunos datos); sin conexión solo muestra los ya comprobados."
+        override val readableOnlyOff = "Todas las noticias – algunas solo se leen completas en la web del medio"
+        override val prefetchWhileReadableOnly =
+            "«Solo artículos completos» está activado: la app ya comprueba y carga los artículos por adelantado. Esta opción vale si lo desactivas."
         override val prefetch = "Precargar artículos"
         override fun prefetchMode(mode: PrefetchMode) = when (mode) {
             PrefetchMode.OFF -> "No"
@@ -1040,9 +1055,12 @@ interface SettingsStrings {
         override val readInApp = "Leggi gli articoli nell'app"
         override val readInAppOn = "Testo completo con immagini – senza pubblicità né banner dei cookie"
         override val readInAppOff = "Ogni articolo si apre nel browser"
-        override val readableOnly = "Solo articoli leggibili nell'app"
-        override val readableOnlyOn = "I siti con paywall o muro dei cookie restano fuori"
-        override val readableOnlyOff = "Tutte le notizie – alcune si leggono solo sul sito della testata"
+        override val readableOnly = "Solo articoli completi"
+        override val readableOnlyOn =
+            "L'app verifica ogni articolo prima di mostrarlo: vedi solo notizie che si leggono per intero nell'app – niente paywall, niente semplici anteprime, niente muri dei cookie. Per questo carica gli articoli in anticipo, anche con i dati mobili (consuma qualche dato); offline mostra solo quelli già verificati."
+        override val readableOnlyOff = "Tutte le notizie – alcune si leggono per intero solo sul sito della testata"
+        override val prefetchWhileReadableOnly =
+            "«Solo articoli completi» è attivo: l'app verifica e carica già gli articoli in anticipo. Questa scelta vale se lo disattivi."
         override val prefetch = "Precarica gli articoli"
         override fun prefetchMode(mode: PrefetchMode) = when (mode) {
             PrefetchMode.OFF -> "No"

@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.cedrickgd.morgenbriefing.AppContainer
 import com.cedrickgd.morgenbriefing.MorgenbriefingApp
 import com.cedrickgd.morgenbriefing.data.article.ArticleCleaner
+import com.cedrickgd.morgenbriefing.data.article.ArticleCompleteness
 import com.cedrickgd.morgenbriefing.data.article.ArticleException
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.ArticleContent
@@ -76,6 +77,12 @@ data class ArticleUiState(
     val showImages: Boolean = true,
     /** Reference for "vor 3 Min.". */
     val now: ZonedDateTime,
+    /**
+     * The text is probably only the free lead of the article
+     * ([com.cedrickgd.morgenbriefing.data.article.ArticleCompleteness]): the reader says so at
+     * its end. Judged on the whole extracted text, before the head is taken out.
+     */
+    val partial: Boolean = false,
 )
 
 /**
@@ -134,7 +141,8 @@ class ArticleViewModel(
                     _state.update { s ->
                         val shown = if (s.item.headline.isBlank()) s.item.copy(headline = content.title) else s.item
                         val arranged = arrange(content, shown)
-                        s.copy(item = shown, content = arranged.content, teaser = arranged.teaser, loading = false, failure = null, now = clock())
+                        val partial = !ArticleCompleteness.isComplete(content, item)
+                        s.copy(item = shown, content = arranged.content, teaser = arranged.teaser, loading = false, failure = null, now = clock(), partial = partial)
                     }
                 },
                 onFailure = { e ->

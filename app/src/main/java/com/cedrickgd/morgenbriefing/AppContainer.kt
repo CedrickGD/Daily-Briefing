@@ -11,6 +11,7 @@ import com.cedrickgd.morgenbriefing.data.article.ArticlePrefetcher
 import com.cedrickgd.morgenbriefing.data.article.ArticleRepository
 import com.cedrickgd.morgenbriefing.data.article.LinkResolver
 import com.cedrickgd.morgenbriefing.data.article.ReadabilityStore
+import com.cedrickgd.morgenbriefing.data.article.VerdictStore
 import com.cedrickgd.morgenbriefing.data.local.NewsCache
 import com.cedrickgd.morgenbriefing.data.local.WeatherStore
 import com.cedrickgd.morgenbriefing.data.news.RssParser
@@ -18,6 +19,9 @@ import com.cedrickgd.morgenbriefing.data.remote.GoogleNewsDecoder
 import com.cedrickgd.morgenbriefing.data.remote.OpenMeteoClient
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
 import com.cedrickgd.morgenbriefing.location.LocationFinder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -59,7 +63,11 @@ class AppContainer(context: Context) {
         warmUp = googleNewsDecoder::warm,
     )
     val articles = ArticleRepository(http, storeDir, json, linkResolver = linkResolver, readability = readability)
-    val prefetcher = ArticlePrefetcher(articles, AndroidNetworkMeter(app))
+
+    /** Per article: verified complete, teaser, wall or no article – kept across starts (`store/verdicts.json`). */
+    val verdicts = VerdictStore(File(storeDir, "verdicts.json"), json, CoroutineScope(SupervisorJob() + Dispatchers.IO))
+    val network = AndroidNetworkMeter(app)
+    val prefetcher = ArticlePrefetcher(articles, network, verdicts)
     val location = LocationFinder(app)
 }
 

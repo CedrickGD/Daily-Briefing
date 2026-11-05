@@ -17,6 +17,7 @@ import com.cedrickgd.morgenbriefing.AppContainer
 import com.cedrickgd.morgenbriefing.container
 import com.cedrickgd.morgenbriefing.data.BERLIN
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
+import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
@@ -27,6 +28,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 
@@ -88,7 +90,7 @@ class MorningWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         }
 
         val snapshot = liveWeather ?: cachedWeather(container)
-        val headlines = topHeadlines(container.news.state.value.topics, settings)
+        val headlines = if (settings.readableOnly) completeHeadlines(container, settings) else topHeadlines(container.news.state.value.topics, settings)
         val text = morningText(snapshot, headlines, settings.language)
         if (!Notifications.canPost(context)) {
             // Data is fetched and cached for the app; there is just nothing we may show.
@@ -125,6 +127,30 @@ class MorningWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             false
         }
 
+    /**
+     * "Nur vollständige Artikel": headlines of articles verified complete only. The top
+     * candidates of each topic are verified (known verdicts answer at once, the next article
+     * stands in for an incomplete one) within [VERIFY_BUDGET_MS]; whatever is verified by then
+     * makes the headlines. The verified articles are cached, so a tap opens them instantly.
+     */
+    private suspend fun completeHeadlines(container: AppContainer, settings: AppSettings): List<String> {
+        val candidates = headlineCandidates(container.news.state.value.topics, settings)
+        val language = settings.edition.language
+        withTimeoutOrNull(VERIFY_BUDGET_MS) {
+            verifyHeadlineCandidates(candidates) { item ->
+                try {
+                    container.prefetcher.verify(item, language)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Verifying a headline failed", e)
+                    ArticleStatus.FAILED
+                }
+            }
+        } ?: Log.i(TAG, "Verifying the headlines took too long, using what is verified")
+        return verifiedHeadlines(candidates, container.prefetcher::statusOf)
+    }
+
     private suspend fun cachedWeather(container: AppContainer): WeatherSnapshot? =
         try {
             container.weather.cached()
@@ -159,6 +185,9 @@ class MorningWorker(context: Context, params: WorkerParameters) : CoroutineWorke
 
         /** Runs with runAttemptCount 0 and 1 may retry; the third run delivers whatever it has. */
         private const val MAX_RETRIES = 2
+
+        /** The most time verifying the headlines may take ("nur vollständige Artikel"). */
+        private const val VERIFY_BUDGET_MS = 20_000L
 
         /** Expedited unique work "morning"; [force] = ignore lastNotifiedDate (test button). */
         fun enqueue(context: Context, force: Boolean = false) {

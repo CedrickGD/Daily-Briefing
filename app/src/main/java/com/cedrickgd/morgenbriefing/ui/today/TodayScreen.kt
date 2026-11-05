@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.data.model.Topics
@@ -91,18 +92,17 @@ import com.cedrickgd.morgenbriefing.ui.news.NewsFeed
 import com.cedrickgd.morgenbriefing.ui.news.NowListening
 import com.cedrickgd.morgenbriefing.ui.news.SectionUi
 import com.cedrickgd.morgenbriefing.ui.news.TopicsSheet
+import com.cedrickgd.morgenbriefing.ui.news.VERIFY_LOW_WATER
 import com.cedrickgd.morgenbriefing.ui.news.articleItems
 import com.cedrickgd.morgenbriefing.ui.news.canUnfollow
 import com.cedrickgd.morgenbriefing.ui.news.chipsParked
 import com.cedrickgd.morgenbriefing.ui.news.endAction
-import com.cedrickgd.morgenbriefing.ui.news.entryItemId
 import com.cedrickgd.morgenbriefing.ui.news.feedChips
 import com.cedrickgd.morgenbriefing.ui.news.fetchedLabel
 import com.cedrickgd.morgenbriefing.ui.news.followSuggestion
 import com.cedrickgd.morgenbriefing.ui.news.forYouItems
 import com.cedrickgd.morgenbriefing.ui.news.invitesToDiscover
 import com.cedrickgd.morgenbriefing.ui.news.listTail
-import com.cedrickgd.morgenbriefing.ui.news.prefetchWindow
 import com.cedrickgd.morgenbriefing.ui.news.rememberFeedActions
 import com.cedrickgd.morgenbriefing.ui.news.rememberListenController
 import com.cedrickgd.morgenbriefing.ui.news.rememberListeningKey
@@ -378,9 +378,21 @@ private fun TodayContent(
     val canLoadMore = topicId != null && state.canLoadMore(topicId)
     val loadingMore = topicId != null && topicId in state.loadingMore
     val stalled = topicId != null && topicId in state.stalled
+    // "Nur vollständige Artikel": candidates still to check below, and all candidates of the list.
+    val waiting = when (selected) {
+        FeedFilter.Latest -> feed?.latestWaiting?.size ?: 0
+        is FeedFilter.OneTopic -> feed?.sectionFor(selected.topicId)?.waiting?.size ?: 0
+        FeedFilter.ForYou -> 0
+    }
+    val candidates = when (selected) {
+        FeedFilter.Latest -> feed?.latestCandidates ?: 0
+        is FeedFilter.OneTopic -> feed?.sectionFor(selected.topicId)?.candidates ?: 0
+        FeedFilter.ForYou -> 0
+    }
+    val lowOnCandidates = waiting < VERIFY_LOW_WATER
     val currentCallbacks by rememberUpdatedState(callbacks)
-    LaunchedEffect(listState, revealed, total, canLoadMore, loadingMore, stalled, topicId) {
-        val action = endAction(revealed, total, canLoadMore, loadingMore, stalled)
+    LaunchedEffect(listState, revealed, total, canLoadMore, loadingMore, stalled, topicId, lowOnCandidates, candidates > 0) {
+        val action = endAction(revealed, total, canLoadMore, loadingMore, stalled, waiting, candidates)
         if (action == EndAction.NONE) return@LaunchedEffect
         snapshotFlow {
             val info = listState.layoutInfo
@@ -393,17 +405,17 @@ private fun TodayContent(
         }
     }
 
-    // Warm the articles on screen (and the next few) once the list rests for a moment.
-    val viewItems = remember(selected, feed, revealed) { feed?.let { viewItems(selected, it, revealed) }.orEmpty() }
-    LaunchedEffect(listState, viewItems) {
-        if (viewItems.isEmpty()) return@LaunchedEffect
-        val byId = viewItems.associateBy { it.id }
-        val order = viewItems.map { it.id }
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { entryItemId(it.key) } }
+    // Once the list rests for a moment: verify the candidates ahead ("nur vollständige Artikel"),
+    // else warm the articles on screen and the next few. Runs again whenever the feed changes
+    // (a new verdict appends articles, so the window moves on).
+    val sectionSize = prefs?.sectionSize ?: AppSettings.DEFAULT_SECTION_SIZE
+    LaunchedEffect(listState, feed, selected, revealed, sectionSize) {
+        val current = feed ?: return@LaunchedEffect
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key } }
             .distinctUntilChanged()
-            .collectLatest { visible ->
+            .collectLatest { keys ->
                 delay(PREFETCH_SETTLE_MS)
-                val window = prefetchWindow(order, visible).mapNotNull(byId::get)
+                val window = warmWindow(selected, current, revealed, keys, sectionSize)
                 if (window.isNotEmpty()) currentCallbacks.onPrefetch(window)
             }
     }
@@ -411,8 +423,8 @@ private fun TodayContent(
     val greeting = Fmt.greeting(now, language)
     val showSkeleton = weather == null && state.weatherLoading
     val headline = weather?.headline?.takeIf { it.isNotBlank() } ?: if (state.weatherLoading) strings.headlineLoading else strings.headlineFallback
-    val notice = remember(feed, state.offline, state.newsLoading, state.newsWarmed, state.newsAttempted, strings, common) {
-        newsNotice(feed, state.offline, state.newsLoading, state.newsWarmed, state.newsAttempted, strings, common)
+    val notice = remember(feed, state.offline, state.newsLoading, state.newsWarmed, state.newsAttempted, state.verifyOffline, strings, common) {
+        newsNotice(feed, state.offline, state.newsLoading, state.newsWarmed, state.newsAttempted, strings, common, verifyOffline = state.verifyOffline)
     }
     val invite = prefs != null && feed != null && selected == FeedFilter.ForYou &&
         feed.sections.isNotEmpty() && invitesToDiscover(prefs.followedIds.size)
@@ -524,8 +536,9 @@ private fun TodayContent(
                                 now = now,
                                 listening = listening,
                                 revealed = revealed,
-                                tail = listTail(revealed, total, canLoadMore, loadingMore, stalled),
+                                tail = listTail(revealed, total, canLoadMore, loadingMore, stalled, checking = waiting > 0, offline = state.verifyOffline),
                                 showImages = showImages,
+                                verifyOffline = state.verifyOffline,
                             ),
                             actions = actions,
                             hints = hints,
@@ -667,6 +680,8 @@ private class FeedView(
     val revealed: Int,
     val tail: ListTail,
     val showImages: Boolean,
+    /** "Nur vollständige Artikel" has candidates to check, but the phone is offline. */
+    val verifyOffline: Boolean = false,
 )
 
 /** The feed below the chips, depending on the selected chip. */
@@ -694,6 +709,7 @@ private fun LazyListScope.feedItems(
                 showImages = view.showImages,
                 onShowAll = onShowAll,
                 keyPrefix = "foryou",
+                verifyOffline = view.verifyOffline,
             )
             suggestions()
         }
@@ -709,9 +725,16 @@ private fun LazyListScope.feedItems(
             if (feed.latest.isEmpty()) {
                 item(key = "latest-empty", contentType = "feed-empty") {
                     val loading = view.loadingTopics.isNotEmpty()
+                    val checking = feed.latestWaiting.isNotEmpty()
                     EmptySectionNote(
-                        text = if (loading) strings.loadingArticles else strings.noArticlesYet,
-                        loading = loading,
+                        text = when {
+                            loading -> strings.loadingArticles
+                            checking && view.verifyOffline -> strings.verifyOffline
+                            checking -> strings.verifying
+                            feed.verifying && feed.latestCandidates > 0 -> strings.noneComplete
+                            else -> strings.noArticlesYet
+                        },
+                        loading = loading || (checking && !view.verifyOffline),
                         modifier = Modifier.animateItem().padding(horizontal = FeedGutter),
                     )
                 }
@@ -739,13 +762,17 @@ private fun LazyListScope.feedItems(
             if (section.isEmpty) {
                 item(key = "topic-${section.id}-empty", contentType = "feed-empty") {
                     val loading = section.id in view.loadingTopics
+                    val checking = section.waiting.isNotEmpty()
                     EmptySectionNote(
                         text = when {
                             loading -> strings.loadingArticles
+                            checking && view.verifyOffline -> strings.verifyOffline
+                            checking -> strings.verifying
+                            section.noneComplete -> strings.noneComplete
                             section.failedSources.isNotEmpty() -> strings.unreachable(section.failedSources.joinToString(", "))
                             else -> strings.nothingHereRightNow
                         },
-                        loading = loading,
+                        loading = loading || (checking && !view.verifyOffline),
                         modifier = Modifier.animateItem().padding(horizontal = FeedGutter),
                     )
                 }
@@ -817,6 +844,12 @@ private fun LazyListScope.tailItems(
     when (tail) {
         ListTail.REVEALING -> item(key = "$keyPrefix-more", contentType = "loading") {
             LoadingMoreRow(strings.moreComing, Modifier.animateItem())
+        }
+        ListTail.VERIFYING -> item(key = "$keyPrefix-verifying", contentType = "loading") {
+            LoadingMoreRow(strings.verifying, Modifier.animateItem())
+        }
+        ListTail.VERIFY_OFFLINE -> item(key = "$keyPrefix-verify-offline", contentType = "feed-empty") {
+            EmptySectionNote(text = strings.verifyOffline, loading = false, modifier = Modifier.animateItem().padding(horizontal = FeedGutter))
         }
         ListTail.LOADING_OLDER -> item(key = "$keyPrefix-older", contentType = "loading") {
             LoadingMoreRow(strings.loadingOlder, Modifier.animateItem())
