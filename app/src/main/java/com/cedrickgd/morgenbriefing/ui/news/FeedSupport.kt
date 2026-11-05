@@ -17,6 +17,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cedrickgd.morgenbriefing.MorgenbriefingApp
+import com.cedrickgd.morgenbriefing.data.model.Topic
+import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.listen.ListenController
 import com.cedrickgd.morgenbriefing.util.rememberLinkActions
 import kotlinx.coroutines.CoroutineScope
@@ -65,38 +67,47 @@ internal fun rememberListeningKey(listen: ListenController?): State<NowListening
 }
 
 /**
- * [FeedActions] for a screen: opening (in-app browser), sharing, listening and copying are
- * handled here; hiding a topic or a source is the screen's. Null callbacks hide those menu items.
+ * [FeedActions] for a screen: opening (in-app reader or browser), sharing, listening and copying
+ * are handled here; following, unfollowing and hiding a source are the screen's. Null callbacks
+ * hide those menu items.
  *
  * @param onMessage shows a short message (snackbar), e.g. "Link kopiert".
+ * @param followSuggestion the topic the ⋮ menu offers to follow for an article (always the newest lambda is used).
  */
 @Composable
 internal fun rememberFeedActions(
     onMessage: (String) -> Unit,
-    onHideTopic: ((FeedArticle) -> Unit)?,
     onHideSource: ((FeedArticle) -> Unit)?,
     onOpenArticle: ((FeedArticle) -> Unit)? = null,
+    onUnfollowTopic: ((Topic) -> Unit)? = null,
+    onFollowTopic: ((Topic) -> Unit)? = null,
+    followSuggestion: (FeedArticle) -> Topic? = { null },
 ): FeedActions {
     val context = LocalContext.current
     val links = rememberLinkActions()
     val listen = rememberListenController()
+    val strings = feedStrings()
+    val currentStrings by rememberUpdatedState(strings)
     val message by rememberUpdatedState(onMessage)
-    val hide by rememberUpdatedState(onHideTopic)
     val hideSource by rememberUpdatedState(onHideSource)
     val openArticle by rememberUpdatedState(onOpenArticle)
-    val canHide = onHideTopic != null
+    val unfollow by rememberUpdatedState(onUnfollowTopic)
+    val follow by rememberUpdatedState(onFollowTopic)
+    val suggestion by rememberUpdatedState(followSuggestion)
     val canHideSource = onHideSource != null
     val readsInApp = onOpenArticle != null
-    return remember(context, links, listen, canHide, canHideSource, readsInApp) {
+    val canUnfollow = onUnfollowTopic != null
+    val canFollow = onFollowTopic != null
+    return remember(context, links, listen, canHideSource, readsInApp, canUnfollow, canFollow) {
         FeedActions(
             onOpen = { article -> openArticle?.invoke(article) ?: links.open(article.item.url) },
             onOpenExternal = { links.open(it.item.url) },
             onListen = { article ->
                 try {
-                    listen?.play(article.item) ?: message("Vorlesen ist hier gerade nicht verfügbar.")
+                    listen?.play(article.item) ?: message(currentStrings.listenUnavailable)
                 } catch (e: Exception) {
                     Log.w(TAG, "Could not start reading aloud", e)
-                    message("Vorlesen klappt gerade nicht.")
+                    message(currentStrings.listenFailed)
                 }
             },
             onStopListening = {
@@ -108,26 +119,28 @@ internal fun rememberFeedActions(
             },
             onShare = { links.shareArticle(it.item) },
             onCopyLink = { article ->
-                val copied = copyLink(context, article.item.headline, article.item.url)
+                val copied = copyLink(context, article.item.headline.ifBlank { currentStrings.clipLabel }, article.item.url)
                 // Android 13+ confirms copying itself; only older versions get our message.
                 if (!copied) {
-                    message("Kopieren hat nicht geklappt.")
+                    message(currentStrings.copyFailed)
                 } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                    message("Link kopiert")
+                    message(currentStrings.linkCopied)
                 }
             },
-            onHideTopic = if (canHide) { article -> hide?.invoke(article) } else null,
             onHideSource = if (canHideSource) { article -> hideSource?.invoke(article) } else null,
+            onUnfollowTopic = if (canUnfollow) { topic -> unfollow?.invoke(topic) } else null,
+            onFollowTopic = if (canFollow) { topic -> follow?.invoke(topic) } else null,
+            followSuggestion = { article -> suggestion(article) },
         )
     }
 }
 
-/** Puts [url] on the clipboard; false when there is nothing to copy or the system refused. */
+/** Puts [url] on the clipboard with [label]; false when there is nothing to copy or the system refused. */
 internal fun copyLink(context: Context, label: String, url: String): Boolean {
     if (url.isBlank()) return false
     val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return false
     return try {
-        clipboard.setPrimaryClip(ClipData.newPlainText(label.ifBlank { "Link" }, url.trim()))
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, url.trim()))
         true
     } catch (e: SecurityException) {
         Log.w(TAG, "Clipboard refused", e)

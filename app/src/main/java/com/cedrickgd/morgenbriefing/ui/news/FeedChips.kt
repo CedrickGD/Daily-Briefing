@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -57,8 +59,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.cedrickgd.morgenbriefing.ui.components.Emoji
+import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.ui.components.pressScale
 import com.cedrickgd.morgenbriefing.ui.glass.GlassLevel
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
@@ -95,6 +96,7 @@ fun FeedChipRow(
     rowState: LazyListState = rememberLazyListState(),
     onGlass: Boolean = false,
 ) {
+    val strings = feedStrings()
     val selectedIndex = chips.indexOfFirst { it.filter == selected }
     LaunchedEffect(selectedIndex) {
         if (selectedIndex < 0) return@LaunchedEffect
@@ -134,7 +136,7 @@ fun FeedChipRow(
                         )
                     }
                 }
-                .semantics { contentDescription = "Nachrichten filtern" },
+                .semantics { contentDescription = strings.filterRow },
             contentPadding = PaddingValues(start = FeedGutter, end = ChipFadeWidth),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -174,6 +176,17 @@ private fun FeedChipPill(chip: FeedChip, selected: Boolean, onGlass: Boolean, on
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "chipText",
     )
+    // Unselected, the icon keeps the topic's own color: the row reads as a palette of topics.
+    val idleIcon = when {
+        topicColors == null -> colors.primary
+        isDarkTheme() -> topicColors.onContainer
+        else -> topicColors.strong
+    }
+    val iconTint by animateColorAsState(
+        targetValue = if (selected) selectedText else idleIcon,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "chipIcon",
+    )
     val interaction = remember { MutableInteractionSource() }
 
     Box(
@@ -201,13 +214,15 @@ private fun FeedChipPill(chip: FeedChip, selected: Boolean, onGlass: Boolean, on
                 )
                 .background(fill, CircleShape)
                 .indication(interaction, ripple())
-                .padding(horizontal = 16.dp),
+                .padding(start = 12.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (chip.emoji != null && chip.emoji.isNotBlank()) {
-                Emoji(chip.emoji, size = 15.sp)
-                Spacer(Modifier.width(6.dp))
+            when {
+                chip.topic != null -> TopicGlyph(chip.topic, tint = iconTint, size = 18.dp)
+                chip.filter == FeedFilter.ForYou -> Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
+                else -> Icon(Icons.Rounded.Schedule, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
             }
+            Spacer(Modifier.width(7.dp))
             Text(
                 text = chip.label,
                 style = MaterialTheme.typography.labelLarge,
@@ -223,6 +238,7 @@ private fun FeedChipPill(chip: FeedChip, selected: Boolean, onGlass: Boolean, on
 @Composable
 private fun TopicsButton(onClick: () -> Unit, onGlass: Boolean, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
+    val label = feedStrings().chooseTopics
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
@@ -241,10 +257,10 @@ private fun TopicsButton(onClick: () -> Unit, onGlass: Boolean, modifier: Modifi
                 interactionSource = interaction,
                 indication = ripple(),
                 role = Role.Button,
-                onClickLabel = "Themen auswählen",
+                onClickLabel = label,
                 onClick = onClick,
             )
-            .semantics { contentDescription = "Themen auswählen" },
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(26.dp)) {
@@ -274,7 +290,7 @@ private fun TopicsButton(onClick: () -> Unit, onGlass: Boolean, modifier: Modifi
  * Swallows the horizontal scroll and fling the chip row could not use itself (at its start or
  * end), so a flick back to "Für dich" never carries on into a page swipe.
  */
-private val KeepHorizontalScroll = object : NestedScrollConnection {
+internal val KeepHorizontalScroll: NestedScrollConnection = object : NestedScrollConnection {
     override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
         Offset(available.x, 0f)
 

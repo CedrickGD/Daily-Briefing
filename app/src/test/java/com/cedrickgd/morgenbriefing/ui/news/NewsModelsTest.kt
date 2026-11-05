@@ -6,6 +6,8 @@ import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.SourceStatus
 import com.cedrickgd.morgenbriefing.data.model.TopicNews
 import com.cedrickgd.morgenbriefing.data.model.Topics
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.FeedStrings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -64,7 +66,8 @@ class NewsModelsTest {
     @Test
     fun `chips list for you, latest and every visible topic`() {
         val feed = buildNewsFeed(emptyMap(), FeedPrefs(AppSettings()), now)
-        val chips = feedChips(feed)
+        val chips = feedChips(feed, FeedStrings.of(AppLanguage.DE))
+        assertEquals("Für dich", chips[0].label)
         assertEquals(FeedFilter.ForYou, chips[0].filter)
         assertEquals(FeedFilter.Latest, chips[1].filter)
         assertEquals(Topics.DEFAULT_ORDER, chips.drop(2).map { (it.filter as FeedFilter.OneTopic).topicId })
@@ -84,14 +87,18 @@ class NewsModelsTest {
 
     @Test
     fun `meta parts and labels`() {
-        val parts = feedMetaParts(item("1", "ki", 3, source = "tagesschau"), now)
+        val de = AppLanguage.DE
+        val parts = feedMetaParts(item("1", "ki", 3, source = "tagesschau"), now, de)
         assertEquals("vor 3 Std.", parts.time)
         assertEquals("tagesschau", parts.source)
-        assertEquals("vor 3 Std. · tagesschau", feedMeta(item("1", "ki", 3, source = "tagesschau"), now))
-        assertNull(feedMetaParts(item("1", "ki", null, source = ""), now).time)
-        assertEquals("x", feedMetaParts(item("1", "ki", null, source = ""), now).source)
-        assertEquals("1 Meldung", articleCountLabel(1))
-        assertEquals("Alle 37 Meldungen zu Sport", moreButtonLabel("Sport", 37))
+        assertEquals("vor 3 Std. · tagesschau", feedMeta(item("1", "ki", 3, source = "tagesschau"), now, de))
+        assertEquals("3 hr ago · tagesschau", feedMeta(item("1", "ki", 3, source = "tagesschau"), now, AppLanguage.EN))
+        assertNull(feedMetaParts(item("1", "ki", null, source = ""), now, de).time)
+        assertEquals("x", feedMetaParts(item("1", "ki", null, source = ""), now, de).source)
+        assertEquals("bbc.com", feedMetaParts(item("1", "ki", null, source = "").copy(publisherDomain = "bbc.com"), now, de).source)
+        val strings = FeedStrings.of(de)
+        assertEquals("1 Meldung", strings.articleCount(1))
+        assertEquals("Alle 37 Meldungen zu Sport", strings.allArticles(37, "Sport"))
         assertEquals("tagesschau.de", hostOf("https://www.tagesschau.de/inland/x.html"))
         assertFalse(fetchedLabel(null).isNotEmpty())
     }

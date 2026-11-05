@@ -2,6 +2,7 @@ package com.cedrickgd.morgenbriefing.ui.news
 
 import androidx.compose.runtime.Immutable
 import com.cedrickgd.morgenbriefing.data.model.Topic
+import com.cedrickgd.morgenbriefing.i18n.FeedStrings
 
 /** What the chip row above the feed filters by. */
 @Immutable
@@ -36,17 +37,17 @@ sealed interface FeedFilter {
     }
 }
 
-/** One chip of the chip row. [topic] is set for topic chips (their color and emoji). */
+/** One chip of the chip row. [topic] is set for topic chips (their color and icon). */
 @Immutable
-data class FeedChip(val filter: FeedFilter, val label: String, val emoji: String? = null, val topic: Topic? = null)
+data class FeedChip(val filter: FeedFilter, val label: String, val topic: Topic? = null)
 
-/** "Für dich", "Neueste", then one chip per visible topic of [feed] (user order). Pure. */
-internal fun feedChips(feed: NewsFeed?): List<FeedChip> = buildList {
-    add(FeedChip(FeedFilter.ForYou, "Für dich"))
-    add(FeedChip(FeedFilter.Latest, "Neueste", emoji = "✨"))
+/** "Für dich", "Neueste", then one chip per followed topic of [feed] (user order). Pure. */
+internal fun feedChips(feed: NewsFeed?, strings: FeedStrings): List<FeedChip> = buildList {
+    add(FeedChip(FeedFilter.ForYou, strings.forYou))
+    add(FeedChip(FeedFilter.Latest, strings.latest))
     feed?.sections
         ?.distinctBy { it.id }
-        ?.forEach { section -> add(FeedChip(FeedFilter.OneTopic(section.id), section.topic.title, section.topic.emoji, section.topic)) }
+        ?.forEach { section -> add(FeedChip(FeedFilter.OneTopic(section.id), section.topic.title, section.topic)) }
 }
 
 /** [selected] when it is still offered, else "Für dich" (e.g. after its topic was hidden). */

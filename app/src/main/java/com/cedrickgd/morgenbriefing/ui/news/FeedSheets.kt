@@ -7,6 +7,8 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +22,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DragIndicator
+import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +54,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.cedrickgd.morgenbriefing.data.model.Topic
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.ui.components.GlassPillButton
 import com.cedrickgd.morgenbriefing.ui.components.GlassSheet
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
@@ -60,12 +65,14 @@ import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
  * "Themen": glass sheet to show, hide and sort the topics of the feed (docs/DESIGN.md §7). Every
  * topic in the user's order, tinted with its color, with today's article count and a switch;
  * the handle (or a long press on the row) drags it to a new place. The order is stored when
- * the finger lifts. "Quellen & eigene Themen" leads to the settings.
+ * the finger lifts. "Weitere Themen entdecken" opens the discover screen, "Quellen & eigene
+ * Themen" the settings.
  *
  * @param counts articles per topic id on screen.
  * @param onSetVisible shows/hides a topic; the last visible one cannot be switched off here.
  * @param onSetOrder stores a new order of topic ids.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TopicsSheet(
     prefs: FeedPrefs,
@@ -74,7 +81,9 @@ fun TopicsSheet(
     onSetOrder: (List<String>) -> Unit,
     onOpenSettings: () -> Unit,
     onDismiss: () -> Unit,
+    onOpenDiscover: (() -> Unit)? = null,
 ) {
+    val strings = feedStrings()
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
     val stepPx = with(density) { (TopicRowHeight + TopicRowGap).toPx() }
@@ -126,9 +135,9 @@ fun TopicsSheet(
     )
 
     GlassSheet(onDismissRequest = onDismiss) {
-        SheetTitle(overline = "Dein Feed", title = "Welche Themen willst du sehen?")
+        SheetTitle(overline = strings.sheetOverline, title = strings.sheetTitle)
         Text(
-            text = "Antippen blendet ein oder aus · am Griff ziehen sortiert",
+            text = strings.sheetHint,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
@@ -164,9 +173,21 @@ fun TopicsSheet(
                 }
             }
         }
-        Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
+        FlowRow(
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (onOpenDiscover != null) {
+                GlassPillButton(
+                    text = strings.discoverMoreTopics,
+                    onClick = onOpenDiscover,
+                    icon = Icons.Rounded.Explore,
+                    filled = true,
+                )
+            }
             GlassPillButton(
-                text = "Quellen & eigene Themen",
+                text = strings.sourcesAndOwnTopics,
                 onClick = onOpenSettings,
                 icon = Icons.Rounded.Tune,
             )
@@ -201,6 +222,7 @@ private fun TopicToggleRow(
     onHeight: (Int) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    val strings = feedStrings()
     val topicColors = rememberTopicColors(topic)
     val dark = isDarkTheme()
     val tint = topicColors.strong.copy(alpha = if (dark) 0.16f else 0.08f)
@@ -249,22 +271,22 @@ private fun TopicToggleRow(
             .toggleable(value = visible, enabled = enabled, role = Role.Switch, onValueChange = { onToggle() })
             .semantics {
                 customActions = buildList {
-                    if (canMoveUp) add(CustomAccessibilityAction("${topic.title} nach oben") { onMoveBy(-1); true })
-                    if (canMoveDown) add(CustomAccessibilityAction("${topic.title} nach unten") { onMoveBy(1); true })
+                    if (canMoveUp) add(CustomAccessibilityAction(strings.moveUp(topic.title)) { onMoveBy(-1); true })
+                    if (canMoveDown) add(CustomAccessibilityAction(strings.moveDown(topic.title)) { onMoveBy(1); true })
                 }
             }
             .padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TopicBadge(topic, diameter = 40.dp)
+        TopicTile(topic, diameter = 40.dp)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(text = topic.title, style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
             Text(
                 text = when {
-                    !enabled -> "Ein Thema bleibt immer an"
-                    count > 0 -> articleCountLabel(count)
-                    else -> "Gerade keine Meldungen"
+                    !enabled -> strings.oneTopicStays
+                    count > 0 -> strings.articleCount(count)
+                    else -> strings.noArticlesRightNow
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
@@ -293,7 +315,7 @@ private fun TopicToggleRow(
 private fun SheetTitle(overline: String, title: String) {
     Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 16.dp)) {
         Text(
-            text = overline.uppercase(),
+            text = overline.uppercase(LocalAppLanguage.current.locale),
             style = MaterialTheme.typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

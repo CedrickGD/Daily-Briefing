@@ -52,7 +52,7 @@ private object HttpsOnlyInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val url = chain.request().url
         if (!isAllowedImageScheme(url.scheme)) {
-            throw IOException("Bilder werden nur über https geladen, nicht von $url")
+            throw IOException("Pictures are loaded over https only, not from $url")
         }
         return chain.proceed(chain.request())
     }

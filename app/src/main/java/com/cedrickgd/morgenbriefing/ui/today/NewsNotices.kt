@@ -1,12 +1,13 @@
 package com.cedrickgd.morgenbriefing.ui.today
 
 import androidx.compose.runtime.Immutable
+import com.cedrickgd.morgenbriefing.i18n.CommonStrings
+import com.cedrickgd.morgenbriefing.i18n.FeedStrings
 import com.cedrickgd.morgenbriefing.ui.news.NewsFeed
-import com.cedrickgd.morgenbriefing.ui.news.articleCountLabel
 import com.cedrickgd.morgenbriefing.ui.news.fetchedLabel
 
 /** What a notice's button does. */
-enum class NoticeAction { RETRY, OPEN_TOPICS, OPEN_SOURCES }
+enum class NoticeAction { RETRY, OPEN_TOPICS, OPEN_SOURCES, DISCOVER }
 
 /** Copy for a [com.cedrickgd.morgenbriefing.ui.components.NoticeBanner]. */
 @Immutable
@@ -19,39 +20,47 @@ data class Notice(
 )
 
 /**
- * The hint above the feed, if any: offline, every topic hidden, every source off, or some
+ * The hint above the feed, if any: offline, no topic followed, every source off, or some
  * newsrooms not answering. Null while loading or when all is well. Pure, unit-tested.
  *
  * @param feed the feed on screen; null until settings are known.
  * @param loading a refresh is running.
  * @param warmed the cache was read.
  */
-internal fun newsNotice(feed: NewsFeed?, offline: Boolean, loading: Boolean, warmed: Boolean, attempted: Boolean): Notice? {
+internal fun newsNotice(
+    feed: NewsFeed?,
+    offline: Boolean,
+    loading: Boolean,
+    warmed: Boolean,
+    attempted: Boolean,
+    strings: FeedStrings,
+    common: CommonStrings,
+): Notice? {
     if (feed == null || !warmed) return null
     if (feed.sections.isEmpty()) {
         return Notice(
-            emoji = "🙈",
-            title = "Alle Themen ausgeblendet",
-            text = "Schalte unter „Themen“ mindestens eins wieder ein.",
-            actionLabel = "Themen wählen",
-            action = NoticeAction.OPEN_TOPICS,
+            emoji = "🧭",
+            title = strings.noTopicsTitle,
+            text = strings.noTopicsText,
+            actionLabel = strings.discoverDescription,
+            action = NoticeAction.DISCOVER,
         )
     }
     if (offline) {
         return if (feed.isEmpty) {
             Notice(
                 emoji = "📡",
-                title = "Offline – noch keine News gespeichert",
-                text = "Sobald du wieder Netz hast, holt die App deine Meldungen.",
-                actionLabel = "Nochmal versuchen",
+                title = strings.offlineEmptyTitle,
+                text = strings.offlineEmptyText,
+                actionLabel = common.retry,
                 action = NoticeAction.RETRY,
             )
         } else {
             Notice(
                 emoji = "📡",
-                title = "Offline – du siehst die zuletzt geladenen Meldungen",
-                text = "Sobald du wieder Netz hast, zieh einfach zum Aktualisieren nach unten.",
-                actionLabel = "Nochmal versuchen",
+                title = strings.offlineCachedTitle,
+                text = strings.offlineCachedText,
+                actionLabel = common.retry,
                 action = NoticeAction.RETRY,
             )
         }
@@ -61,18 +70,18 @@ internal fun newsNotice(feed: NewsFeed?, offline: Boolean, loading: Boolean, war
     if (feed.isEmpty && attempted) {
         return Notice(
             emoji = "📭",
-            title = "Keine Meldungen",
-            text = if (failed.isNotEmpty()) "Die Quellen antworten gerade nicht." else "Sind unter „Quellen“ noch welche eingeschaltet?",
-            actionLabel = if (failed.isNotEmpty()) "Nochmal versuchen" else "Quellen prüfen",
+            title = strings.noArticlesTitle,
+            text = if (failed.isNotEmpty()) strings.sourcesSilent else strings.sourcesSwitchedOff,
+            actionLabel = if (failed.isNotEmpty()) common.retry else strings.checkSources,
             action = if (failed.isNotEmpty()) NoticeAction.RETRY else NoticeAction.OPEN_SOURCES,
         )
     }
     if (failed.size >= FAILED_SOURCES_NOTICE) {
         return Notice(
             emoji = "🔌",
-            title = "${failed.size} Quellen antworten gerade nicht",
+            title = strings.sourcesFailing(failed.size),
             text = failed.take(4).joinToString(", ") + if (failed.size > 4) " …" else "",
-            actionLabel = "Nochmal versuchen",
+            actionLabel = common.retry,
             action = NoticeAction.RETRY,
         )
     }
@@ -83,9 +92,9 @@ internal fun newsNotice(feed: NewsFeed?, offline: Boolean, loading: Boolean, war
 private const val FAILED_SOURCES_NOTICE = 3
 
 /** "Stand 07:12 · 128 Meldungen · Wetter: Open-Meteo" for the end of the page. */
-internal fun footerLine(feed: NewsFeed?, hasWeather: Boolean, weatherOffline: Boolean): String = buildList {
+internal fun footerLine(feed: NewsFeed?, hasWeather: Boolean, weatherOffline: Boolean, strings: FeedStrings): String = buildList {
     val stand = fetchedLabel(feed?.fetchedAt)
-    if (stand.isNotBlank()) add("Stand $stand")
-    feed?.articleCount?.takeIf { it > 0 }?.let { add(articleCountLabel(it)) }
-    if (hasWeather) add(if (weatherOffline) "Wetter: Open-Meteo (offline)" else "Wetter: Open-Meteo")
+    if (stand.isNotBlank()) add(strings.stand(stand))
+    feed?.articleCount?.takeIf { it > 0 }?.let { add(strings.articleCount(it)) }
+    if (hasWeather) add(if (weatherOffline) strings.weatherCreditOffline else strings.weatherCredit)
 }.joinToString(" · ")

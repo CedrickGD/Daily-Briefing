@@ -35,9 +35,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.cedrickgd.morgenbriefing.data.model.Topic
-import com.cedrickgd.morgenbriefing.ui.components.Emoji
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
 import kotlin.math.PI
 import kotlin.math.cos
@@ -113,8 +111,8 @@ internal class CoverRandom(seed: Int) {
  * A typographic cover for articles without a (free) picture — editorial, not clip-art: a soft
  * mesh gradient in the topic's color with a quiet abstract motif (picked by a hash of
  * [seedKey]), a large serif initial of the [title] as a watermark, and a small frosted badge
- * with the topic ("🤖 KI & TECH"). Small covers (thumbnails) keep only the initial and the topic
- * emoji in a little glass circle. Decorative — no semantics. Works in light and dark (the palette
+ * with the topic (icon + "KI & TECH"). Small covers (thumbnails) keep only the initial and the topic
+ * icon in a little glass circle. Decorative — no semantics. Works in light and dark (the palette
  * comes from [rememberTopicColors]).
  *
  * @param title the headline; its first letter becomes the watermark (falls back to the topic).
@@ -135,7 +133,6 @@ fun CoverArt(
     val colors = rememberTopicColors(topic)
     val spec = remember(seedKey) { coverSpec(seedKey) }
     val initial = remember(title, topic.title) { coverInitial(title, topic.title) }
-    val emoji = topic.emoji.ifBlank { "📰" }
 
     BoxWithConstraints(
         // The shapes deliberately overshoot the edges; never paint over neighbouring content.
@@ -169,7 +166,7 @@ fun CoverArt(
         if (!showBadge) return@BoxWithConstraints
         if (large) {
             TopicBadgeOnCover(
-                emoji = emoji,
+                topic = topic,
                 label = topic.title,
                 modifier = Modifier
                     .align(badgeAlignment)
@@ -185,15 +182,15 @@ fun CoverArt(
                     .border(1.dp, Color.White.copy(alpha = 0.32f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Emoji(emoji, size = 16.sp)
+                TopicGlyph(topic, tint = Color.White, size = 17.dp)
             }
         }
     }
 }
 
-/** "🤖 KI & TECH" on a frosted white pill. */
+/** Topic icon + "KI & TECH" on a frosted white pill. */
 @Composable
-private fun TopicBadgeOnCover(emoji: String, label: String, modifier: Modifier = Modifier) {
+private fun TopicBadgeOnCover(topic: Topic, label: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .clip(CircleShape)
@@ -202,7 +199,7 @@ private fun TopicBadgeOnCover(emoji: String, label: String, modifier: Modifier =
             .padding(start = 10.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Emoji(emoji, size = 15.sp)
+        TopicGlyph(topic, tint = Color.White, size = 16.dp)
         Spacer(Modifier.width(7.dp))
         Text(
             text = label.uppercase(),

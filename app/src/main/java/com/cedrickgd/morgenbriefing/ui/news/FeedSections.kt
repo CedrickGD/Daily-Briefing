@@ -16,8 +16,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,17 +31,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.cedrickgd.morgenbriefing.data.model.Topic
-import com.cedrickgd.morgenbriefing.ui.components.Emoji
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.feedStrings
+import com.cedrickgd.morgenbriefing.ui.components.GlassPillButton
 import com.cedrickgd.morgenbriefing.ui.components.entrance
 import com.cedrickgd.morgenbriefing.ui.components.pressScale
 import com.cedrickgd.morgenbriefing.ui.components.rememberEntrance
@@ -54,20 +61,26 @@ internal val FeedGutter: Dp = 16.dp
 private val EntryGap = 14.dp
 
 /**
- * Opens a topic in the feed like a newspaper section: a hairline, then "🤖 KI & TECH" in the
- * topic's color on the left and "37 Meldungen" on the right — straight on the sky.
+ * Opens a topic in the feed like a newspaper section: a hairline, then the topic's icon on its
+ * gradient tile, the title in the topic's color with a one-line description below, and the
+ * article count with a chevron on the right — straight on the sky. Tapping it opens the topic's
+ * own endless list ([onOpen]; null while the topic has nothing to show).
  */
 @Composable
-fun FeedSectionHeader(topic: Topic, count: Int, modifier: Modifier = Modifier) {
+fun FeedSectionHeader(
+    topic: Topic,
+    count: Int,
+    modifier: Modifier = Modifier,
+    subtitle: String = "",
+    onOpen: (() -> Unit)? = null,
+) {
     val colors = MaterialTheme.colorScheme
+    val strings = feedStrings()
+    val language = LocalAppLanguage.current
     val topicColors = rememberTopicColors(topic)
     val tint = if (isDarkTheme()) topicColors.onContainer else topicColors.strong
-    val countLabel = articleCountLabel(count)
-    Column(
-        modifier
-            .fillMaxWidth()
-            .semantics(mergeDescendants = true) { heading() },
-    ) {
+    val interaction = remember { MutableInteractionSource() }
+    Column(modifier.fillMaxWidth()) {
         Box(
             Modifier
                 .fillMaxWidth()
@@ -77,27 +90,61 @@ fun FeedSectionHeader(topic: Topic, count: Int, modifier: Modifier = Modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 44.dp)
-                .padding(horizontal = 4.dp),
+                .heightIn(min = 64.dp)
+                .then(
+                    if (onOpen != null) {
+                        Modifier
+                            .pressScale(interaction, pressedScale = 0.98f)
+                            .clickable(
+                                interactionSource = interaction,
+                                indication = null,
+                                role = Role.Button,
+                                onClickLabel = strings.openTopic(topic.title),
+                                onClick = onOpen,
+                            )
+                    } else {
+                        Modifier
+                    },
+                )
+                .semantics(mergeDescendants = true) { heading() }
+                .padding(horizontal = 4.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Emoji(topic.emoji.ifBlank { "📰" }, size = 16.sp)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = topic.title.uppercase(),
-                style = MaterialTheme.typography.labelLarge.copy(letterSpacing = OverlineLetterSpacing, fontWeight = FontWeight.SemiBold),
-                color = tint,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+            TopicTile(topic, diameter = 40.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = topic.title.uppercase(language.locale),
+                    style = MaterialTheme.typography.labelLarge.copy(letterSpacing = OverlineLetterSpacing, fontWeight = FontWeight.SemiBold),
+                    color = tint,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (subtitle.isNotBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
             Spacer(Modifier.width(10.dp))
             Text(
-                text = countLabel,
+                text = strings.articleCount(count),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.onSurfaceVariant,
                 maxLines = 1,
             )
+            if (onOpen != null) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = colors.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }
@@ -125,11 +172,12 @@ fun AllArticlesButton(section: SectionUi, onClick: () -> Unit, modifier: Modifie
         horizontalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = moreButtonLabel(section.topic.title, section.count),
+            text = feedStrings().allArticles(section.count, section.topic.title),
             style = MaterialTheme.typography.labelLarge,
             color = labelColor,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
             modifier = Modifier.weight(1f, fill = false),
         )
         Spacer(Modifier.width(6.dp))
@@ -142,22 +190,53 @@ fun AllArticlesButton(section: SectionUi, onClick: () -> Unit, modifier: Modifie
     }
 }
 
-/** A small overline + serif title introducing a feed view ("Neueste", a topic). */
+/**
+ * A small overline + serif title introducing a feed view ("Neueste", a topic), with an optional
+ * [topic] tile, a [subtitle] and an [action] below (e.g. "Unterthemen von Wirtschaft").
+ */
 @Composable
-fun FeedViewIntro(overline: String, title: String, modifier: Modifier = Modifier) {
+fun FeedViewIntro(
+    overline: String,
+    title: String,
+    modifier: Modifier = Modifier,
+    topic: Topic? = null,
+    subtitle: String = "",
+    action: (@Composable () -> Unit)? = null,
+) {
+    val language = LocalAppLanguage.current
     Column(modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-        Text(
-            text = overline.uppercase(),
-            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.semantics { heading() },
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (topic != null) {
+                TopicTile(topic, diameter = 48.dp)
+                Spacer(Modifier.width(14.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = overline.uppercase(language.locale),
+                    style = MaterialTheme.typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() },
+                )
+            }
+        }
+        if (subtitle.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (action != null) {
+            Spacer(Modifier.height(12.dp))
+            action()
+        }
     }
 }
 
@@ -182,22 +261,83 @@ fun EmptySectionNote(text: String, loading: Boolean, modifier: Modifier = Modifi
     }
 }
 
-/** The calm end of an endless list: "Das war's · 128 Meldungen aus 9 Quellen". */
+/**
+ * The calm end of an endless list: a short rule, "Das war's · 128 Meldungen" and, when
+ * [onBackToTop] is set, a glass pill back to the top.
+ */
 @Composable
-fun ListEndNote(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
+fun ListEndNote(text: String, modifier: Modifier = Modifier, onBackToTop: (() -> Unit)? = null) {
+    val colors = MaterialTheme.colorScheme
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 20.dp),
-    )
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier
+                .size(width = 28.dp, height = 3.dp)
+                .background(colors.onSurfaceVariant.copy(alpha = 0.28f), CircleShape),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        if (onBackToTop != null) {
+            Spacer(Modifier.height(12.dp))
+            GlassPillButton(text = feedStrings().backToTop, onClick = onBackToTop, icon = Icons.Rounded.KeyboardArrowUp)
+        }
+    }
 }
 
 /**
- * "Für dich": every visible topic with its header, its first articles as editorial entries
+ * The row at the end of an endless list while more is on its way: a small spinner in a frosted
+ * pill with [text] ("Suche ältere Meldungen …"); announced politely to TalkBack.
+ */
+@Composable
+fun LoadingMoreRow(text: String, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier
+                .heightIn(min = 44.dp)
+                .glass(shape = GlassShapes.pill, level = GlassLevel.Thin)
+                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
+                .padding(horizontal = 18.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(12.dp))
+            Text(text = text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** The last load of older articles came back empty: say so and let the user look further back. */
+@Composable
+fun LoadOlderRow(onLoadOlder: () -> Unit, modifier: Modifier = Modifier) {
+    val strings = feedStrings()
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = strings.nothingOlderFound,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(10.dp))
+        GlassPillButton(text = strings.searchFurtherBack, onClick = onLoadOlder, icon = Icons.Rounded.History)
+    }
+}
+
+/**
+ * "Für dich": every followed topic with its header, its first articles as editorial entries
  * and the "Alle … Meldungen" pill that opens the topic's own chip.
  *
  * @param loadingTopics topics whose refresh is running (empty sections say "lade …").
@@ -209,6 +349,7 @@ internal fun LazyListScope.forYouItems(
     now: ZonedDateTime,
     listening: NowListening?,
     actions: FeedActions,
+    hints: FeedHints,
     showImages: Boolean,
     onShowAll: (SectionUi) -> Unit,
     keyPrefix: String,
@@ -219,6 +360,8 @@ internal fun LazyListScope.forYouItems(
             FeedSectionHeader(
                 topic = section.topic,
                 count = section.count,
+                subtitle = section.subtitle,
+                onOpen = if (section.isEmpty) null else ({ onShowAll(section) }),
                 modifier = Modifier
                     .animateItem()
                     .padding(horizontal = FeedGutter)
@@ -227,13 +370,14 @@ internal fun LazyListScope.forYouItems(
         }
         if (section.isEmpty) {
             item(key = "$sectionKey-empty", contentType = "feed-empty") {
+                val strings = feedStrings()
                 val loading = section.id in loadingTopics
                 EmptySectionNote(
                     text = when {
-                        loading -> "Hole die Meldungen …"
-                        section.failedSources.isNotEmpty() -> "Gerade nicht erreichbar: ${section.failedSources.joinToString(", ")}"
-                        section.fetchedAt == null -> "Noch nichts geladen – zieh nach unten zum Aktualisieren."
-                        else -> "Heute noch nichts Neues."
+                        loading -> strings.loadingArticles
+                        section.failedSources.isNotEmpty() -> strings.unreachable(section.failedSources.joinToString(", "))
+                        section.fetchedAt == null -> strings.nothingLoadedYet
+                        else -> strings.nothingNewToday
                     },
                     loading = loading,
                     modifier = Modifier.animateItem().padding(horizontal = FeedGutter),
@@ -242,9 +386,9 @@ internal fun LazyListScope.forYouItems(
             return@forEach
         }
         section.top.forEachIndexed { index, item ->
-            item(key = "$sectionKey-top-$index-${item.key}", contentType = "feed-entry") {
+            item(key = entryKey(sectionKey, index, item.key), contentType = "feed-entry") {
                 val article = remember(item, section.topic) { FeedArticle(item, section.topic) }
-                AnimatedFeedEntry(article, now, listening.reading(item.key), listening.pausedOn(item.key), actions, showImages)
+                AnimatedFeedEntry(article, now, listening.reading(item.key), listening.pausedOn(item.key), actions, hints, showImages)
             }
         }
         if (section.hasMore) {
@@ -272,13 +416,14 @@ internal fun LazyListScope.articleItems(
     now: ZonedDateTime,
     listening: NowListening?,
     actions: FeedActions,
+    hints: FeedHints,
     showImages: Boolean,
     keyPrefix: String,
     showTopic: Boolean,
 ) {
     articles.forEachIndexed { index, article ->
-        item(key = "$keyPrefix-$index-${article.feedKey}", contentType = "feed-entry") {
-            AnimatedFeedEntry(article, now, listening.reading(article.item.key), listening.pausedOn(article.item.key), actions, showImages, showTopic)
+        item(key = entryKey(keyPrefix, index, article.feedKey), contentType = "feed-entry") {
+            AnimatedFeedEntry(article, now, listening.reading(article.item.key), listening.pausedOn(article.item.key), actions, hints, showImages, showTopic)
         }
     }
 }
@@ -291,6 +436,7 @@ private fun LazyItemScope.AnimatedFeedEntry(
     listening: Boolean,
     paused: Boolean,
     actions: FeedActions,
+    hints: FeedHints,
     showImage: Boolean,
     showTopic: Boolean = false,
 ) {
@@ -301,6 +447,7 @@ private fun LazyItemScope.AnimatedFeedEntry(
         listening = listening,
         paused = paused,
         actions = actions,
+        hints = hints,
         showTopic = showTopic,
         showImage = showImage,
         modifier = Modifier

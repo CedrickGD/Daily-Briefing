@@ -1,13 +1,22 @@
 package com.cedrickgd.morgenbriefing.ui.news
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -21,16 +30,21 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.AddCircleOutline
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material.icons.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -39,6 +53,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,8 +86,13 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.cedrickgd.morgenbriefing.ui.components.Emoji
+import com.cedrickgd.morgenbriefing.data.model.ArticleImage
+import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
+import com.cedrickgd.morgenbriefing.data.model.Topic
+import com.cedrickgd.morgenbriefing.i18n.FeedStrings
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.commonStrings
+import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.ui.components.motionDisabled
 import com.cedrickgd.morgenbriefing.ui.components.pressScale
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
@@ -89,9 +110,6 @@ private const val FEED_IMAGE_RATIO = 16f / 10f
 /** In a short window (landscape) a feed picture takes at most this share of its height. */
 private const val FEED_IMAGE_MAX_WINDOW_SHARE = 0.45f
 
-/** The tappable suffix of a feed lead: the full article is one tap away, on the newsroom's site. */
-internal const val MORE_LABEL = "Weiterlesen"
-
 /**
  * Everything a feed entry can do. Null callbacks hide their menu item. Create it once per
  * screen (`remember`) so entries stay skippable.
@@ -106,15 +124,45 @@ class FeedActions(
     val onStopListening: () -> Unit,
     val onShare: (FeedArticle) -> Unit,
     val onCopyLink: (FeedArticle) -> Unit,
-    val onHideTopic: ((FeedArticle) -> Unit)? = null,
     val onHideSource: ((FeedArticle) -> Unit)? = null,
+    /** Stops following the topic an article is shown under (⋮ → "„Wirtschaft“ nicht mehr folgen"). */
+    val onUnfollowTopic: ((Topic) -> Unit)? = null,
+    /** Follows a topic the ⋮ menu offers ([followSuggestion]). */
+    val onFollowTopic: ((Topic) -> Unit)? = null,
+    /** The topic the ⋮ menu offers to follow for an article (its sub-topic), if any. */
+    val followSuggestion: (FeedArticle) -> Topic? = { null },
 )
+
+/**
+ * What the prefetcher learned about the articles on screen: the lead picture of articles that
+ * came without one (Google News) and whether the reader can show them. Entries read single
+ * values through `derivedStateOf`, so one new status recomposes only its own card.
+ */
+@Stable
+class FeedHints(
+    private val images: State<Map<String, String>>,
+    private val statuses: State<Map<String, ArticleStatus>>,
+) {
+    /** The article's lead picture found by the prefetcher, if any. */
+    fun heroImage(itemId: String): String? = images.value[itemId]
+
+    fun status(itemId: String): ArticleStatus = statuses.value[itemId] ?: ArticleStatus.UNKNOWN
+
+    companion object {
+        /** Nothing known (previews, screens without a prefetcher). */
+        val None = FeedHints(mutableStateOf(emptyMap()), mutableStateOf(emptyMap()))
+    }
+}
 
 /**
  * One article in the editorial feed, without a card frame, directly on the sky: a full-width
  * picture (or generated cover), the headline big in serif, the serif lead with an inline
  * "… Weiterlesen" and a meta row with "Zuhören", share and a ⋮ menu. Picture, headline and
- * lead open the article on the newsroom's site (in-app browser).
+ * lead open the article (the in-app reader, or the browser).
+ *
+ * Articles that came without a picture (Google News) show the page's lead picture once the
+ * prefetcher found it, fading in over the cover; a small hint on the picture tells whether the
+ * full text is ready in the app or the article sits behind a paywall.
  *
  * @param listening this article is being read aloud right now — the button turns into "Stopp".
  * @param paused this article is loaded in the player but paused — the button offers "Weiter".
@@ -131,11 +179,19 @@ fun FeedEntry(
     paused: Boolean = false,
     showTopic: Boolean = false,
     showImage: Boolean = true,
+    hints: FeedHints = FeedHints.None,
 ) {
     val item = article.item
+    val strings = feedStrings()
+    val language = LocalAppLanguage.current
     val interaction = remember { MutableInteractionSource() }
-    val meta = remember(item, now) { feedMetaParts(item, now) }
+    val meta = remember(item, now, language) { feedMetaParts(item, now, language) }
     val maxImageHeight = windowHeight() * FEED_IMAGE_MAX_WINDOW_SHARE
+    val hero by remember(hints, item.id, item.image) {
+        derivedStateOf { if (item.image == null) hints.heroImage(item.id) else null }
+    }
+    val badge by remember(hints, item.id) { derivedStateOf { cardBadge(hints.status(item.id)) } }
+    val visualItem = remember(item, hero) { hero?.let { item.copy(image = ArticleImage(it)) } ?: item }
 
     Column(modifier.fillMaxWidth()) {
         Column(
@@ -145,7 +201,7 @@ fun FeedEntry(
                     interactionSource = interaction,
                     indication = null,
                     role = Role.Button,
-                    onClickLabel = "Artikel öffnen",
+                    onClickLabel = strings.openArticle,
                     onClick = { actions.onOpen(article) },
                 ),
         ) {
@@ -156,11 +212,18 @@ fun FeedEntry(
                     .clip(GlassShapes.tile),
             ) {
                 ArticleVisual(
-                    item = item,
+                    item = visualItem,
                     topic = article.topic,
                     modifier = Modifier.matchParentSize(),
                     showImage = showImage,
                     contentDescription = item.image?.alt?.takeIf { it.isNotBlank() },
+                )
+                CardBadgePill(
+                    badge = badge,
+                    strings = strings,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp),
                 )
             }
             Spacer(Modifier.height(16.dp))
@@ -177,7 +240,7 @@ fun FeedEntry(
             )
             if (item.summary.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
-                LeadText(item.summary)
+                LeadText(item.summary, more = strings.readMore)
             }
         }
         FeedMetaRow(
@@ -191,16 +254,52 @@ fun FeedEntry(
     }
 }
 
-/** "🤖 KI & TECH" above the headline, in the topic's color. */
+/**
+ * The readability hint on a feed picture ("✓ Volltext", "🔒 Bezahlinhalt", "Nur im Browser"):
+ * a small dark frosted pill that pops in once the prefetcher knows; nothing while unknown.
+ */
+@Composable
+private fun CardBadgePill(badge: CardBadge?, strings: FeedStrings, modifier: Modifier = Modifier) {
+    val still = motionDisabled()
+    AnimatedVisibility(
+        visible = badge != null,
+        modifier = modifier,
+        enter = if (still) EnterTransition.None else fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) +
+            scaleIn(spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow), initialScale = 0.8f),
+        exit = if (still) ExitTransition.None else fadeOut(),
+    ) {
+        val shown = badge ?: return@AnimatedVisibility
+        val (icon, label, description) = when (shown) {
+            CardBadge.FULL_TEXT -> Triple(Icons.Rounded.CheckCircle, strings.fullText, strings.fullTextDescription)
+            CardBadge.PAYWALL -> Triple(Icons.Rounded.Lock, strings.paywall, strings.paywallDescription)
+            CardBadge.BROWSER_ONLY -> Triple(Icons.Rounded.Public, strings.browserOnly, strings.browserOnlyDescription)
+        }
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.52f))
+                .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+                .clearAndSetSemantics { contentDescription = description }
+                .padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(5.dp))
+            Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 1)
+        }
+    }
+}
+
+/** The topic's icon and "KI & TECH" above the headline, in the topic's color. */
 @Composable
 private fun TopicOverline(article: FeedArticle) {
     val colors = rememberTopicColors(article.topic)
     val tint = if (isDarkTheme()) colors.onContainer else colors.strong
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Emoji(article.topic.emoji.ifBlank { "📰" }, size = 13.sp)
+        TopicGlyph(article.topic, tint = tint, size = 15.dp)
         Spacer(Modifier.width(6.dp))
         Text(
-            text = article.topic.title.uppercase(),
+            text = article.topic.title.uppercase(LocalAppLanguage.current.locale),
             style = MaterialTheme.typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
             color = tint,
             maxLines = 1,
@@ -210,20 +309,20 @@ private fun TopicOverline(article: FeedArticle) {
 }
 
 /**
- * The lead in serif with "… Weiterlesen" appended inline: the lead is cut at a word so that
- * the suffix still fits into [maxLines] lines; a lead that fits gets " Weiterlesen" without
- * the ellipsis. Measured once per text and width.
+ * The lead in serif with "… [more]" appended inline: the lead is cut at a word so that the
+ * suffix still fits into [maxLines] lines; a lead that fits gets " [more]" without the
+ * ellipsis. Measured once per text and width.
  */
 @Composable
-internal fun LeadText(text: String, modifier: Modifier = Modifier, maxLines: Int = 3) {
+internal fun LeadText(text: String, more: String, modifier: Modifier = Modifier, maxLines: Int = 3) {
     val style = Reading.feedLead()
     // A quiet continuation: lighter than the lead, never bolder.
     val suffix = SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontWeight = FontWeight.Medium)
     val measurer = rememberTextMeasurer(cacheSize = 8)
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val width = constraints.maxWidth
-        val annotated = remember(text, width, style, suffix, measurer) {
-            leadWithMore(text.trim(), width, style, suffix, measurer, maxLines)
+        val annotated = remember(text, more, width, style, suffix, measurer) {
+            leadWithMore(text.trim(), more, width, style, suffix, measurer, maxLines)
         }
         Text(text = annotated, style = style, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
     }
@@ -231,6 +330,7 @@ internal fun LeadText(text: String, modifier: Modifier = Modifier, maxLines: Int
 
 private fun leadWithMore(
     text: String,
+    more: String,
     width: Int,
     style: TextStyle,
     suffix: SpanStyle,
@@ -240,7 +340,7 @@ private fun leadWithMore(
     fun build(body: String, cut: Boolean) = buildAnnotatedString {
         append(body)
         append(if (cut) "… " else " ")
-        withStyle(suffix) { append(MORE_LABEL) }
+        withStyle(suffix) { append(more) }
     }
     if (width <= 0 || width == Constraints.Infinity) return build(text, cut = false)
     val constraints = Constraints(maxWidth = width)
@@ -314,7 +414,7 @@ private fun FeedMetaRow(
                 .background(colors.onSurfaceVariant.copy(alpha = 0.3f)),
         )
         IconButton(onClick = { actions.onShare(article) }) {
-            Icon(Icons.Rounded.Share, contentDescription = "Teilen", tint = colors.onSurfaceVariant)
+            Icon(Icons.Rounded.Share, contentDescription = commonStrings().share, tint = colors.onSurfaceVariant)
         }
         FeedMenu(article = article, actions = actions)
     }
@@ -322,17 +422,18 @@ private fun FeedMetaRow(
 
 /**
  * "🎧 Zuhören"; while this article is read, a little equalizer and "Stopp"; while it is paused,
- * "Weiter". The button always keeps the width of its longest label, so toggling never reflows
- * the row.
+ * "Weiter". The button always keeps the width of its longest label (in every language), so
+ * toggling never reflows the row.
  */
 @Composable
 private fun ListenButton(listening: Boolean, paused: Boolean, headline: String, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val strings = feedStrings()
     val tint = if (listening || paused) colors.primary else colors.onSurfaceVariant
     val label = when {
-        listening -> "Stopp"
-        paused -> "Weiter"
-        else -> "Zuhören"
+        listening -> strings.stop
+        paused -> strings.resume
+        else -> strings.listen
     }
     Box(
         modifier = Modifier
@@ -341,18 +442,20 @@ private fun ListenButton(listening: Boolean, paused: Boolean, headline: String, 
             .clickable(role = Role.Button, onClick = onClick)
             .clearAndSetSemantics {
                 contentDescription = when {
-                    listening -> "Vorlesen beenden"
-                    paused -> "Weiter vorlesen: $headline"
-                    else -> "Vorlesen: $headline"
+                    listening -> strings.stopListening
+                    paused -> strings.resumeListening(headline)
+                    else -> strings.listenTo(headline)
                 }
             }
             .padding(horizontal = 10.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        // Invisible widest label: reserves the room, so "Stopp"/"Weiter" do not shrink the button.
-        Row(Modifier.graphicsLayer { alpha = 0f }, verticalAlignment = Alignment.CenterVertically) {
-            Spacer(Modifier.width(26.dp))
-            Text(text = "Zuhören", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        // Invisible labels: reserve the room of the widest, so switching labels never resizes the button.
+        for (reserved in listOf(strings.listen, strings.stop, strings.resume)) {
+            Row(Modifier.graphicsLayer { alpha = 0f }, verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(26.dp))
+                Text(text = reserved, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (listening) {
@@ -400,10 +503,12 @@ private fun Equalizer(color: Color, modifier: Modifier = Modifier) {
 private fun FeedMenu(article: FeedArticle, actions: FeedActions) {
     var open by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
-    val source = article.item.source.ifBlank { hostOf(article.item.url) }
+    val strings = feedStrings()
+    val common = commonStrings()
+    val source = article.item.source.ifBlank { publisherHost(article.item) }.ifBlank { hostOf(article.item.url) }
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Rounded.MoreVert, contentDescription = "Weitere Optionen", tint = colors.onSurfaceVariant)
+            Icon(Icons.Rounded.MoreVert, contentDescription = strings.moreOptions, tint = colors.onSurfaceVariant)
         }
         DropdownMenu(
             expanded = open,
@@ -413,14 +518,26 @@ private fun FeedMenu(article: FeedArticle, actions: FeedActions) {
             tonalElevation = 0.dp,
             shadowElevation = 12.dp,
         ) {
-            MenuItem("Artikel lesen", Icons.AutoMirrored.Rounded.Article) { open = false; actions.onOpen(article) }
-            MenuItem("Im Browser öffnen", Icons.AutoMirrored.Rounded.OpenInNew) { open = false; actions.onOpenExternal(article) }
-            MenuItem("Link kopieren", Icons.Rounded.ContentCopy) { open = false; actions.onCopyLink(article) }
-            actions.onHideSource?.let { hide ->
-                MenuItem("„$source“ ausblenden", Icons.Rounded.VolumeOff) { open = false; hide(article) }
+            MenuItem(strings.readArticle, Icons.AutoMirrored.Rounded.Article) { open = false; actions.onOpen(article) }
+            MenuItem(common.openInBrowser, Icons.AutoMirrored.Rounded.OpenInNew) { open = false; actions.onOpenExternal(article) }
+            MenuItem(common.copyLink, Icons.Rounded.ContentCopy) { open = false; actions.onCopyLink(article) }
+            if (open) {
+                actions.onFollowTopic?.let { follow ->
+                    actions.followSuggestion(article)?.let { topic ->
+                        MenuItem(strings.followTopic(topic.title), Icons.Rounded.AddCircleOutline, tint = colors.primary) {
+                            open = false
+                            follow(topic)
+                        }
+                    }
+                }
             }
-            actions.onHideTopic?.let { hide ->
-                MenuItem("Thema „${article.topic.title}“ ausblenden", Icons.Rounded.VisibilityOff) { open = false; hide(article) }
+            actions.onHideSource?.let { hide ->
+                if (source.isNotBlank() && canHideSource(article.item)) {
+                    MenuItem(strings.hideSource(source), Icons.AutoMirrored.Rounded.VolumeOff) { open = false; hide(article) }
+                }
+            }
+            actions.onUnfollowTopic?.let { unfollow ->
+                MenuItem(strings.unfollowTopic(article.topic.title), Icons.Rounded.RemoveCircleOutline) { open = false; unfollow(article.topic) }
             }
         }
     }
@@ -429,7 +546,7 @@ private fun FeedMenu(article: FeedArticle, actions: FeedActions) {
 @Composable
 private fun MenuItem(label: String, icon: ImageVector, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant, onClick: () -> Unit) {
     DropdownMenuItem(
-        text = { Text(label, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        text = { Text(label, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         onClick = onClick,
         leadingIcon = { Icon(icon, contentDescription = null, tint = tint) },
         modifier = Modifier.heightIn(min = 48.dp),

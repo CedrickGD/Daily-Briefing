@@ -1,6 +1,7 @@
 package com.cedrickgd.morgenbriefing.ui.news
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,18 +16,41 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cedrickgd.morgenbriefing.data.model.Topic
-import com.cedrickgd.morgenbriefing.ui.components.Emoji
 
 /** Corner radius of article cards (reader). Feed pictures use 22 dp (GlassShapes.tile). */
 internal val CardShape = RoundedCornerShape(24.dp)
 
-/** Small rounded chip with the topic's emoji and title, tinted with the topic color. */
+/**
+ * The topic's icon in white on a small tile with the topic's own gradient (the colors of its
+ * cover): the lively mark that opens a section, a suggestion or the discover invitation.
+ * The corners follow [diameter] (≈ 30 %).
+ */
+@Composable
+internal fun TopicTile(topic: Topic, modifier: Modifier = Modifier, diameter: Dp = 40.dp) {
+    val colors = rememberTopicColors(topic)
+    val shape = RoundedCornerShape(diameter * 0.3f)
+    Box(
+        modifier = modifier
+            .size(diameter)
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(colors.coverStart, colors.coverEnd)))
+            .border(1.dp, Color.White.copy(alpha = 0.22f), shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        TopicGlyph(topic, tint = Color.White, size = diameter * 0.55f)
+    }
+}
+
+/** Small rounded chip with the topic's icon and title, tinted with the topic color. */
 @Composable
 fun TopicChip(topic: Topic, modifier: Modifier = Modifier, compact: Boolean = false) {
     val colors = rememberTopicColors(topic)
