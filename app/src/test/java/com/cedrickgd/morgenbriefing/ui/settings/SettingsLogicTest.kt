@@ -2,6 +2,7 @@ package com.cedrickgd.morgenbriefing.ui.settings
 
 import com.cedrickgd.morgenbriefing.data.model.AccentId
 import com.cedrickgd.morgenbriefing.data.model.Place
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -50,7 +51,8 @@ class SettingsLogicTest {
 
     @Test
     fun `labels`() {
-        assertEquals("10–18 Uhr", DayWindow.label(10, 18))
+        assertEquals("10–18 Uhr", DayWindow.label(10, 18, AppLanguage.DE))
+        assertEquals("10 am–6 pm", DayWindow.label(10, 18, AppLanguage.EN))
         assertEquals("05:30", clockLabel(5, 30))
         assertEquals("18:05", clockLabel(18, 5))
         assertEquals("Bad Düben · Sachsen, Deutschland", Place.BAD_DUEBEN.displayLabel())
@@ -61,23 +63,23 @@ class SettingsLogicTest {
     fun `next briefing label says today, tomorrow or the day after`() {
         val zone = ZoneId.of("Europe/Berlin")
         val now = ZonedDateTime.of(2026, 10, 6, 4, 0, 0, 0, zone)
-        assertEquals("Nächstes Briefing: heute um 05:30", nextBriefingLabel(now, now.withHour(5).withMinute(30)))
+        assertEquals("Nächstes Briefing: heute um 05:30", nextBriefingLabel(now, now.withHour(5).withMinute(30), AppLanguage.DE))
         assertEquals(
             "Nächstes Briefing: morgen um 05:30",
-            nextBriefingLabel(now.withHour(6), now.plusDays(1).withHour(5).withMinute(30)),
+            nextBriefingLabel(now.withHour(6), now.plusDays(1).withHour(5).withMinute(30), AppLanguage.DE),
         )
-        assertEquals("Nächstes Briefing: übermorgen um 06:00", nextBriefingLabel(now, now.plusDays(2).withHour(6)))
+        assertEquals("Nächstes Briefing: übermorgen um 06:00", nextBriefingLabel(now, now.plusDays(2).withHour(6), AppLanguage.DE))
     }
 
     @Test
     fun `countdown to the next briefing`() {
-        assertEquals("gleich", countdownLabel(0))
-        assertEquals("gleich", countdownLabel(-5))
-        assertEquals("in 45 Min.", countdownLabel(45))
-        assertEquals("in 1 Std.", countdownLabel(60))
-        assertEquals("in 2 Std. 15 Min.", countdownLabel(135))
-        assertEquals("in 9 Std.", countdownLabel(9 * 60 + 10))
-        assertEquals("in 10 Std.", countdownLabel(9 * 60 + 40))
+        assertEquals("gleich", countdownLabel(0, AppLanguage.DE))
+        assertEquals("gleich", countdownLabel(-5, AppLanguage.DE))
+        assertEquals("in 45 Min.", countdownLabel(45, AppLanguage.DE))
+        assertEquals("in 1 Std.", countdownLabel(60, AppLanguage.DE))
+        assertEquals("in 2 Std. 15 Min.", countdownLabel(135, AppLanguage.DE))
+        assertEquals("in 9 Std.", countdownLabel(9 * 60 + 10, AppLanguage.DE))
+        assertEquals("in 10 Std.", countdownLabel(9 * 60 + 40, AppLanguage.DE))
     }
 
     @Test
@@ -85,11 +87,11 @@ class SettingsLogicTest {
         val zone = ZoneId.of("Europe/Berlin")
         val evening = ZonedDateTime.of(2026, 10, 5, 20, 30, 0, 0, zone)
         val next = ZonedDateTime.of(2026, 10, 6, 5, 30, 0, 0, zone)
-        assertEquals("Nächstes Briefing: morgen · in 9 Std.", nextBriefingCountdown(evening, next))
+        assertEquals("Nächstes Briefing: morgen · in 9 Std.", nextBriefingCountdown(evening, next, AppLanguage.DE))
         val early = ZonedDateTime.of(2026, 10, 6, 4, 50, 0, 0, zone)
-        assertEquals("Nächstes Briefing: heute · in 40 Min.", nextBriefingCountdown(early, next))
-        assertEquals("heute", dayWord(early, next))
-        assertEquals("am Fr, 9. Okt.", dayWord(evening, ZonedDateTime.of(2026, 10, 9, 5, 30, 0, 0, zone)))
+        assertEquals("Nächstes Briefing: heute · in 40 Min.", nextBriefingCountdown(early, next, AppLanguage.DE))
+        assertEquals("heute", dayWord(early, next, AppLanguage.DE))
+        assertEquals("am Fr, 9. Okt.", dayWord(evening, ZonedDateTime.of(2026, 10, 9, 5, 30, 0, 0, zone), AppLanguage.DE))
     }
 
     @Test
@@ -168,11 +170,11 @@ class SettingsLogicTest {
         val now = ZonedDateTime.of(2026, 10, 6, 6, 48, 0, 0, ZoneId.of("Europe/Berlin"))
         val next = nextBriefingAt(now, 5, 30, ZoneId.of("GMT"))
         assertEquals(Instant.parse("2026-10-06T05:30:00Z"), next.toInstant())
-        assertEquals("Nächstes Briefing: heute · in 42 Min.", nextBriefingCountdown(now, next))
-        assertEquals("heute", dayWord(now, next))
+        assertEquals("Nächstes Briefing: heute · in 42 Min.", nextBriefingCountdown(now, next, AppLanguage.DE))
+        assertEquals("heute", dayWord(now, next, AppLanguage.DE))
         // In Berlin itself nothing changes.
         val berlin = nextBriefingAt(now, 5, 30, ZoneId.of("Europe/Berlin"))
-        assertEquals("Nächstes Briefing: morgen · in 23 Std.", nextBriefingCountdown(now, berlin))
+        assertEquals("Nächstes Briefing: morgen · in 23 Std.", nextBriefingCountdown(now, berlin, AppLanguage.DE))
     }
 
     @Test
@@ -183,6 +185,23 @@ class SettingsLogicTest {
         assertEquals(AccentId.MORGENROT, effectiveAccent(AccentId.DYNAMIC, sdkInt = 28))
         assertEquals(AccentId.DYNAMIC, effectiveAccent(AccentId.DYNAMIC, sdkInt = 34))
         assertEquals(AccentId.OZEAN, effectiveAccent(AccentId.OZEAN, sdkInt = 24))
+    }
+
+    @Test
+    fun `the next briefing in every language`() {
+        val zone = ZoneId.of("Europe/Berlin")
+        val evening = ZonedDateTime.of(2026, 10, 5, 20, 30, 0, 0, zone)
+        val next = ZonedDateTime.of(2026, 10, 6, 5, 30, 0, 0, zone)
+        assertEquals("Next briefing: tomorrow · in 9 hrs", nextBriefingCountdown(evening, next, AppLanguage.EN))
+        assertEquals("Prochain briefing : demain · dans 9 h", nextBriefingCountdown(evening, next, AppLanguage.FR))
+        assertEquals("Próximo resumen: mañana · en 9 h", nextBriefingCountdown(evening, next, AppLanguage.ES))
+        assertEquals("Prossimo briefing: domani · tra 9 h", nextBriefingCountdown(evening, next, AppLanguage.IT))
+        assertEquals("the day after tomorrow", dayWord(evening, next.plusDays(1), AppLanguage.EN))
+        assertEquals("on Fri, Oct 9", dayWord(evening, ZonedDateTime.of(2026, 10, 9, 5, 30, 0, 0, zone), AppLanguage.EN))
+        assertEquals("in 1 hr", countdownLabel(60, AppLanguage.EN))
+        assertEquals("in 2 hr 15 min", countdownLabel(135, AppLanguage.EN))
+        assertEquals("any moment", countdownLabel(0, AppLanguage.EN))
+        assertEquals("Next briefing: today at 05:30", nextBriefingLabel(evening.withHour(4), next.withDayOfMonth(5), AppLanguage.EN))
     }
 
     @Test

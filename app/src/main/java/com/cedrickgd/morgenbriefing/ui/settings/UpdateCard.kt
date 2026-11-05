@@ -1,6 +1,9 @@
 package com.cedrickgd.morgenbriefing.ui.settings
 
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.SettingsStrings
+import com.cedrickgd.morgenbriefing.i18n.commonStrings
+import com.cedrickgd.morgenbriefing.i18n.settingsStrings
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -90,9 +93,9 @@ internal fun UpdateCard(
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Overline("App-Update")
+                Overline(settingsStrings().updateOverline)
                 Text(
-                    text = headline(state.phase),
+                    text = headline(state.phase, settingsStrings()),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
@@ -111,18 +114,16 @@ internal fun UpdateCard(
     }
 }
 
-private fun headline(phase: UpdatePhase): String = run {
-    when (phase) {
-        UpdatePhase.Idle -> "Nach neuen Versionen suchen"
-        UpdatePhase.Checking -> "Suche nach Updates …"
-        UpdatePhase.UpToDate -> "Du bist auf dem neuesten Stand"
-        is UpdatePhase.Available -> "Version ${phase.release.version} ist da"
-        is UpdatePhase.Downloading -> "Lade Version ${phase.release.version} …"
-        is UpdatePhase.Verifying -> "Prüfe Paket und Signatur …"
-        is UpdatePhase.NeedsPermission -> "Einmal erlauben, dann geht's weiter"
-        is UpdatePhase.ReadyToInstall -> "Version ${phase.release.version} ist bereit"
-        is UpdatePhase.Failed -> "Das hat nicht geklappt"
-    }
+private fun headline(phase: UpdatePhase, strings: SettingsStrings): String = when (phase) {
+    UpdatePhase.Idle -> strings.updateIdle
+    UpdatePhase.Checking -> strings.updateChecking
+    UpdatePhase.UpToDate -> strings.updateUpToDate
+    is UpdatePhase.Available -> strings.updateAvailable(phase.release.version)
+    is UpdatePhase.Downloading -> strings.updateDownloading(phase.release.version)
+    is UpdatePhase.Verifying -> strings.updateVerifying
+    is UpdatePhase.NeedsPermission -> strings.updateNeedsPermission
+    is UpdatePhase.ReadyToInstall -> strings.updateReady(phase.release.version)
+    is UpdatePhase.Failed -> strings.updateFailed
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -134,27 +135,29 @@ private fun PhaseContent(
     actions: UpdateCardActions,
 ) {
     val colors = MaterialTheme.colorScheme
+    val strings = settingsStrings()
+    val common = commonStrings()
     when (val phase = state.phase) {
         UpdatePhase.Idle -> {
             Caption(lastCheck)
-            GlassPillButton("Nach Updates suchen", onClick = actions.onCheck, icon = Icons.Rounded.Refresh)
+            GlassPillButton(strings.updateCheck, onClick = actions.onCheck, icon = Icons.Rounded.Refresh)
         }
 
         UpdatePhase.Checking -> {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), strokeCap = StrokeCap.Round)
-            GlassPillButton("Abbrechen", onClick = actions.onCancel, style = PillStyle.Quiet)
+            GlassPillButton(common.cancel, onClick = actions.onCancel, style = PillStyle.Quiet)
         }
 
         UpdatePhase.UpToDate -> {
-            StatusLine(icon = Icons.Rounded.CheckCircle, text = "Morgenbriefing ${state.installedVersion} ist aktuell.", tint = StatusPalette.ok())
+            StatusLine(icon = Icons.Rounded.CheckCircle, text = strings.updateIsCurrent(common.appName, state.installedVersion), tint = StatusPalette.ok())
             Caption(lastCheck)
-            GlassPillButton("Nochmal suchen", onClick = actions.onCheck, icon = Icons.Rounded.Refresh, style = PillStyle.Quiet)
+            GlassPillButton(strings.updateCheckAgain, onClick = actions.onCheck, icon = Icons.Rounded.Refresh, style = PillStyle.Quiet)
         }
 
         is UpdatePhase.Available -> {
             ReleaseSummary(phase.release)
             GlassPillButton(
-                "Herunterladen & installieren",
+                strings.updateDownload,
                 onClick = { actions.onDownload(phase.release) },
                 icon = Icons.Rounded.Download,
                 style = PillStyle.Filled,
@@ -164,7 +167,7 @@ private fun PhaseContent(
 
         is UpdatePhase.Downloading -> {
             DownloadProgressBar(phase, reduceMotion)
-            GlassPillButton("Abbrechen", onClick = actions.onCancel, style = PillStyle.Quiet)
+            GlassPillButton(common.cancel, onClick = actions.onCancel, style = PillStyle.Quiet)
         }
 
         is UpdatePhase.Verifying -> {
@@ -172,25 +175,18 @@ private fun PhaseContent(
         }
 
         is UpdatePhase.NeedsPermission -> {
-            Caption(
-                "Android fragt dafür einmal nach: Schalte „Aus dieser Quelle zulassen“ ein und komm " +
-                    "zurück – die Installation geht dann direkt weiter.",
-            )
-            GlassPillButton("Erlauben", onClick = actions.onAllowInstall, style = PillStyle.Filled)
+            Caption(strings.updatePermissionText)
+            GlassPillButton(strings.allow, onClick = actions.onAllowInstall, style = PillStyle.Filled)
         }
 
         is UpdatePhase.ReadyToInstall -> {
             StatusLine(
                 icon = Icons.Rounded.CheckCircle,
-                text = if (phase.installerOpened) {
-                    "Geprüft – bestätige die Installation im Android-Dialog."
-                } else {
-                    "Geladen und geprüft."
-                },
+                text = if (phase.installerOpened) strings.updateConfirmInDialog else strings.updateVerified,
                 tint = StatusPalette.ok(),
             )
             GlassPillButton(
-                if (phase.installerOpened) "Installation erneut öffnen" else "Jetzt installieren",
+                if (phase.installerOpened) strings.updateReopenInstaller else strings.updateInstallNow,
                 onClick = { actions.onInstall(phase) },
                 icon = Icons.Rounded.InstallMobile,
                 style = PillStyle.Filled,
@@ -206,11 +202,11 @@ private fun PhaseContent(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val release = phase.release
                 GlassPillButton(
-                    "Nochmal versuchen",
+                    common.retry,
                     onClick = { if (release != null) actions.onDownload(release) else actions.onCheck() },
                     icon = Icons.Rounded.Refresh,
                 )
-                GlassPillButton("Schließen", onClick = actions.onDismissError, style = PillStyle.Quiet)
+                GlassPillButton(common.close, onClick = actions.onDismissError, style = PillStyle.Quiet)
             }
         }
     }
@@ -220,7 +216,7 @@ private fun PhaseContent(
 @Composable
 private fun ReleaseSummary(release: ReleaseInfo) {
     val meta = listOfNotNull(
-        parseInstantOrNull(release.publishedAt)?.let { "vom ${Fmt.shortDate(it.atZone(BERLIN).toLocalDate(), LocalAppLanguage.current)}" },
+        parseInstantOrNull(release.publishedAt)?.let { settingsStrings().releasedOn(Fmt.shortDate(it.atZone(BERLIN).toLocalDate(), LocalAppLanguage.current)) },
         release.apk.size.takeIf { it > 0 }?.let { UpdateText.megabytes(it, LocalAppLanguage.current) },
     ).joinToString(" · ")
     if (meta.isNotEmpty()) Caption(meta)
@@ -244,7 +240,7 @@ private fun DownloadProgressBar(phase: UpdatePhase.Downloading, reduceMotion: Bo
     val track = if (isGlassDark()) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.08f)
     if (fraction == null) {
         LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), strokeCap = StrokeCap.Round, trackColor = track)
-        Caption(if (phase.received > 0) UpdateText.megabytes(phase.received, LocalAppLanguage.current) else "Verbinde …")
+        Caption(if (phase.received > 0) UpdateText.megabytes(phase.received, LocalAppLanguage.current) else settingsStrings().connecting)
         return
     }
     val animated by animateFloatAsState(
@@ -271,7 +267,10 @@ private fun DownloadProgressBar(phase: UpdatePhase.Downloading, reduceMotion: Bo
             modifier = Modifier.weight(1f),
         )
         Text(
-            text = "${UpdateText.megabytes(phase.received, LocalAppLanguage.current)} von ${UpdateText.megabytes(phase.total, LocalAppLanguage.current)}",
+            text = settingsStrings().downloadedOf(
+                UpdateText.megabytes(phase.received, LocalAppLanguage.current),
+                UpdateText.megabytes(phase.total, LocalAppLanguage.current),
+            ),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

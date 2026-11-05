@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -31,9 +32,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cedrickgd.morgenbriefing.data.model.AccentId
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
+import com.cedrickgd.morgenbriefing.data.model.SourceStatus
+import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.data.model.Topics
+import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.SettingsStrings
+import com.cedrickgd.morgenbriefing.i18n.settingsStrings
 import com.cedrickgd.morgenbriefing.notify.MorningWorker
 import com.cedrickgd.morgenbriefing.ui.glass.PageTitle
 import com.cedrickgd.morgenbriefing.ui.glass.TopGlassBar
@@ -57,13 +66,16 @@ import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
 
 /** Dialogs and sheets of the settings page; saveable so they survive rotation. */
-private enum class SettingsDialog { TIME, HOME_PLACE, DAY_PLACE, ADD_FEED, NEW_TOPIC, EDIT_TOPIC, DELETE_TOPIC, REGION }
+private enum class SettingsDialog { TIME, HOME_PLACE, DAY_PLACE, LOCAL_PLACE, EDITION, ADD_FEED, NEW_TOPIC, EDIT_TOPIC, DELETE_TOPIC, REGION }
 
 /** Lazy-list keys of the page, in display order. */
 private object Block {
     const val TITLE = "title"
     const val LOADING = "loading"
     const val HERO = "hero"
+    const val H_LANGUAGE = "h-language"
+    const val LANGUAGE = "language"
+    const val LOCAL = "local"
     const val H_BRIEFING = "h-briefing"
     const val BRIEFING = "briefing"
     const val H_TOPICS = "h-topics"
@@ -84,21 +96,25 @@ private object Block {
     const val FOOTER = "footer"
 
     val ALL = listOf(
-        TITLE, HERO, H_BRIEFING, BRIEFING, H_TOPICS, TOPICS, H_SOURCES, SOURCES, H_FEED, FEED, H_LOOK, LOOK,
-        H_PLACES, PLACES, WEATHER_CARDS, H_APP, APP, UPDATE, LINKS, FOOTER,
+        TITLE, HERO, H_LANGUAGE, LANGUAGE, LOCAL, H_BRIEFING, BRIEFING, H_TOPICS, TOPICS, H_SOURCES, SOURCES,
+        H_FEED, FEED, H_LOOK, LOOK, H_PLACES, PLACES, WEATHER_CARDS, H_APP, APP, UPDATE, LINKS, FOOTER,
     )
 }
 
 /**
  * Page "Einstellungen" (docs/DESIGN.md §4, §7): transparent over the sky, page title under the
- * status bar and a frosted top bar once it scrolled away. Sections: status hero, Morgenbriefing,
- * Themen, Quellen, Feed, Darstellung, Orte & Zeitfenster (with the weather blocks), App. Every
- * change is saved immediately.
+ * status bar and a frosted top bar once it scrolled away. Sections: status hero, Sprache &
+ * Region (app language, news edition, Bundesland, local news), Morgenbriefing, Deine Themen,
+ * Quellen, Feed, Darstellung, Orte & Zeitfenster (with the weather blocks), App. Every change is
+ * saved immediately; every text follows the interface language.
+ *
+ * @param onOpenDiscover opens the "Themen entdecken" screen (categories, sub-topics, places).
  */
 @Composable
 fun SettingsScreen(
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
+    onOpenDiscover: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory),
     updateViewModel: UpdateViewModel = viewModel(factory = UpdateViewModel.Factory),
 ) {
@@ -108,8 +124,13 @@ fun SettingsScreen(
     val addFeed by viewModel.addFeed.collectAsStateWithLifecycle()
     val weather by viewModel.weather.collectAsStateWithLifecycle()
     val weatherLoading by viewModel.weatherLoading.collectAsStateWithLifecycle()
+    val sourceStatus by viewModel.sourceStatus.collectAsStateWithLifecycle()
+    val blocked by viewModel.blockedDomains.collectAsStateWithLifecycle()
     val update by updateViewModel.state.collectAsStateWithLifecycle()
 
+    val strings = settingsStrings()
+    val language = LocalAppLanguage.current
+    val latestLanguage by rememberUpdatedState(language)
     val context = LocalContext.current
     val links = rememberLinkActions()
     val snackbar = remember { SnackbarHostState() }
@@ -143,7 +164,7 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(viewModel) {
-        viewModel.messages.collect { snackbar.showSnackbar(it) }
+        viewModel.messages.collect { snackbar.showSnackbar(it.text(latestLanguage)) }
     }
 
     KeepListEndAboveChrome(listState, bottomContentInset(contentPadding))
@@ -159,7 +180,17 @@ fun SettingsScreen(
 
     fun openPlacePicker(target: PlaceTarget) {
         viewModel.resetPlaceSearch()
-        dialog = if (target == PlaceTarget.HOME) SettingsDialog.HOME_PLACE else SettingsDialog.DAY_PLACE
+        dialog = when (target) {
+            PlaceTarget.HOME -> SettingsDialog.HOME_PLACE
+            PlaceTarget.DAY -> SettingsDialog.DAY_PLACE
+            PlaceTarget.LOCAL -> SettingsDialog.LOCAL_PLACE
+        }
+    }
+
+    fun openAddFeed(topicId: String) {
+        viewModel.resetAddFeed()
+        dialogTopicId = topicId
+        dialog = SettingsDialog.ADD_FEED
     }
 
     // Sent here from another screen (onboarding, the topic sheet): glide to the right section
@@ -186,8 +217,8 @@ fun SettingsScreen(
         if (!status.canNotify) {
             scope.launch {
                 val result = snackbar.showSnackbar(
-                    message = "Erlaube zuerst Benachrichtigungen.",
-                    actionLabel = "Erlauben",
+                    message = strings.testNeedsPermission,
+                    actionLabel = strings.allow,
                     duration = SnackbarDuration.Long,
                 )
                 if (result == SnackbarResult.ActionPerformed) requestNotifications()
@@ -199,11 +230,7 @@ fun SettingsScreen(
             } catch (e: IllegalStateException) {
                 false
             }
-            scope.launch {
-                snackbar.showSnackbar(
-                    if (queued) "Kommt gleich – die Test-Benachrichtigung ist unterwegs." else "Die Test-Benachrichtigung konnte nicht gestartet werden.",
-                )
-            }
+            scope.launch { snackbar.showSnackbar(if (queued) strings.testQueued else strings.testFailed) }
         }
     }
 
@@ -225,7 +252,7 @@ fun SettingsScreen(
         onInstall = { ready -> updateViewModel.install(ready.release, ready.apk) },
         onAllowInstall = {
             if (!updateViewModel.openInstallPermission()) {
-                scope.launch { snackbar.showSnackbar("Die Einstellung ließ sich nicht öffnen.") }
+                scope.launch { snackbar.showSnackbar(strings.settingOpenFailed) }
             }
         },
         onDismissError = updateViewModel::dismissError,
@@ -234,11 +261,7 @@ fun SettingsScreen(
     val sourcesActions = SourcesActions(
         onSourceEnabled = viewModel::setSourceEnabled,
         onEnableAll = viewModel::enableAllSources,
-        onAddFeed = { topic ->
-            viewModel.resetAddFeed()
-            dialogTopicId = topic.id
-            dialog = SettingsDialog.ADD_FEED
-        },
+        onAddFeed = { topic -> openAddFeed(topic.id) },
         onRemoveFeed = viewModel::removeCustomFeed,
         onEditTopic = { topic ->
             dialogTopicId = topic.id
@@ -248,7 +271,30 @@ fun SettingsScreen(
             dialogTopicId = topic.id
             dialog = SettingsDialog.DELETE_TOPIC
         },
-        onPickRegion = { dialog = SettingsDialog.REGION },
+    )
+
+    val topicsActions = TopicsActions(
+        onOpenDiscover = onOpenDiscover,
+        onUnfollow = viewModel::unfollow,
+        onFollow = viewModel::follow,
+        onReorder = viewModel::reorderFollowed,
+        onAddTopic = {
+            dialogTopicId = null
+            dialog = SettingsDialog.NEW_TOPIC
+        },
+        onEditTopic = { topic ->
+            dialogTopicId = topic.id
+            dialog = SettingsDialog.EDIT_TOPIC
+        },
+    )
+
+    val feedActions = FeedCardActions(
+        onSectionSize = viewModel::setSectionSize,
+        onNewsAge = viewModel::setNewsAge,
+        onShowImages = viewModel::setShowImages,
+        onReadInApp = viewModel::setReadInApp,
+        onReadableOnly = viewModel::setReadableOnly,
+        onPrefetch = viewModel::setPrefetch,
     )
 
     val current = settings
@@ -283,7 +329,7 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .staggerIn(stagger, key, index)
                 if (key == Block.TITLE) {
-                    PageTitle(overline = "Dein Morgen", title = "Einstellungen", modifier = enter.padding(horizontal = 4.dp))
+                    PageTitle(overline = strings.pageOverline, title = strings.pageTitle, modifier = enter.padding(horizontal = 4.dp))
                     return@items
                 }
                 if (current == null) {
@@ -302,10 +348,17 @@ fun SettingsScreen(
                         update = update,
                         reduceMotion = reduceMotion,
                         expandedSources = expandedSources,
+                        sourceStatus = sourceStatus,
+                        blocked = blocked,
                     ),
                     callbacks = BlockCallbacks(
                         onPill = onPill,
                         onOpenAppDetails = { SystemIntents.openAppDetails(context) },
+                        onLanguage = viewModel::setUiLanguage,
+                        onOpenEditions = { dialog = SettingsDialog.EDITION },
+                        onPickRegion = { dialog = SettingsDialog.REGION },
+                        onAddLocalPlace = { openPlacePicker(PlaceTarget.LOCAL) },
+                        onRemoveLocalPlace = viewModel::removeLocalPlace,
                         onNotificationsToggle = { enabled ->
                             viewModel.setNotificationsEnabled(enabled)
                             if (enabled && !status.canNotify) requestNotifications()
@@ -314,19 +367,10 @@ fun SettingsScreen(
                         onTestNotification = onTestNotification,
                         onThemeMode = viewModel::setThemeMode,
                         onAccent = viewModel::setAccent,
-                        onTopicVisible = viewModel::setTopicVisible,
-                        onTopicOrder = viewModel::setTopicOrder,
-                        onResetTopics = viewModel::resetTopics,
-                        onAddTopic = {
-                            dialogTopicId = null
-                            dialog = SettingsDialog.NEW_TOPIC
-                        },
+                        topics = topicsActions,
                         sources = sourcesActions,
                         onToggleSourcesExpanded = { id -> expandedSources = if (id in expandedSources) expandedSources - id else expandedSources + id },
-                        onSectionSize = viewModel::setSectionSize,
-                        onNewsAge = viewModel::setNewsAge,
-                        onShowImages = viewModel::setShowImages,
-                        onReadInApp = viewModel::setReadInApp,
+                        feed = feedActions,
                         onWeatherCard = viewModel::setWeatherCard,
                         onEditPlace = ::openPlacePicker,
                         onDayWindow = viewModel::setDayWindow,
@@ -339,7 +383,7 @@ fun SettingsScreen(
             }
         }
         TopGlassBar(
-            title = "Einstellungen",
+            title = strings.pageTitle,
             visible = showTopBar,
             onTap = { scope.launch { if (reduceMotion) listState.scrollToItem(0) else listState.animateScrollToItem(0) } },
         )
@@ -365,11 +409,20 @@ fun SettingsScreen(
             },
         )
 
-        SettingsDialog.HOME_PLACE, SettingsDialog.DAY_PLACE -> {
-            val target = if (dialog == SettingsDialog.HOME_PLACE) PlaceTarget.HOME else PlaceTarget.DAY
+        SettingsDialog.HOME_PLACE, SettingsDialog.DAY_PLACE, SettingsDialog.LOCAL_PLACE -> {
+            val target = when (dialog) {
+                SettingsDialog.HOME_PLACE -> PlaceTarget.HOME
+                SettingsDialog.DAY_PLACE -> PlaceTarget.DAY
+                else -> PlaceTarget.LOCAL
+            }
             PlacePickerSheet(
                 target = target,
-                current = if (target == PlaceTarget.HOME) current.home else current.day,
+                current = when (target) {
+                    PlaceTarget.HOME -> current.home
+                    PlaceTarget.DAY -> current.day
+                    PlaceTarget.LOCAL -> null
+                },
+                germanEdition = EditionChange.showsRegionPresets(current.edition),
                 search = placeSearch,
                 location = location,
                 onQueryChange = viewModel::onPlaceQueryChange,
@@ -391,6 +444,15 @@ fun SettingsScreen(
             )
         }
 
+        SettingsDialog.EDITION -> EditionPickerSheet(
+            current = current.edition,
+            onPick = { edition ->
+                dialog = null
+                viewModel.setEdition(edition)
+            },
+            onDismiss = { dialog = null },
+        )
+
         SettingsDialog.ADD_FEED -> dialogTopic?.let { topic ->
             AddFeedDialog(
                 topic = topic,
@@ -406,10 +468,12 @@ fun SettingsScreen(
 
         SettingsDialog.NEW_TOPIC -> CustomTopicDialog(
             topic = null,
-            onConfirm = { title, emoji, seed ->
+            onConfirm = { draft ->
                 dialog = null
-                viewModel.addCustomTopic(title, emoji, seed)
-                scrollTo(Block.H_SOURCES)
+                viewModel.addCustomTopic(draft) { id ->
+                    // A feed topic is empty until it has a feed: ask for the first one right away.
+                    if (draft.content == TopicContent.FEEDS) openAddFeed(id)
+                }
             },
             onDismiss = { dialog = null },
         )
@@ -417,9 +481,9 @@ fun SettingsScreen(
         SettingsDialog.EDIT_TOPIC -> dialogTopic?.let { topic ->
             CustomTopicDialog(
                 topic = topic,
-                onConfirm = { title, emoji, seed ->
+                onConfirm = { draft ->
                     dialog = null
-                    viewModel.updateCustomTopic(topic.id, title, emoji, seed)
+                    viewModel.updateCustomTopic(topic.id, draft)
                 },
                 onDismiss = { dialog = null },
             )
@@ -459,28 +523,29 @@ private class BlockContent(
     val update: UpdatePanelState,
     val reduceMotion: Boolean,
     val expandedSources: Set<String>,
+    val sourceStatus: Map<String, SourceStatus>,
+    val blocked: Set<String>,
 )
 
 /** Callbacks of the blocks. */
 private class BlockCallbacks(
     val onPill: (StatusItem) -> Unit,
     val onOpenAppDetails: () -> Unit,
+    val onLanguage: (AppLanguage?) -> Unit,
+    val onOpenEditions: () -> Unit,
+    val onPickRegion: () -> Unit,
+    val onAddLocalPlace: () -> Unit,
+    val onRemoveLocalPlace: (String) -> Unit,
     val onNotificationsToggle: (Boolean) -> Unit,
     val onEditTime: () -> Unit,
     val onTestNotification: () -> Unit,
-    val onThemeMode: (com.cedrickgd.morgenbriefing.data.model.ThemeMode) -> Unit,
-    val onAccent: (com.cedrickgd.morgenbriefing.data.model.AccentId) -> Unit,
-    val onTopicVisible: (String, Boolean) -> Unit,
-    val onTopicOrder: (List<String>) -> Unit,
-    val onResetTopics: () -> Unit,
-    val onAddTopic: () -> Unit,
+    val onThemeMode: (ThemeMode) -> Unit,
+    val onAccent: (AccentId) -> Unit,
+    val topics: TopicsActions,
     val sources: SourcesActions,
     val onToggleSourcesExpanded: (String) -> Unit,
-    val onSectionSize: (Int) -> Unit,
-    val onNewsAge: (com.cedrickgd.morgenbriefing.data.model.NewsAge) -> Unit,
-    val onShowImages: (Boolean) -> Unit,
-    val onReadInApp: (Boolean) -> Unit,
-    val onWeatherCard: (com.cedrickgd.morgenbriefing.data.model.WeatherCard, Boolean) -> Unit,
+    val feed: FeedCardActions,
+    val onWeatherCard: (WeatherCard, Boolean) -> Unit,
     val onEditPlace: (PlaceTarget) -> Unit,
     val onDayWindow: (Int, Int) -> Unit,
     val update: UpdateCardActions,
@@ -498,15 +563,18 @@ private fun SettingsBlock(
     listState: LazyListState,
     topObstruction: Float,
 ) {
+    val strings = settingsStrings()
+    val lang = LocalAppLanguage.current
     when (key) {
         Block.HERO -> {
-            val items = statusItems(content.status)
+            val items = remember(content.status, lang) { statusItems(content.status, lang) }
             val next = nextBriefingAt(content.now, settings.notifyHour, settings.notifyMinute)
             val hero = heroText(
                 enabled = settings.notificationsEnabled,
                 items = items,
-                day = dayWord(content.now, next),
+                day = dayWord(content.now, next, lang),
                 time = clockLabel(settings.notifyHour, settings.notifyMinute),
+                lang = lang,
             )
             StatusHero(
                 hero = hero,
@@ -518,7 +586,23 @@ private fun SettingsBlock(
                 modifier = modifier.padding(top = 16.dp),
             )
         }
-        Block.H_BRIEFING -> SectionHeading("Dein Wecker", "Morgenbriefing", modifier)
+        Block.H_LANGUAGE -> Heading(strings, key, modifier)
+        Block.LANGUAGE -> LanguageEditionCard(
+            settings = settings,
+            onLanguage = callbacks.onLanguage,
+            onOpenEditions = callbacks.onOpenEditions,
+            onPickRegion = callbacks.onPickRegion,
+            modifier = modifier,
+        )
+        Block.LOCAL -> LocalNewsCard(
+            settings = settings,
+            onAddPlace = callbacks.onAddLocalPlace,
+            onRemovePlace = callbacks.onRemoveLocalPlace,
+            onFollowPlace = callbacks.topics.onFollow,
+            reduceMotion = content.reduceMotion,
+            modifier = modifier.padding(top = 14.dp),
+        )
+        Block.H_BRIEFING -> Heading(strings, key, modifier)
         Block.BRIEFING -> BriefingCard(
             settings = settings,
             now = content.now,
@@ -528,39 +612,29 @@ private fun SettingsBlock(
             onTest = callbacks.onTestNotification,
             modifier = modifier,
         )
-        Block.H_TOPICS -> SectionHeading("Dein Feed", "Themen", modifier)
-        Block.TOPICS -> TopicGrid(
-            topics = remember(settings) { Topics.catalogue(settings) },
-            defaultOrder = remember(settings.customTopics) { Topics.DEFAULT_ORDER + settings.customTopics.map { it.id } },
-            hidden = remember(settings) { Topics.hidden(settings) },
+        Block.H_TOPICS -> Heading(strings, key, modifier)
+        Block.TOPICS -> FollowedTopicsPanel(
+            settings = settings,
             reduceMotion = content.reduceMotion,
             listState = listState,
             listItemKey = Block.TOPICS,
             topObstruction = topObstruction,
-            onToggle = callbacks.onTopicVisible,
-            onOrder = callbacks.onTopicOrder,
-            onReset = callbacks.onResetTopics,
-            onAddTopic = callbacks.onAddTopic,
+            actions = callbacks.topics,
             modifier = modifier,
         )
-        Block.H_SOURCES -> SectionHeading("Woher die News kommen", "Quellen", modifier)
+        Block.H_SOURCES -> Heading(strings, key, modifier)
         Block.SOURCES -> SourcesSection(
             settings = settings,
+            blocked = content.blocked,
+            status = content.sourceStatus,
             expanded = content.expandedSources,
             onToggleExpanded = callbacks.onToggleSourcesExpanded,
             actions = callbacks.sources,
             modifier = modifier,
         )
-        Block.H_FEED -> SectionHeading("So liest sich dein Feed", "Feed", modifier)
-        Block.FEED -> FeedCard(
-            settings = settings,
-            onSectionSize = callbacks.onSectionSize,
-            onNewsAge = callbacks.onNewsAge,
-            onShowImages = callbacks.onShowImages,
-            onReadInApp = callbacks.onReadInApp,
-            modifier = modifier,
-        )
-        Block.H_LOOK -> SectionHeading("Dein Look", "Darstellung", modifier)
+        Block.H_FEED -> Heading(strings, key, modifier)
+        Block.FEED -> FeedCard(settings = settings, actions = callbacks.feed, modifier = modifier)
+        Block.H_LOOK -> Heading(strings, key, modifier)
         Block.LOOK -> AppearanceCard(
             themeMode = settings.themeMode,
             accent = settings.accent,
@@ -568,10 +642,10 @@ private fun SettingsBlock(
             onAccent = callbacks.onAccent,
             modifier = modifier,
         )
-        Block.H_PLACES -> SectionHeading("Dein Wetter", "Orte & Zeitfenster", modifier)
+        Block.H_PLACES -> Heading(strings, key, modifier)
         Block.PLACES -> {
-            val (home, day) = remember(content.weather, settings.home, settings.day, content.now) {
-                placeWeather(content.weather, settings.home, settings.day, content.now)
+            val (home, day) = remember(content.weather, settings.home, settings.day, content.now, lang) {
+                placeWeather(content.weather, settings.home, settings.day, content.now, lang)
             }
             PlacesSection(
                 settings = settings,
@@ -588,7 +662,7 @@ private fun SettingsBlock(
             onToggle = callbacks.onWeatherCard,
             modifier = modifier.padding(top = 14.dp),
         )
-        Block.H_APP -> SectionHeading("Über", "App", modifier)
+        Block.H_APP -> Heading(strings, key, modifier)
         Block.APP -> AppHeaderCard(installedVersion = content.update.installedVersion, modifier = modifier)
         Block.UPDATE -> UpdateCard(
             state = content.update,
@@ -599,6 +673,22 @@ private fun SettingsBlock(
         Block.LINKS -> LinksCard(onOpen = callbacks.onOpenLink, modifier = modifier.padding(top = 14.dp))
         Block.FOOTER -> SettingsFooter(modifier)
     }
+}
+
+/** The overline + title of the section that starts at [key]. */
+@Composable
+private fun Heading(strings: SettingsStrings, key: String, modifier: Modifier) {
+    val (overline, title) = when (key) {
+        Block.H_LANGUAGE -> strings.languageOverline to strings.languageTitle
+        Block.H_BRIEFING -> strings.briefingOverline to strings.briefingTitle
+        Block.H_TOPICS -> strings.topicsOverline to strings.topicsTitle
+        Block.H_SOURCES -> strings.sourcesOverline to strings.sourcesTitle
+        Block.H_FEED -> strings.feedOverline to strings.feedTitle
+        Block.H_LOOK -> strings.lookOverline to strings.lookTitle
+        Block.H_PLACES -> strings.placesOverline to strings.placesTitle
+        else -> strings.appOverline to strings.appTitle
+    }
+    SectionHeading(overline, title, modifier)
 }
 
 private val TOP_BAR_HEIGHT = 52.dp

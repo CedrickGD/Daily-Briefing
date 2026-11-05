@@ -106,8 +106,8 @@ import com.cedrickgd.morgenbriefing.ui.glass.LocalGlassState
 import com.cedrickgd.morgenbriefing.ui.glass.glass
 import com.cedrickgd.morgenbriefing.ui.glass.glassEdgeBrush
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import kotlinx.coroutines.delay
-import java.util.Locale
 
 /*
  * Building blocks of the "Morgenglas" settings and history pages (docs/DESIGN.md §2, §5, §6):
@@ -133,8 +133,9 @@ internal fun SectionHeading(overline: String, title: String, modifier: Modifier 
 /** Small tracked uppercase label (inside cards and above titles). */
 @Composable
 internal fun Overline(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    val locale = LocalAppLanguage.current.locale
     Text(
-        text = text.uppercase(Locale.GERMAN),
+        text = remember(text, locale) { text.uppercase(locale) },
         style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.6.sp),
         color = color,
         maxLines = 1,
@@ -383,6 +384,30 @@ internal fun IconBadge(icon: ImageVector, modifier: Modifier = Modifier, tint: C
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.5f))
+    }
+}
+
+/**
+ * A Material symbol in a softly tinted rounded tile (leading element of the settings' cards and
+ * rows): a gentle gradient of [tint] with a light rim, the symbol in a readable shade of it.
+ */
+@Composable
+internal fun IconTile(icon: ImageVector, modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.primary, size: Dp = 40.dp) {
+    val dark = isGlassDark()
+    val shape = RoundedCornerShape(size * 0.32f)
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    listOf(tint.copy(alpha = if (dark) 0.36f else 0.24f), tint.copy(alpha = if (dark) 0.16f else 0.10f)),
+                ),
+            )
+            .border(1.dp, Color.White.copy(alpha = if (dark) 0.08f else 0.5f), shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = if (dark) lerp(tint, Color.White, 0.35f) else tint, modifier = Modifier.size(size * 0.52f))
     }
 }
 

@@ -1,11 +1,13 @@
 package com.cedrickgd.morgenbriefing.ui.settings
 
-import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import android.os.Build
 import androidx.compose.runtime.Immutable
 import com.cedrickgd.morgenbriefing.data.model.AccentId
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.domain.Fmt
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.FormatStrings
+import com.cedrickgd.morgenbriefing.i18n.SettingsStrings
 import com.cedrickgd.morgenbriefing.notify.AlarmScheduler
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -38,8 +40,8 @@ internal object DayWindow {
     /** Makes any stored pair valid (used before persisting). */
     fun normalize(start: Int, end: Int): Pair<Int, Int> = constrain(start, end, start, end)
 
-    /** "10–18 Uhr" */
-    fun label(start: Int, end: Int): String = "$start–$end Uhr"
+    /** "10–18 Uhr", "10 am–6 pm" */
+    fun label(start: Int, end: Int, lang: AppLanguage): String = Fmt.hourRange(start, end, lang)
 }
 
 /** How a gesture on a horizontal control started. */
@@ -124,37 +126,40 @@ internal class SliderTouchGuard {
     }
 }
 
-/** "05:30" */
+/** "05:30" – the app shows times on a 24-hour clock in every language (like its time picker). */
 internal fun clockLabel(hour: Int, minute: Int): String =
-    String.format(Locale.GERMANY, "%02d:%02d", hour, minute)
+    String.format(Locale.ROOT, "%02d:%02d", hour, minute)
 
 /** "Nächstes Briefing: morgen um 05:30" for the next alarm [next] as seen from [now]. */
-internal fun nextBriefingLabel(now: ZonedDateTime, next: ZonedDateTime): String =
-    "Nächstes Briefing: ${dayWord(now, next)} um ${clockLabel(next.hour, next.minute)}"
+internal fun nextBriefingLabel(now: ZonedDateTime, next: ZonedDateTime, lang: AppLanguage): String =
+    SettingsStrings.of(lang).nextBriefingAt(dayWord(now, next, lang), clockLabel(next.hour, next.minute))
 
 /** "heute", "morgen", "übermorgen" or "am Di, 6. Okt." for [next] as seen from [now] (in [next]'s zone). */
-internal fun dayWord(now: ZonedDateTime, next: ZonedDateTime): String =
-    when (ChronoUnit.DAYS.between(now.withZoneSameInstant(next.zone).toLocalDate(), next.toLocalDate())) {
-        0L -> "heute"
-        1L -> "morgen"
-        2L -> "übermorgen"
-        else -> "am ${Fmt.shortDate(next.toLocalDate(), AppLanguage.DE)}"
+internal fun dayWord(now: ZonedDateTime, next: ZonedDateTime, lang: AppLanguage): String {
+    val format = FormatStrings.of(lang)
+    return when (ChronoUnit.DAYS.between(now.withZoneSameInstant(next.zone).toLocalDate(), next.toLocalDate())) {
+        0L -> format.today
+        1L -> format.tomorrow
+        2L -> SettingsStrings.of(lang).dayAfterTomorrow
+        else -> SettingsStrings.of(lang).onDate(Fmt.shortDate(next.toLocalDate(), lang))
     }
+}
 
 /**
  * Time until the next briefing: "in 45 Min.", "in 2 Std. 15 Min." (below 3 hours, where the
  * minutes still matter) and "in 9 Std." (rounded) beyond that. Negative values count as 0.
  */
-internal fun countdownLabel(minutes: Long): String {
+internal fun countdownLabel(minutes: Long, lang: AppLanguage): String {
+    val s = SettingsStrings.of(lang)
     val m = minutes.coerceAtLeast(0)
     return when {
-        m < 1 -> "gleich"
-        m < 60 -> "in $m Min."
+        m < 1 -> s.countdownNow
+        m < 60 -> s.countdownMinutes(m)
         m < 180 -> {
             val rest = m % 60
-            if (rest == 0L) "in ${m / 60} Std." else "in ${m / 60} Std. $rest Min."
+            if (rest == 0L) s.countdownHours(m / 60) else s.countdownHoursMinutes(m / 60, rest)
         }
-        else -> "in ${(m + 30) / 60} Std."
+        else -> s.countdownHours((m + 30) / 60)
     }
 }
 
@@ -166,9 +171,9 @@ internal fun nextBriefingAt(now: ZonedDateTime, hour: Int, minute: Int, zone: Zo
     AlarmScheduler.nextTrigger(now.withZoneSameInstant(zone), hour, minute)
 
 /** "Nächstes Briefing: morgen · in 9 Std." */
-internal fun nextBriefingCountdown(now: ZonedDateTime, next: ZonedDateTime): String {
+internal fun nextBriefingCountdown(now: ZonedDateTime, next: ZonedDateTime, lang: AppLanguage): String {
     val minutes = ChronoUnit.MINUTES.between(now, next)
-    return "Nächstes Briefing: ${dayWord(now, next)} · ${countdownLabel(minutes)}"
+    return SettingsStrings.of(lang).nextBriefingCountdown(dayWord(now, next, lang), countdownLabel(minutes, lang))
 }
 
 /** Accents offered on this device: Material You only where it exists (API 31+). */
@@ -189,10 +194,16 @@ internal fun Place.sameSpotAs(other: Place): Boolean =
 
 private const val SAME_SPOT_DEGREES = 0.01
 
-/** Which place the picker edits. */
-enum class PlaceTarget(val title: String, val overline: String, val question: String) {
-    HOME("Ort für „Vor der Tür“", "Vor der Tür", "Wo bist du morgens?"),
-    DAY("Ort für „Tagsüber“", "Tagsüber", "Wo verbringst du den Tag?"),
+/** What the place picker chooses a place for. */
+enum class PlaceTarget {
+    /** "Vor der Tür": weather of the morning (and the region topic). */
+    HOME,
+
+    /** "Tagsüber": the day curve. */
+    DAY,
+
+    /** A new place to follow the local news of ([com.cedrickgd.morgenbriefing.data.model.AppSettings.localPlaces]). */
+    LOCAL,
 }
 
 /** Place search inside the picker dialog. */

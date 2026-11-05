@@ -11,24 +11,32 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.cedrickgd.morgenbriefing.AppContainer
 import com.cedrickgd.morgenbriefing.MorgenbriefingApp
 import com.cedrickgd.morgenbriefing.data.BERLIN
+import com.cedrickgd.morgenbriefing.data.SettingsOps
+import com.cedrickgd.morgenbriefing.data.article.KnownWalls
 import com.cedrickgd.morgenbriefing.data.model.AccentId
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.FeedSource
 import com.cedrickgd.morgenbriefing.data.model.NewsAge
+import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.Place
+import com.cedrickgd.morgenbriefing.data.model.PrefetchMode
+import com.cedrickgd.morgenbriefing.data.model.SourceStatus
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
-import com.cedrickgd.morgenbriefing.data.model.Topic
-import com.cedrickgd.morgenbriefing.data.SettingsOps
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
 import com.cedrickgd.morgenbriefing.data.news.FeedCatalog
 import com.cedrickgd.morgenbriefing.data.news.Regions
+import com.cedrickgd.morgenbriefing.data.news.TopicSources
+import com.cedrickgd.morgenbriefing.data.remote.FeedError
 import com.cedrickgd.morgenbriefing.data.remote.FeedException
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.SettingsStrings
 import com.cedrickgd.morgenbriefing.location.LocationException
 import com.cedrickgd.morgenbriefing.location.LocationIssue
 import com.cedrickgd.morgenbriefing.util.attempt
 import com.cedrickgd.morgenbriefing.util.flatten
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -39,7 +47,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -60,15 +73,46 @@ sealed interface AddFeedState {
     data object Idle : AddFeedState
     data object Checking : AddFeedState
     data class Found(val url: String, val title: String, val itemCount: Int) : AddFeedState
-    data class Failed(val reason: String) : AddFeedState
+    data class Failed(val error: FeedError, val httpCode: Int? = null) : AddFeedState
     data object Saved : AddFeedState
 }
 
+/** One-off snackbars of the settings; worded in the interface language by [text]. */
+@Immutable
+sealed interface SettingsMessage {
+    data class BriefingTime(val hour: Int, val minute: Int) : SettingsMessage
+    data object KeepOneTopic : SettingsMessage
+    data class TopicCreated(val title: String, val search: Boolean) : SettingsMessage
+    data object TopicDeleted : SettingsMessage
+    data class FeedAdded(val name: String) : SettingsMessage
+    data object FeedRemoved : SettingsMessage
+    data class PlaceAdded(val name: String) : SettingsMessage
+    data class PlaceRemoved(val name: String) : SettingsMessage
+    data object SaveFailed : SettingsMessage
+
+    /** The snackbar text in [lang]. */
+    fun text(lang: AppLanguage): String {
+        val s = SettingsStrings.of(lang)
+        return when (this) {
+            is BriefingTime -> s.briefingTimeSet(clockLabel(hour, minute))
+            KeepOneTopic -> s.keepOneTopic
+            is TopicCreated -> if (search) s.topicCreatedSearch(title) else s.topicCreatedAddFeed(title)
+            TopicDeleted -> s.topicDeleted
+            is FeedAdded -> s.feedAdded(name)
+            FeedRemoved -> s.feedRemoved
+            is PlaceAdded -> s.placeAdded(name)
+            is PlaceRemoved -> s.placeRemoved(name)
+            SaveFailed -> s.saveFailed
+        }
+    }
+}
+
 /**
- * Settings: every change is written straight to the DataStore (theme and topics apply live,
- * the alarm is re-synced by [MorgenbriefingApp]). Also runs the place search and "Mein
- * Standort", the feed lookup for own sources, and the mini weather of the place cards. The
- * in-app updater has its own [UpdateViewModel].
+ * Settings: every change is written straight to the DataStore (theme, language and topics apply
+ * live, the alarm is re-synced by [MorgenbriefingApp]). Also runs the place search and "Mein
+ * Standort", the feed lookup for own sources, and the mini weather of the place cards, and
+ * exposes how each source fared in the last refresh. The in-app updater has its own
+ * [UpdateViewModel].
  */
 class SettingsViewModel(
     private val container: AppContainer,
@@ -79,6 +123,21 @@ class SettingsViewModel(
     val settings: StateFlow<AppSettings?> = container.settings.settings
         .catch { e -> Log.w(TAG, "Settings unavailable", e) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    /** The last fetch of every source, by source id (for the sources section). */
+    val sourceStatus: StateFlow<Map<String, SourceStatus>> = container.news.state
+        .map { state -> state.topics.values.flatMap { it.sources }.associateBy { it.sourceId } }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyMap())
+
+    /**
+     * The sites the reader cannot show (seed + learned), as the news engine leaves them out.
+     * The store reads its file on first access, so this starts off the main thread.
+     */
+    val blockedDomains: StateFlow<Set<String>> = flow { emitAll(container.readability.blocked) }
+        .flowOn(Dispatchers.IO)
+        .catch { e -> Log.w(TAG, "Readability unavailable", e) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), KnownWalls.DOMAINS)
 
     private val _placeSearch = MutableStateFlow(PlaceSearchState())
     val placeSearch: StateFlow<PlaceSearchState> = _placeSearch.asStateFlow()
@@ -102,10 +161,10 @@ class SettingsViewModel(
     /** True until the first weather (stored or live) arrived or the stored copy turned out missing. */
     val weatherLoading: StateFlow<Boolean> = _weatherLoading.asStateFlow()
 
-    private val _messages = Channel<String>(Channel.BUFFERED)
+    private val _messages = Channel<SettingsMessage>(Channel.BUFFERED)
 
-    /** One-off snackbar texts. */
-    val messages: Flow<String> = _messages.receiveAsFlow()
+    /** One-off snackbars. */
+    val messages: Flow<SettingsMessage> = _messages.receiveAsFlow()
 
     private var searchJob: Job? = null
     private var locationJob: Job? = null
@@ -139,27 +198,48 @@ class SettingsViewModel(
 
     fun setAccent(accent: AccentId) = edit { it.copy(accent = accent) }
 
+    /** The interface language; null follows the phone. Applies at once (AppRoot provides it). */
+    fun setUiLanguage(language: AppLanguage?) = edit { it.copy(uiLanguage = language) }
+
+    /** Where the news come from; a feed still on the old edition's defaults moves along ([EditionChange]). */
+    fun setEdition(edition: NewsEdition) = edit { EditionChange.apply(it, edition) }
+
     fun setNotificationsEnabled(enabled: Boolean) = edit { it.copy(notificationsEnabled = enabled) }
 
     fun setNotifyTime(hour: Int, minute: Int) {
         val h = hour.coerceIn(0, 23)
         val m = minute.coerceIn(0, 59)
-        edit(successMessage = "Dein Briefing kommt jetzt um ${clockLabel(h, m)} Uhr.") {
-            it.copy(notifyHour = h, notifyMinute = m)
-        }
+        edit(success = SettingsMessage.BriefingTime(h, m)) { it.copy(notifyHour = h, notifyMinute = m) }
     }
 
     /**
      * Stores [place] for [target]. A new home place in Germany also moves the "Region" topic to
      * its Bundesland when the region was never chosen by hand (the first place of a new install).
+     * [PlaceTarget.LOCAL] follows the place's local news instead.
      */
-    fun setPlace(target: PlaceTarget, place: Place) = edit {
+    fun setPlace(target: PlaceTarget, place: Place) {
         when (target) {
-            PlaceTarget.HOME -> {
+            PlaceTarget.HOME -> edit {
                 val guessed = Regions.guess(place)?.key
                 it.copy(home = place, region = if (it.regionChosenByUser || guessed == null) it.region else guessed)
             }
-            PlaceTarget.DAY -> it.copy(day = place)
+            PlaceTarget.DAY -> edit { it.copy(day = place) }
+            PlaceTarget.LOCAL -> edit(success = SettingsMessage.PlaceAdded(place.name)) { SettingsOps.addLocalPlace(it, place).first }
+        }
+    }
+
+    /** Stops following a place and forgets it (and its cached articles). */
+    fun removeLocalPlace(topicId: String) {
+        viewModelScope.launch {
+            var name: String? = null
+            val saved = persist { current ->
+                name = Topics.placeFor(topicId, current)?.name
+                SettingsOps.removeLocalPlace(current, topicId)
+            }
+            if (saved) {
+                attempt { container.news.forget(topicId) }.onFailure { Log.w(TAG, "Could not forget $topicId", it) }
+                name?.let { _messages.send(SettingsMessage.PlaceRemoved(it)) }
+            }
         }
     }
 
@@ -168,42 +248,46 @@ class SettingsViewModel(
         edit { it.copy(dayStartHour = s, dayEndHour = e) }
     }
 
-    /**
-     * Shows or hides a topic. Hiding the last visible topic is refused with a hint — the feed
-     * would otherwise be empty.
-     */
-    fun setTopicVisible(id: String, visible: Boolean) {
+    /** Follows a topic (own topic, place) again, at the end of the feed. */
+    fun follow(id: String) = edit { SettingsOps.follow(it, id) }
+
+    /** Stops following a topic; the last followed one stays, with a hint. */
+    fun unfollow(id: String) {
         viewModelScope.launch {
             var refused = false
             val saved = persist { current ->
-                refused = !visible && !SettingsOps.canUnfollow(current, id)
-                SettingsOps.setFollowed(current, id, visible)
+                refused = !SettingsOps.canUnfollow(current, id)
+                SettingsOps.unfollow(current, id)
             }
-            if (saved && refused) _messages.send("Mindestens ein Thema bleibt sichtbar.")
+            if (saved && refused) _messages.send(SettingsMessage.KeepOneTopic)
         }
     }
 
-    /** Stores a new topic order (after a drag or a move action). */
-    fun setTopicOrder(order: List<String>) = edit { SettingsOps.reorder(it, order) }
+    /** Stores a new order of the followed topics (after a drag or a move action). */
+    fun reorderFollowed(order: List<String>) = edit { SettingsOps.reorder(it, order) }
 
-    /** "Zurücksetzen" of the topic grid: catalogue order and every topic visible again (own topics stay). */
-    fun resetTopics() = edit(successMessage = "Alle Themen sind wieder da – in der ursprünglichen Reihenfolge.") {
-        SettingsOps.followAll(it)
-    }
-
-    /** Creates an own topic; it appears at the end of the order, visible. */
-    fun addCustomTopic(title: String, emoji: String, seed: Long) {
-        val clean = title.trim()
-        if (clean.isEmpty()) return
-        val topic = Topic(id = Topics.newCustomId(), title = clean.take(MAX_TITLE), emoji = emoji.trim().take(4), seed = seed, custom = true)
-        edit(successMessage = "„${topic.title}“ angelegt – füge jetzt eine Quelle hinzu.") {
-            SettingsOps.addCustomTopic(it, topic)
+    /**
+     * Creates an own topic from [draft] and follows it at the end. [onCreated] gets its id once it
+     * is stored (the screen then asks for the first feed of a feed topic).
+     */
+    internal fun addCustomTopic(draft: TopicDraft, onCreated: (String) -> Unit = {}) {
+        if (!draft.canSave) return
+        val topic = draft.toTopic(Topics.newCustomId())
+        viewModelScope.launch {
+            val saved = persist { SettingsOps.addCustomTopic(it, topic) }
+            if (saved) {
+                onCreated(topic.id)
+                _messages.send(SettingsMessage.TopicCreated(topic.title, search = topic.query != null))
+            }
         }
     }
 
-    /** Renames / recolors an own topic. */
-    fun updateCustomTopic(id: String, title: String, emoji: String, seed: Long) = edit {
-        it.copy(customTopics = it.customTopics.map { t -> if (t.id == id) t.copy(title = title.trim().take(MAX_TITLE).ifEmpty { t.title }, emoji = emoji.trim().take(4), seed = seed) else t })
+    /** Renames, re-icons, recolors an own topic or changes its search. */
+    internal fun updateCustomTopic(id: String, draft: TopicDraft) {
+        if (!draft.canSave) return
+        edit { current ->
+            current.copy(customTopics = current.customTopics.map { if (it.id == id) draft.toTopic(id) else it })
+        }
     }
 
     /** Deletes an own topic with its sources; its cached articles go too. */
@@ -212,7 +296,7 @@ class SettingsViewModel(
             val saved = persist { SettingsOps.deleteCustomTopic(it, id) }
             if (saved) {
                 attempt { container.news.forget(id) }.onFailure { Log.w(TAG, "Could not forget $id", it) }
-                _messages.send("Thema gelöscht.")
+                _messages.send(SettingsMessage.TopicDeleted)
             }
         }
     }
@@ -224,7 +308,7 @@ class SettingsViewModel(
 
     /** All sources of [topicId] back on. */
     fun enableAllSources(topicId: String) = edit { current ->
-        val ids = FeedCatalog.allSourcesFor(topicId, current).map { it.id }.toSet()
+        val ids = TopicSources.resolve(topicId, current, blockedDomains.value, includeDisabled = true).map { it.id }.toSet()
         current.copy(disabledFeeds = current.disabledFeeds - ids)
     }
 
@@ -234,7 +318,12 @@ class SettingsViewModel(
     fun setSectionSize(size: Int) = edit { it.copy(sectionSize = size.coerceIn(AppSettings.MIN_SECTION_SIZE, AppSettings.MAX_SECTION_SIZE)) }
 
     fun setShowImages(show: Boolean) = edit { it.copy(showImages = show) }
+
     fun setReadInApp(inApp: Boolean) = edit { it.copy(readInApp = inApp) }
+
+    fun setReadableOnly(only: Boolean) = edit { it.copy(readableOnly = only) }
+
+    fun setPrefetch(mode: PrefetchMode) = edit { it.copy(prefetch = mode) }
 
     fun setNewsAge(age: NewsAge) = edit { it.copy(newsAge = age) }
 
@@ -261,7 +350,8 @@ class SettingsViewModel(
                 onSuccess = { AddFeedState.Found(it.url, it.title, it.itemCount) },
                 onFailure = { e ->
                     Log.i(TAG, "Feed lookup failed: ${e.message}")
-                    AddFeedState.Failed((e as? FeedException)?.reason ?: "Hier ist kein Feed zu finden")
+                    val failure = e as? FeedException
+                    AddFeedState.Failed(failure?.error ?: FeedError.NO_FEED_FOUND, failure?.httpCode)
                 },
             )
         }
@@ -270,7 +360,7 @@ class SettingsViewModel(
     /** Stores the feed found by [lookUpFeed] for [topicId] under [name]. */
     fun saveFoundFeed(topicId: String, name: String) {
         val found = _addFeed.value as? AddFeedState.Found ?: return
-        val clean = name.trim().ifEmpty { found.title }.take(MAX_TITLE)
+        val clean = name.trim().ifEmpty { found.title }.take(TopicDraft.MAX_TITLE)
         viewModelScope.launch {
             val saved = persist { current ->
                 if (current.customFeeds.any { it.url == found.url && it.topicId == topicId }) return@persist current
@@ -278,7 +368,7 @@ class SettingsViewModel(
             }
             if (saved) {
                 _addFeed.value = AddFeedState.Saved
-                _messages.send("„$clean“ hinzugefügt.")
+                _messages.send(SettingsMessage.FeedAdded(clean))
             }
         }
     }
@@ -289,7 +379,7 @@ class SettingsViewModel(
     }
 
     /** Deletes an own source. */
-    fun removeCustomFeed(sourceId: String) = edit(successMessage = "Quelle entfernt.") {
+    fun removeCustomFeed(sourceId: String) = edit(success = SettingsMessage.FeedRemoved) {
         it.copy(customFeeds = it.customFeeds.filterNot { f -> f.id == sourceId }, disabledFeeds = it.disabledFeeds - sourceId)
     }
 
@@ -359,9 +449,9 @@ class SettingsViewModel(
         }
     }
 
-    private fun edit(successMessage: String? = null, transform: (AppSettings) -> AppSettings) {
+    private fun edit(success: SettingsMessage? = null, transform: (AppSettings) -> AppSettings) {
         viewModelScope.launch {
-            if (persist(transform) && successMessage != null) _messages.send(successMessage)
+            if (persist(transform) && success != null) _messages.send(success)
         }
     }
 
@@ -370,7 +460,7 @@ class SettingsViewModel(
         val result = attempt { container.settings.update(transform) }
         if (result.isFailure) {
             Log.w(TAG, "Settings update failed", result.exceptionOrNull())
-            _messages.send("Das konnte gerade nicht gespeichert werden.")
+            _messages.send(SettingsMessage.SaveFailed)
         }
         return result.isSuccess
     }
@@ -380,7 +470,6 @@ class SettingsViewModel(
         private const val STOP_TIMEOUT_MS = 5_000L
         private const val SEARCH_DEBOUNCE_MS = 350L
         private const val WEATHER_WAIT_MS = 20_000L
-        private const val MAX_TITLE = 40
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {

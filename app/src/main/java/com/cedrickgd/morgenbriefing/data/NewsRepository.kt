@@ -15,6 +15,7 @@ import com.cedrickgd.morgenbriefing.data.news.GoogleNews
 import com.cedrickgd.morgenbriefing.data.news.PagingQuery
 import com.cedrickgd.morgenbriefing.data.news.RssDates
 import com.cedrickgd.morgenbriefing.data.news.TopicSources
+import com.cedrickgd.morgenbriefing.data.remote.FeedError
 import com.cedrickgd.morgenbriefing.data.remote.FeedException
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
 import com.cedrickgd.morgenbriefing.util.parseInstantOrNull
@@ -313,10 +314,10 @@ class NewsRepository(
                         FetchResult(source, emptyList(), e.reason)
                     } catch (e: IOException) {
                         Log.w(TAG, "${source.name} failed", e)
-                        FetchResult(source, emptyList(), "Nicht erreichbar")
+                        FetchResult(source, emptyList(), FeedException.code(FeedError.UNREACHABLE))
                     } catch (e: Exception) {
                         Log.w(TAG, "${source.name} failed unexpectedly", e)
-                        FetchResult(source, emptyList(), "Fehler beim Lesen")
+                        FetchResult(source, emptyList(), FeedException.code(FeedError.UNREADABLE))
                     }
                 }
             }

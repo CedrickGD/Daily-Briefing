@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -65,6 +66,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
+import com.cedrickgd.morgenbriefing.domain.Fmt
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.regionStrings
 import com.cedrickgd.morgenbriefing.ui.components.Emoji
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
@@ -85,6 +89,7 @@ internal fun PlacesSection(
     onDayWindow: (start: Int, end: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = regionStrings()
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(
             modifier = Modifier
@@ -93,7 +98,7 @@ internal fun PlacesSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             PlaceCard(
-                overline = "Vor der Tür",
+                overline = strings.placeHome,
                 icon = Icons.Rounded.Home,
                 name = settings.home.name,
                 weather = homeWeather,
@@ -104,7 +109,7 @@ internal fun PlacesSection(
                     .fillMaxHeight(),
             )
             PlaceCard(
-                overline = "Tagsüber",
+                overline = strings.placeDay,
                 icon = Icons.Rounded.LocationCity,
                 name = settings.day.name,
                 weather = dayWeather,
@@ -142,7 +147,7 @@ private fun PlaceCard(
             }
         },
         onClick = onClick,
-        onClickLabel = "Ort ändern",
+        onClickLabel = regionStrings().changePlace,
         contentPadding = PaddingValues(18.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -186,7 +191,7 @@ private fun PlaceCard(
             Box(Modifier.size(width = 72.dp, height = 12.dp).lamina(CircleShape))
         } else {
             Text(
-                text = "Wetter gerade nicht erreichbar",
+                text = regionStrings().weatherUnavailable,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -217,23 +222,22 @@ private fun DayWindowCard(start: Int, end: Int, placeName: String, onCommit: (In
         }
     }
     val onTouchEnd = remember { { how: TouchEnd -> finishTouch(how) } }
+    val strings = regionStrings()
+    val lang = LocalAppLanguage.current
     GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Overline("Zeitfenster")
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                text = "${range.first}–${range.second}",
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = "Uhr",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 6.dp, bottom = 6.dp),
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconTile(Icons.Rounded.WbTwilight, tint = Color(0xFFE8744A))
+            Spacer(Modifier.width(14.dp))
+            Overline(strings.dayWindow)
         }
+        Spacer(Modifier.height(6.dp))
         Text(
-            text = "Für den Tagesverlauf in $placeName",
+            text = DayWindow.label(range.first, range.second, lang),
+            style = MaterialTheme.typography.displaySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = strings.dayWindowFor(placeName),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -261,12 +265,19 @@ private fun DayWindowCard(start: Int, end: Int, placeName: String, onCommit: (In
             track = { state -> DaylightTrack(state) },
             modifier = Modifier
                 .followSliderTouch(guard, onTouchEnd)
-                .semantics { contentDescription = "Zeitfenster für den Tagesverlauf" },
+                .semantics {
+                    contentDescription = strings.dayWindowDescription
+                    stateDescription = DayWindow.label(range.first, range.second, lang)
+                },
         )
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("🌅 ${DayWindow.MIN_HOUR} Uhr", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Rounded.WbSunny, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(Fmt.hour(DayWindow.MIN_HOUR, lang), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.weight(1f))
-            Text("${DayWindow.MAX_HOUR} Uhr 🌇", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(Fmt.hour(DayWindow.MAX_HOUR, lang), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(4.dp))
+            Icon(Icons.Rounded.WbTwilight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
         }
     }
 }

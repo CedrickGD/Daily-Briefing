@@ -18,8 +18,115 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
-/** A feed that could not be read, with a short German reason for the settings. */
-class FeedException(val reason: String, cause: Throwable? = null) : IOException(reason, cause)
+/** Why a feed could not be read; the settings word it in the interface language. */
+enum class FeedError {
+    /** What the user typed is no web address at all. */
+    NOT_A_URL,
+
+    /** The address cannot be requested (malformed). */
+    INVALID_URL,
+
+    /** No answer: offline, DNS, timeout, TLS. */
+    UNREACHABLE,
+
+    /** HTTP 401/403: the site refuses readers like this app. */
+    BLOCKED,
+
+    /** HTTP 404/410. */
+    NOT_FOUND,
+
+    /** HTTP 429. */
+    RATE_LIMITED,
+
+    /** HTTP 5xx. */
+    SERVER_ERROR,
+
+    /** Any other unsuccessful HTTP status ([FeedException.httpCode]). */
+    HTTP_ERROR,
+
+    /** The answer is no RSS/Atom feed (or broken XML). */
+    NOT_A_FEED,
+
+    /** A publisher feed without a single article. */
+    EMPTY,
+
+    /** Neither the address nor the page behind it led to a feed. */
+    NO_FEED_FOUND,
+
+    /** Something unexpected went wrong while reading. */
+    UNREADABLE,
+    ;
+
+    companion object {
+        /** The error of an unsuccessful HTTP [status]. */
+        fun forHttp(status: Int): FeedError = when (status) {
+            401, 403 -> BLOCKED
+            404, 410 -> NOT_FOUND
+            429 -> RATE_LIMITED
+            in 500..599 -> SERVER_ERROR
+            else -> HTTP_ERROR
+        }
+    }
+}
+
+/**
+ * A feed that could not be read. [error] says why (the settings word it per language, see
+ * `i18n/SourcesStrings`); the exception message is a short English text for the log only.
+ */
+class FeedException(
+    val error: FeedError,
+    val httpCode: Int? = null,
+    cause: Throwable? = null,
+) : IOException(describe(error, httpCode, cause), cause) {
+
+    /**
+     * Stable code stored with a source's status
+     * ([com.cedrickgd.morgenbriefing.data.model.SourceStatus.error]): `NOT_FOUND:404`,
+     * `UNREACHABLE`. [parse] reads it back.
+     */
+    val reason: String get() = code(error, httpCode)
+
+    companion object {
+        fun code(error: FeedError, httpCode: Int? = null): String =
+            if (httpCode != null) "${error.name}:$httpCode" else error.name
+
+        /**
+         * The error and HTTP status behind a stored [code]; null for an empty one. App version 2
+         * stored German sentences instead: the known ones are recognised, any other text counts
+         * as [FeedError.UNREADABLE].
+         */
+        fun parse(code: String?): Pair<FeedError, Int?>? {
+            val text = code?.trim().orEmpty()
+            if (text.isEmpty()) return null
+            val name = text.substringBefore(':')
+            FeedError.entries.firstOrNull { it.name == name }?.let { return it to text.substringAfter(':', "").toIntOrNull() }
+            val status = LEGACY_STATUS.find(text)?.groupValues?.drop(1)?.firstOrNull { it.isNotEmpty() }?.toIntOrNull()
+            val legacy = when {
+                text.startsWith("Nicht erreichbar") -> FeedError.UNREACHABLE
+                text.startsWith("Die Seite blockt") -> FeedError.BLOCKED
+                text.startsWith("Feed nicht gefunden") -> FeedError.NOT_FOUND
+                text.startsWith("Zu viele Anfragen") -> FeedError.RATE_LIMITED
+                text.startsWith("Server antwortet nicht") -> FeedError.SERVER_ERROR
+                text.startsWith("HTTP ") -> FeedError.HTTP_ERROR
+                text.contains("keine Meldungen") -> FeedError.EMPTY
+                text.contains("kein RSS") || text.contains("kein gültiges XML") || text.contains("kann nicht gelesen") -> FeedError.NOT_A_FEED
+                text.startsWith("Ungültige Adresse") -> FeedError.INVALID_URL
+                text.startsWith("Das ist keine Web-Adresse") -> FeedError.NOT_A_URL
+                text.startsWith("Hier ist kein Feed") -> FeedError.NO_FEED_FOUND
+                else -> FeedError.UNREADABLE
+            }
+            return legacy to status
+        }
+
+        private val LEGACY_STATUS = Regex("\\((\\d{3})\\)|^HTTP (\\d{3})")
+
+        private fun describe(error: FeedError, httpCode: Int?, cause: Throwable?): String = buildString {
+            append(error.name.lowercase().replace('_', ' '))
+            if (httpCode != null) append(" (HTTP ").append(httpCode).append(')')
+            cause?.message?.takeIf { it.isNotBlank() }?.let { append(": ").append(it) }
+        }
+    }
+}
 
 /** What [RssClient.discover] found behind a URL the user typed. */
 data class DiscoveredFeed(
@@ -55,7 +162,7 @@ class RssClient(
         val feed = fetchFeed(source.url)
         if (source.isGoogleNews) return feed.entries.mapNotNull { googleNewsItem(it, source) }
         val items = feed.entries.mapNotNull { publisherItem(it, source) }
-        if (items.isEmpty()) throw FeedException("Der Feed enthält keine Meldungen")
+        if (items.isEmpty()) throw FeedException(FeedError.EMPTY)
         return items
     }
 
@@ -65,7 +172,7 @@ class RssClient(
      * @throws FeedException when nothing usable is found.
      */
     suspend fun discover(input: String): DiscoveredFeed {
-        val typed = normalizeUrl(input) ?: throw FeedException("Das ist keine Web-Adresse")
+        val typed = normalizeUrl(input) ?: throw FeedException(FeedError.NOT_A_URL)
         val candidates = mutableListOf(typed)
         var lastError: FeedException? = null
         var pageHtml: String? = null
@@ -76,7 +183,7 @@ class RssClient(
                 if (feed.entries.isNotEmpty()) {
                     return DiscoveredFeed(url = url, title = feed.title.ifBlank { hostOf(url) }, itemCount = feed.entries.size)
                 }
-                lastError = FeedException("Der Feed enthält keine Meldungen")
+                lastError = FeedException(FeedError.EMPTY)
             } catch (e: FeedException) {
                 lastError = e
                 if (round == 0) {
@@ -98,12 +205,12 @@ class RssClient(
                 lastError = e
             }
         }
-        throw lastError ?: FeedException("Hier ist kein Feed zu finden")
+        throw lastError ?: FeedException(FeedError.NO_FEED_FOUND)
     }
 
     private suspend fun fetchFeed(url: String): ParsedFeed {
         val request = Request.Builder()
-            .url(url.toHttpUrlOrNull() ?: throw FeedException("Ungültige Adresse"))
+            .url(url.toHttpUrlOrNull() ?: throw FeedException(FeedError.INVALID_URL))
             .header("Accept", ACCEPT)
             .header("User-Agent", FEED_USER_AGENT)
             .get()
@@ -113,25 +220,15 @@ class RssClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            throw FeedException("Nicht erreichbar", e)
+            throw FeedException(FeedError.UNREACHABLE, cause = e)
         }
         return response.use { r ->
-            if (!r.isSuccessful) {
-                throw FeedException(
-                    when (r.code) {
-                        403 -> "Die Seite blockt den Zugriff (403)"
-                        404 -> "Feed nicht gefunden (404)"
-                        429 -> "Zu viele Anfragen (429)"
-                        in 500..599 -> "Server antwortet nicht (${r.code})"
-                        else -> "HTTP ${r.code}"
-                    },
-                )
-            }
+            if (!r.isSuccessful) throw FeedException(FeedError.forHttp(r.code), httpCode = r.code)
             withContext(Dispatchers.IO) {
                 try {
                     r.body.byteStream().use { stream -> parser.parse(stream) }
                 } catch (e: IOException) {
-                    throw FeedException(e.message ?: "Feed kann nicht gelesen werden", e)
+                    throw FeedException(FeedError.NOT_A_FEED, cause = e)
                 }
             }
         }
