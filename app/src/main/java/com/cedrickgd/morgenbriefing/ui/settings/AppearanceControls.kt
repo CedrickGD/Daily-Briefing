@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.data.model.AccentId
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
+import com.cedrickgd.morgenbriefing.i18n.settingsStrings
 import com.cedrickgd.morgenbriefing.ui.components.SkyKind
 import com.cedrickgd.morgenbriefing.ui.components.skyPalette
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
@@ -86,28 +87,25 @@ internal fun AppearanceCard(
     onAccent: (AccentId) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = settingsStrings()
     GlassCard(modifier = modifier.fillMaxWidth()) {
-        Overline("Modus")
+        Overline(strings.modeOverline)
         Spacer(Modifier.height(12.dp))
         ThemePreviewRow(selected = themeMode, accent = accent, onSelect = onThemeMode)
         Spacer(Modifier.height(24.dp))
-        Overline("Akzentfarbe")
+        Overline(strings.accentOverline)
         Spacer(Modifier.height(8.dp))
         AccentOrbs(selected = accent, onSelect = onAccent)
     }
 }
 
-private data class ModeOption(val mode: ThemeMode, val label: String)
-
-private val ModeOptions = listOf(
-    ModeOption(ThemeMode.SYSTEM, "System"),
-    ModeOption(ThemeMode.LIGHT, "Hell"),
-    ModeOption(ThemeMode.DARK, "Dunkel"),
-)
+/** The theme modes in display order. */
+private val ModeOptions = listOf(ThemeMode.SYSTEM, ThemeMode.LIGHT, ThemeMode.DARK)
 
 /** System / Hell / Dunkel as three tiles with a tiny drawn phone each. */
 @Composable
 private fun ThemePreviewRow(selected: ThemeMode, accent: AccentId, onSelect: (ThemeMode) -> Unit) {
+    val strings = settingsStrings()
     val haptic = rememberToggleHaptics()
     val currentPrimary = MaterialTheme.colorScheme.primary
     val context = LocalContext.current
@@ -119,8 +117,8 @@ private fun ThemePreviewRow(selected: ThemeMode, accent: AccentId, onSelect: (Th
             .selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        ModeOptions.forEach { option ->
-            val isSelected = option.mode == selected
+        ModeOptions.forEach { mode ->
+            val isSelected = mode == selected
             val ring by animateDpAsState(if (isSelected) 2.dp else 0.dp, label = "modeRing")
             val scale by animateFloatAsState(
                 targetValue = if (isSelected) 1f else 0.96f,
@@ -142,7 +140,7 @@ private fun ThemePreviewRow(selected: ThemeMode, accent: AccentId, onSelect: (Th
                         role = Role.RadioButton,
                         onClick = {
                             if (!isSelected) haptic(true)
-                            onSelect(option.mode)
+                            onSelect(mode)
                         },
                     )
                     .padding(top = 12.dp, bottom = 10.dp),
@@ -153,7 +151,7 @@ private fun ThemePreviewRow(selected: ThemeMode, accent: AccentId, onSelect: (Th
                         .size(width = 58.dp, height = 108.dp)
                         .clearAndSetSemantics { },
                 ) {
-                    when (option.mode) {
+                    when (mode) {
                         ThemeMode.LIGHT -> drawMiniPhone(lightPhone)
                         ThemeMode.DARK -> drawMiniPhone(darkPhone)
                         ThemeMode.SYSTEM -> {
@@ -180,7 +178,7 @@ private fun ThemePreviewRow(selected: ThemeMode, accent: AccentId, onSelect: (Th
                         Spacer(Modifier.width(4.dp))
                     }
                     Text(
-                        text = option.label,
+                        text = strings.themeMode(mode),
                         style = MaterialTheme.typography.labelLarge,
                         color = if (isSelected) primary else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -305,6 +303,7 @@ private fun DrawScope.drawMiniPhone(c: MiniPhoneColors) {
  */
 @Composable
 private fun AccentOrbs(selected: AccentId, onSelect: (AccentId) -> Unit) {
+    val strings = settingsStrings()
     val context = LocalContext.current
     val dark = isGlassDark()
     val accents = remember { availableAccents() }
@@ -359,7 +358,7 @@ private fun AccentOrbs(selected: AccentId, onSelect: (AccentId) -> Unit) {
                                 onSelect(accent)
                             },
                         )
-                        .semantics { contentDescription = accent.label },
+                        .semantics { contentDescription = strings.accentName(accent) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Canvas(
@@ -390,7 +389,7 @@ private fun AccentOrbs(selected: AccentId, onSelect: (AccentId) -> Unit) {
         }
     }
     AnimatedContent(
-        targetState = current.label,
+        targetState = strings.accentName(current),
         transitionSpec = {
             (slideInVertically { it / 2 } + fadeIn()) togetherWith (slideOutVertically { -it / 2 } + fadeOut())
         },

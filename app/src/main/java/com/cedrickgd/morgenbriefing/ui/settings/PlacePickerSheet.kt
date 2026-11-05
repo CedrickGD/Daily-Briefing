@@ -63,16 +63,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cedrickgd.morgenbriefing.data.model.Place
+import com.cedrickgd.morgenbriefing.i18n.regionStrings
 import com.cedrickgd.morgenbriefing.location.LocationIssue
 import com.cedrickgd.morgenbriefing.ui.components.Emoji
 import com.cedrickgd.morgenbriefing.ui.components.GlassSheet
 import com.cedrickgd.morgenbriefing.ui.components.pressScale
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
-import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
 import androidx.compose.foundation.interaction.MutableInteractionSource
 
-/** Quick picks shown before the user types: big German cities. */
+/** Quick picks shown before the user types for the weather places: big German cities. */
 internal val QuickPlaces: List<Place> = listOf(
     Place("Berlin", 52.5244, 13.4105, "Berlin, Deutschland", "DE"),
     Place("Hamburg", 53.5753, 10.0153, "Hamburg, Deutschland", "DE"),
@@ -84,23 +84,40 @@ internal val QuickPlaces: List<Place> = listOf(
     Place("Stuttgart", 48.7823, 9.177, "Baden-Württemberg, Deutschland", "DE"),
 )
 
-/** 🇩🇪 for "DE"; empty for unknown codes. */
-internal fun flagEmoji(countryCode: String): String {
-    val code = countryCode.trim().uppercase()
-    if (code.length != 2 || !code.all { it in 'A'..'Z' }) return ""
-    return code.map { String(Character.toChars(0x1F1E6 + (it - 'A'))) }.joinToString("")
-}
+/**
+ * Quick picks for local news anywhere: world cities whose local news Google News carries in
+ * their country's edition. The region label's first part disambiguates the place for Google
+ * News ("Washington, District of Columbia").
+ */
+internal val WorldPlaces: List<Place> = listOf(
+    Place("Washington", 38.8951, -77.0364, "District of Columbia, United States", "US"),
+    Place("New York", 40.7143, -74.006, "New York, United States", "US"),
+    Place("London", 51.5085, -0.1257, "England, United Kingdom", "GB"),
+    Place("Paris", 48.8534, 2.3488, "Île-de-France, France", "FR"),
+    Place("Wien", 48.2085, 16.3721, "Wien, Österreich", "AT"),
+    Place("Zürich", 47.3667, 8.55, "Zürich, Schweiz", "CH"),
+    Place("Madrid", 40.4165, -3.7026, "Comunidad de Madrid, España", "ES"),
+    Place("Roma", 41.8919, 12.5113, "Lazio, Italia", "IT"),
+)
+
+/** The quick picks of [target]: world cities for local news, German cities for the weather of a German edition. */
+internal fun quickPlacesFor(target: PlaceTarget, germanEdition: Boolean): List<Place> =
+    if (target == PlaceTarget.LOCAL || !germanEdition) WorldPlaces else QuickPlaces
 
 /**
  * The place picker as a glass sheet: a search field with live results (Open-Meteo geocoding),
  * "Mein Standort" (one coarse fix + the town name) and quick picks while nothing is typed. The
  * query is debounced in the ViewModel; this renders [search] and reports typing and the choice.
+ *
+ * @param current the place in use for [target]; null for a new local-news place.
+ * @param germanEdition the news come from Germany (the quick picks are German cities then).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PlacePickerSheet(
     target: PlaceTarget,
-    current: Place,
+    current: Place?,
+    germanEdition: Boolean,
     search: PlaceSearchState,
     location: LocationState,
     onQueryChange: (String) -> Unit,
@@ -108,8 +125,10 @@ internal fun PlacePickerSheet(
     onPick: (Place) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val strings = regionStrings()
     val focusRequester = remember { FocusRequester() }
     val colors = MaterialTheme.colorScheme
+    val quickPicks = remember(target, germanEdition) { quickPlacesFor(target, germanEdition) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         // Denied as well: the lookup then fails with NO_PERMISSION and the sheet says so.
         onUseLocation()
@@ -125,18 +144,32 @@ internal fun PlacePickerSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 8.dp),
         ) {
-            Text(
-                text = target.overline.uppercase(),
-                style = MaterialTheme.typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
-                color = colors.onSurfaceVariant,
+            Overline(
+                when (target) {
+                    PlaceTarget.HOME -> strings.placeHome
+                    PlaceTarget.DAY -> strings.placeDay
+                    PlaceTarget.LOCAL -> strings.localNews
+                },
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = target.question,
+                text = when (target) {
+                    PlaceTarget.HOME -> strings.pickerHomeQuestion
+                    PlaceTarget.DAY -> strings.pickerDayQuestion
+                    PlaceTarget.LOCAL -> strings.pickerLocalQuestion
+                },
                 style = MaterialTheme.typography.headlineSmall,
                 color = colors.onSurface,
                 modifier = Modifier.semantics { heading() },
             )
+            if (target == PlaceTarget.LOCAL) {
+                Text(
+                    text = strings.pickerLocalHint,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             Spacer(Modifier.height(14.dp))
 
             LaunchedEffect(focusRequester) { runCatching { focusRequester.requestFocus() } }
@@ -148,12 +181,12 @@ internal fun PlacePickerSheet(
                     .focusRequester(focusRequester),
                 singleLine = true,
                 shape = GlassShapes.chip,
-                placeholder = { Text("Ort suchen, z. B. Leipzig") },
+                placeholder = { Text(strings.searchPlaceholder) },
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (search.query.isNotEmpty()) {
                         IconButton(onClick = { onQueryChange("") }) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Suche leeren")
+                            Icon(Icons.Rounded.Close, contentDescription = strings.clearSearch)
                         }
                     }
                 },
@@ -185,13 +218,13 @@ internal fun PlacePickerSheet(
                     searching = location.searching,
                     onClick = { permission.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
                 )
-                CurrentPlaceChip(current)
+                if (current != null) CurrentPlaceChip(current)
             }
             AnimatedVisibility(visible = issue != null, enter = fadeIn(), exit = fadeOut()) {
                 Text(
                     text = when (issue) {
-                        LocationIssue.NO_PERMISSION -> "Ohne Standortfreigabe geht das nicht – suche den Ort einfach oben."
-                        LocationIssue.UNAVAILABLE -> "Der Standort ließ sich gerade nicht bestimmen. Ist er im System eingeschaltet?"
+                        LocationIssue.NO_PERMISSION -> strings.locationNoPermission
+                        LocationIssue.UNAVAILABLE -> strings.locationUnavailable
                         null -> ""
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -205,24 +238,21 @@ internal fun PlacePickerSheet(
             Spacer(Modifier.height(16.dp))
             when {
                 search.queryTooShort -> {
-                    Text(
-                        text = "SCHNELL AUSGEWÄHLT",
-                        style = MaterialTheme.typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
-                        color = colors.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
+                    Overline(strings.quickPicks, modifier = Modifier.padding(bottom = 8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        QuickPlaces.forEach { place -> QuickPlaceChip(place, selected = place.sameSpotAs(current), onClick = { onPick(place) }) }
+                        quickPicks.forEach { place ->
+                            QuickPlaceChip(place, selected = current?.sameSpotAs(place) == true, onClick = { onPick(place) })
+                        }
                     }
                 }
 
-                search.failed -> ResultsMessage("Suche gerade nicht möglich – bist du online?")
+                search.failed -> ResultsMessage(strings.searchFailed)
 
                 !search.loading && search.searchedFor == search.query.trim() && search.results.isEmpty() ->
-                    ResultsMessage("Nichts gefunden für „${search.query.trim()}“.")
+                    ResultsMessage(strings.nothingFound(search.query.trim()))
 
                 else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    search.results.forEach { place -> PlaceResultRow(place, selected = place.sameSpotAs(current), onClick = { onPick(place) }) }
+                    search.results.forEach { place -> PlaceResultRow(place, selected = current?.sameSpotAs(place) == true, onClick = { onPick(place) }) }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -251,7 +281,7 @@ private fun LocationPill(searching: Boolean, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(8.dp))
         Text(
-            text = if (searching) "Suche Standort …" else "Mein Standort",
+            text = if (searching) regionStrings().locating else regionStrings().myLocation,
             style = MaterialTheme.typography.labelLarge,
             color = colors.onPrimaryContainer,
             maxLines = 1,
@@ -271,7 +301,7 @@ private fun CurrentPlaceChip(place: Place) {
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Aktuell:", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+        Text(regionStrings().currentPlace, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
         Spacer(Modifier.width(6.dp))
         val flag = flagEmoji(place.countryCode)
         if (flag.isNotEmpty()) {
@@ -315,7 +345,7 @@ private fun PlaceResultRow(place: Place, selected: Boolean, onClick: () -> Unit)
             .pressScale(interaction, pressedScale = 0.98f)
             .clip(RoundedCornerShape(18.dp))
             .then(if (selected) Modifier.background(colors.primaryContainer.copy(alpha = 0.6f)) else Modifier)
-            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClickLabel = "Auswählen", onClick = onClick)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClickLabel = regionStrings().select, onClick = onClick)
             .heightIn(min = 60.dp)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

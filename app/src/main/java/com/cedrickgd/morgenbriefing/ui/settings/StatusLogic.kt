@@ -1,6 +1,8 @@
 package com.cedrickgd.morgenbriefing.ui.settings
 
 import androidx.compose.runtime.Immutable
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.SettingsStrings
 import com.cedrickgd.morgenbriefing.util.SystemStatus
 
 /*
@@ -28,75 +30,55 @@ data class StatusItem(
 @Immutable
 data class HeroText(val title: String, val subtitle: String, val ready: Boolean)
 
-/** The pills of the status hero, in display order. */
-internal fun statusItems(system: SystemStatus): List<StatusItem> = buildList {
-    add(
+/** The pills of the status hero, in display order, worded in [lang]. */
+internal fun statusItems(system: SystemStatus, lang: AppLanguage): List<StatusItem> {
+    val s = SettingsStrings.of(lang)
+    // Below Android 12 every alarm may be exact, so the pill is simply green there.
+    val exact = !system.exactAlarmRelevant || system.exactAlarmsAllowed
+    return listOf(
         StatusItem(
             kind = StatusKind.NOTIFICATIONS,
             level = if (system.canNotify) StatusLevel.OK else StatusLevel.ATTENTION,
-            label = "Benachrichtigungen",
+            label = s.statusNotifications,
             state = when {
-                system.canNotify -> "erlaubt"
-                system.permissionGranted && system.appNotificationsEnabled -> "Kanal ausgeschaltet"
-                else -> "nicht erlaubt"
+                system.canNotify -> s.stateAllowed
+                system.permissionGranted && system.appNotificationsEnabled -> s.stateChannelOff
+                else -> s.stateNotAllowed
             },
         ),
-    )
-    // Below Android 12 every alarm may be exact, so the pill is simply green there.
-    val exact = !system.exactAlarmRelevant || system.exactAlarmsAllowed
-    add(
         StatusItem(
             kind = StatusKind.EXACT_ALARM,
             level = if (exact) StatusLevel.OK else StatusLevel.ATTENTION,
-            label = "Exakte Uhrzeit",
-            state = if (exact) "erlaubt" else "nicht erlaubt",
+            label = s.statusExactAlarm,
+            state = if (exact) s.stateAllowed else s.stateNotAllowed,
         ),
-    )
-    add(
         StatusItem(
             kind = StatusKind.BATTERY,
             level = if (system.batteryUnrestricted) StatusLevel.OK else StatusLevel.ATTENTION,
-            label = "Akku",
-            state = if (system.batteryUnrestricted) "nicht eingeschränkt" else "Optimierung an",
+            label = s.statusBattery,
+            state = if (system.batteryUnrestricted) s.stateUnrestricted else s.stateOptimized,
         ),
     )
 }
 
 /**
- * What the hero says. [day] is "morgen"/"heute"/…, [time] "05:30". A blocked notification is
- * the worst case; the sentence counts every yellow pill it asks to tap.
+ * What the hero says in [lang]. [day] is "morgen"/"heute"/… ([dayWord]), [time] "05:30". A
+ * blocked notification is the worst case; the sentence counts every yellow pill it asks to tap.
  */
-internal fun heroText(enabled: Boolean, items: List<StatusItem>, day: String, time: String): HeroText {
-    if (!enabled) {
-        return HeroText(
-            title = "Dein Morgenbriefing ist aus",
-            subtitle = "Schalte es unten wieder ein – dann kommt es jeden Morgen um $time.",
-            ready = false,
-        )
-    }
+internal fun heroText(enabled: Boolean, items: List<StatusItem>, day: String, time: String, lang: AppLanguage): HeroText {
+    val s = SettingsStrings.of(lang)
+    if (!enabled) return HeroText(title = s.heroOffTitle, subtitle = s.heroOffSubtitle(time), ready = false)
     val problems = items.filter { it.level == StatusLevel.ATTENTION }
-    if (problems.isEmpty()) {
-        return HeroText(
-            title = "Alles bereit für $day, $time",
-            subtitle = "Wetter und News kommen pünktlich – du musst nichts weiter tun.",
-            ready = true,
-        )
-    }
-    val title = if (problems.any { it.kind == StatusKind.NOTIFICATIONS }) {
-        "Noch kommt morgens nichts an"
-    } else {
-        "Fast bereit für $day, $time"
-    }
+    if (problems.isEmpty()) return HeroText(title = s.heroReadyTitle(day, time), subtitle = s.heroReadySubtitle, ready = true)
+    val title = if (problems.any { it.kind == StatusKind.NOTIFICATIONS }) s.heroNothingArrives else s.heroAlmostReady(day, time)
     val subtitle = if (problems.size == 1) {
-        hintFor(problems.single())
+        when (problems.single().kind) {
+            StatusKind.NOTIFICATIONS -> s.hintNotifications
+            StatusKind.EXACT_ALARM -> s.hintExactAlarm
+            StatusKind.BATTERY -> s.hintBattery
+        }
     } else {
-        "${problems.size} Kleinigkeiten fehlen noch – tippe auf die gelben Punkte."
+        s.heroProblems(problems.size)
     }
     return HeroText(title = title, subtitle = subtitle, ready = false)
-}
-
-private fun hintFor(item: StatusItem): String = when (item.kind) {
-    StatusKind.NOTIFICATIONS -> "Erlaube Benachrichtigungen – tippe unten auf den gelben Punkt."
-    StatusKind.EXACT_ALARM -> "Mit „Exakte Uhrzeit“ kommt dein Briefing auf die Minute."
-    StatusKind.BATTERY -> "Nimm die App aus der Akku-Optimierung, damit Android sie morgens nicht bremst."
 }

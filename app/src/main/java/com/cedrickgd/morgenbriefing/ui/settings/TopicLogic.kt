@@ -1,11 +1,9 @@
 package com.cedrickgd.morgenbriefing.ui.settings
 
 import com.cedrickgd.morgenbriefing.data.model.Topics
-import java.util.Locale
-import kotlin.math.roundToInt
 
 /**
- * Topic list operations behind Settings → "Themen". Pure (no Android), unit-tested.
+ * Topic list operations (the feed's topic sheet, Settings → "Deine Themen"). Pure (no Android), unit-tested.
  * Orders are lists of [Topics] ids; hidden topics are a set of ids.
  */
 internal object TopicList {
@@ -61,25 +59,4 @@ internal object TopicList {
     /** Whether [order] already is the catalogue order (the reset button is disabled then). */
     fun isDefaultOrder(order: List<String>, catalogue: List<String> = Topics.DEFAULT_ORDER): Boolean =
         normalize(order, catalogue) == catalogue
-}
-
-/** The article text size slider (Settings → "Lesen"): 85–140 % in steps of 5 %. */
-internal object ReaderScale {
-    const val MIN = 0.85f
-    const val MAX = 1.4f
-    const val DEFAULT = 1f
-    private const val STEP_PERCENT = 5
-
-    /** Stops between the ends for a Material slider with one stop per 5 %. */
-    const val SLIDER_STEPS = ((140 - 85) / STEP_PERCENT) - 1
-
-    /** Rounds to the nearest 5 % and clamps to [MIN]..[MAX]. NaN becomes [DEFAULT]. */
-    fun normalize(value: Float): Float {
-        if (value.isNaN()) return DEFAULT
-        val steps = (value * 100f / STEP_PERCENT).roundToInt()
-        return (steps * STEP_PERCENT / 100f).coerceIn(MIN, MAX)
-    }
-
-    /** "115 %" */
-    fun label(value: Float): String = String.format(Locale.GERMANY, "%d %%", (normalize(value) * 100).roundToInt())
 }

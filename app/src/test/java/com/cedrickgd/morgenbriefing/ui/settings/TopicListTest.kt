@@ -76,19 +76,4 @@ class TopicListTest {
         assertTrue(TopicList.isDefaultOrder(Topics.DEFAULT_ORDER.dropLast(2)))
         assertFalse(TopicList.isDefaultOrder(listOf("politik"), catalogue))
     }
-
-    @Test
-    fun `reader scale snaps to 5 percent steps within 85 to 140`() {
-        assertEquals(10, ReaderScale.SLIDER_STEPS)
-        assertEquals(1f, ReaderScale.normalize(1.01f))
-        assertEquals(1.15f, ReaderScale.normalize(1.13f))
-        assertEquals(0.85f, ReaderScale.normalize(0.2f))
-        assertEquals(1.4f, ReaderScale.normalize(3f))
-        assertEquals(1f, ReaderScale.normalize(Float.NaN))
-        assertTrue(ReaderScale.normalize(1.4f) in 0.85f..1.4f)
-        assertEquals("100 %", ReaderScale.label(1f))
-        assertEquals("115 %", ReaderScale.label(1.149f))
-        assertEquals("85 %", ReaderScale.label(0.85f))
-        assertEquals("140 %", ReaderScale.label(1.4f))
-    }
 }

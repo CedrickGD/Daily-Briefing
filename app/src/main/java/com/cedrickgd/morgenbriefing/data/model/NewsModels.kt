@@ -99,7 +99,11 @@ data class SourceStatus(
     val name: String,
     val ok: Boolean,
     val count: Int = 0,
-    /** Short German reason when [ok] is false. */
+    /**
+     * Why the source failed when [ok] is false: a stable code
+     * ([com.cedrickgd.morgenbriefing.data.remote.FeedException.code], e.g. `NOT_FOUND:404`) that
+     * the settings word in the interface language. Caches of version 2 hold German sentences.
+     */
     val error: String = "",
 )
 

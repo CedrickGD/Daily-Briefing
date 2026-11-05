@@ -25,26 +25,27 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /**
  * Accent palettes. [DYNAMIC] = Material You wallpaper colors (Android 12+); on older
- * devices it falls back to [MORGENROT]. Seeds are ARGB.
+ * devices it falls back to [MORGENROT]. Seeds are ARGB. The names shown in the settings live in
+ * `i18n/SettingsStrings` (stored by enum name, never rename one).
  */
-enum class AccentId(val label: String, val seed: Long) {
-    DYNAMIC("Material You", 0xFFC6613F),
-    MORGENROT("Morgenrot", 0xFFC6613F),
-    SONNE("Sonne", 0xFFE0A100),
-    OZEAN("Ozean", 0xFF0E7C9B),
-    WALD("Wald", 0xFF2E8B57),
-    LAVENDEL("Lavendel", 0xFF7B61FF),
-    BEERE("Beere", 0xFFC2185B),
-    GRAPHIT("Graphit", 0xFF5F6B7A),
+enum class AccentId(val seed: Long) {
+    DYNAMIC(0xFFC6613F),
+    MORGENROT(0xFFC6613F),
+    SONNE(0xFFE0A100),
+    OZEAN(0xFF0E7C9B),
+    WALD(0xFF2E8B57),
+    LAVENDEL(0xFF7B61FF),
+    BEERE(0xFFC2185B),
+    GRAPHIT(0xFF5F6B7A),
 }
 
-/** How far back the feed reaches. */
-enum class NewsAge(val label: String, val hours: Int) {
+/** How far back the feed reaches; [hours] = 0 means everything the sources deliver. Labels: `i18n/SettingsStrings`. */
+enum class NewsAge(val hours: Int) {
     /** The last 24 hours — "tagesaktuell". */
-    DAY("Heute", 24),
-    TWO_DAYS("2 Tage", 48),
-    WEEK("Eine Woche", 24 * 7),
-    ALL("Alles, was die Quellen liefern", 0),
+    DAY(24),
+    TWO_DAYS(48),
+    WEEK(24 * 7),
+    ALL(0),
     ;
 
     companion object {
@@ -52,11 +53,11 @@ enum class NewsAge(val label: String, val hours: Int) {
     }
 }
 
-/** The weather blocks of "Heute" the user can switch off (the hero stays). */
-enum class WeatherCard(val label: String, val description: String) {
-    WARNINGS("Warnungen", "Glätte, Sturm, Hitze – wenn etwas ansteht"),
-    CURVE("Tagesverlauf", "Temperatur und Regen über den Tag"),
-    CLOTHING("Anziehen", "Was du heute anziehen solltest"),
+/** The weather blocks of "Heute" the user can switch off (the hero stays). Labels: `i18n/SettingsStrings`. */
+enum class WeatherCard {
+    WARNINGS,
+    CURVE,
+    CLOTHING,
     ;
 
     companion object {

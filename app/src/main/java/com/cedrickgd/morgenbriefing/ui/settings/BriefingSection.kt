@@ -20,9 +20,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AlarmOn
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material3.Icon
@@ -46,6 +48,9 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.data.BERLIN
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.commonStrings
+import com.cedrickgd.morgenbriefing.i18n.settingsStrings
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import kotlinx.coroutines.delay
 import java.time.ZonedDateTime
@@ -65,11 +70,14 @@ internal fun BriefingCard(
     onTest: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = settingsStrings()
+    val lang = LocalAppLanguage.current
     val enabled = settings.notificationsEnabled
     val time = clockLabel(settings.notifyHour, settings.notifyMinute)
-    val countdown = remember(now, settings.notifyHour, settings.notifyMinute) {
-        nextBriefingCountdown(now, nextBriefingAt(now, settings.notifyHour, settings.notifyMinute))
+    val countdown = remember(now, settings.notifyHour, settings.notifyMinute, lang) {
+        nextBriefingCountdown(now, nextBriefingAt(now, settings.notifyHour, settings.notifyMinute), lang)
     }
+    val common = commonStrings()
     val haptic = rememberToggleHaptics()
     val timeAlpha by animateFloatAsState(
         targetValue = if (enabled) 1f else 0.42f,
@@ -79,8 +87,10 @@ internal fun BriefingCard(
 
     GlassCard(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            IconTile(Icons.Rounded.AlarmOn)
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Overline("Jeden Morgen um")
+                Overline(strings.everyMorningAt)
             }
             Box(
                 modifier = Modifier
@@ -93,7 +103,7 @@ internal fun BriefingCard(
                             onToggle(value)
                         },
                     )
-                    .semantics { contentDescription = "Morgenbriefing" }
+                    .semantics { contentDescription = strings.briefingSwitch }
                     .padding(6.dp),
             ) {
                 GlassSwitch(checked = enabled)
@@ -102,10 +112,10 @@ internal fun BriefingCard(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(20.dp))
-                .clickable(onClickLabel = "Uhrzeit ändern", role = Role.Button, onClick = onEditTime)
+                .clickable(onClickLabel = strings.changeTime, role = Role.Button, onClick = onEditTime)
                 .semantics(mergeDescendants = true) {
-                    contentDescription = "Uhrzeit $time Uhr"
-                    stateDescription = if (enabled) "an" else "aus"
+                    contentDescription = strings.timeDescription(time)
+                    stateDescription = if (enabled) common.on else common.off
                 }
                 .padding(end = 12.dp),
             verticalAlignment = Alignment.Bottom,
@@ -131,14 +141,16 @@ internal fun BriefingCard(
                         .clearAndSetSemantics { },
                 )
             }
-            Text(
-                text = "Uhr",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .padding(start = 8.dp, bottom = 12.dp)
-                    .clearAndSetSemantics { },
-            )
+            if (strings.clockSuffix.isNotEmpty()) {
+                Text(
+                    text = strings.clockSuffix,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(start = 8.dp, bottom = 12.dp)
+                        .clearAndSetSemantics { },
+                )
+            }
             Icon(
                 imageVector = Icons.Rounded.Edit,
                 contentDescription = null,
@@ -149,14 +161,14 @@ internal fun BriefingCard(
             )
         }
         Text(
-            text = if (enabled) countdown else "Aus – morgens kommt keine Benachrichtigung.",
+            text = if (enabled) countdown else strings.briefingIsOff,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GlassPillButton(
-                text = "Test-Benachrichtigung",
+                text = strings.testNotification,
                 onClick = onTest,
                 icon = Icons.Rounded.NotificationsActive,
                 style = PillStyle.Tonal,

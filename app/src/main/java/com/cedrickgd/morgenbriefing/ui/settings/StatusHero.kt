@@ -37,7 +37,6 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PriorityHigh
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -62,6 +61,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.cedrickgd.morgenbriefing.i18n.settingsStrings
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 
@@ -95,6 +95,7 @@ internal fun StatusHero(
         Seal.OFF -> MaterialTheme.colorScheme.outline
     }
     val glowAlpha = if (isGlassDark()) 0.22f else 0.26f
+    val strings = settingsStrings()
     GlassCard(modifier = modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
         Column(
             Modifier
@@ -119,9 +120,9 @@ internal fun StatusHero(
                 Column(Modifier.weight(1f)) {
                     Overline(
                         when (seal) {
-                            Seal.READY -> "Status · alles gut"
-                            Seal.ATTENTION -> "Status · kurz prüfen"
-                            Seal.OFF -> "Status · pausiert"
+                            Seal.READY -> strings.sealOverlineReady
+                            Seal.ATTENTION -> strings.sealOverlineAttention
+                            Seal.OFF -> strings.sealOverlineOff
                         },
                     )
                     AnimatedContent(
@@ -163,10 +164,11 @@ private fun StatusSeal(seal: Seal, reduceMotion: Boolean) {
         Seal.ATTENTION -> StatusPalette.attentionFill()
         Seal.OFF -> MaterialTheme.colorScheme.outline
     }
+    val strings = settingsStrings()
     val description = when (seal) {
-        Seal.READY -> "Alles bereit"
-        Seal.ATTENTION -> "Braucht deine Aufmerksamkeit"
-        Seal.OFF -> "Ausgeschaltet"
+        Seal.READY -> strings.sealReady
+        Seal.ATTENTION -> strings.sealAttention
+        Seal.OFF -> strings.sealOff
     }
     val draw = remember(seal) { Animatable(if (reduceMotion || seal != Seal.READY) 1f else 0f) }
     LaunchedEffect(seal) {
@@ -239,11 +241,10 @@ private fun StatusPill(item: StatusItem, onClick: () -> Unit) {
         StatusLevel.ATTENTION -> StatusPalette.attention()
         StatusLevel.NEUTRAL -> colors.onSurfaceVariant
     }
-    val checking = false
+    val strings = settingsStrings()
     val action = when (item.level) {
-        StatusLevel.ATTENTION -> "Beheben"
-        StatusLevel.OK -> "Zum Abschnitt"
-        StatusLevel.NEUTRAL -> "Zum Abschnitt"
+        StatusLevel.ATTENTION -> strings.pillFix
+        StatusLevel.OK, StatusLevel.NEUTRAL -> strings.pillGoToSection
     }
     val attentionWash = StatusPalette.attentionFill().copy(alpha = if (isGlassDark()) 0.16f else 0.14f)
     Row(
@@ -257,20 +258,16 @@ private fun StatusPill(item: StatusItem, onClick: () -> Unit) {
             .padding(start = 10.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (checking) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = tint)
-        } else {
-            Icon(
-                imageVector = when (item.level) {
-                    StatusLevel.OK -> Icons.Rounded.CheckCircle
-                    StatusLevel.ATTENTION -> Icons.Rounded.ErrorOutline
-                    StatusLevel.NEUTRAL -> Icons.Rounded.RadioButtonUnchecked
-                },
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(18.dp),
-            )
-        }
+        Icon(
+            imageVector = when (item.level) {
+                StatusLevel.OK -> Icons.Rounded.CheckCircle
+                StatusLevel.ATTENTION -> Icons.Rounded.ErrorOutline
+                StatusLevel.NEUTRAL -> Icons.Rounded.RadioButtonUnchecked
+            },
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(18.dp),
+        )
         Spacer(Modifier.width(6.dp))
         Text(item.label, style = MaterialTheme.typography.labelLarge, color = colors.onSurface, maxLines = 1)
     }
@@ -279,14 +276,15 @@ private fun StatusPill(item: StatusItem, onClick: () -> Unit) {
 /** Samsung's own app battery setting is separate from Android's optimization list. */
 @Composable
 private fun SamsungHint(onOpenAppDetails: () -> Unit) {
+    val strings = settingsStrings()
     Column(Modifier.padding(top = 10.dp)) {
         Text(
-            text = "Bei Samsung zusätzlich: App-Info → Akku → „Nicht eingeschränkt“.",
+            text = strings.samsungHint,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(6.dp))
-        GlassPillButton(text = "App-Info öffnen", onClick = onOpenAppDetails, style = PillStyle.Quiet)
+        GlassPillButton(text = strings.openAppInfo, onClick = onOpenAppDetails, style = PillStyle.Quiet)
     }
 }
 

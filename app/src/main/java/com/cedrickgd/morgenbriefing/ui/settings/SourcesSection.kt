@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,8 +25,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.rounded.RssFeed
+import androidx.compose.material.icons.rounded.TravelExplore
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,10 +50,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.FeedSource
+import com.cedrickgd.morgenbriefing.data.model.SourceStatus
 import com.cedrickgd.morgenbriefing.data.model.Topic
-import com.cedrickgd.morgenbriefing.data.model.Topics
-import com.cedrickgd.morgenbriefing.data.news.FeedCatalog
-import com.cedrickgd.morgenbriefing.data.news.Regions
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.commonStrings
+import com.cedrickgd.morgenbriefing.i18n.sourcesStrings
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.news.TopicBadge
 import com.cedrickgd.morgenbriefing.ui.news.hostOf
@@ -64,44 +68,49 @@ internal class SourcesActions(
     val onRemoveFeed: (sourceId: String) -> Unit,
     val onEditTopic: (Topic) -> Unit,
     val onDeleteTopic: (Topic) -> Unit,
-    val onPickRegion: () -> Unit,
 )
 
 /**
- * Settings section "Quellen": the region preset and, per topic, every feed with a switch. A
- * topic row expands to its feeds; own feeds can be removed, own topics edited or deleted, and
- * "Eigene Quelle" adds a feed to any topic.
+ * Settings section "Quellen": for the current news edition, every followed topic (and the own
+ * topics that are paused) with each source it reads – publisher feeds, the Google News page as
+ * one understandable line ("Google News · Suche: Börse, DAX, Aktien …"), own feeds – a switch
+ * per source and how its last fetch went. Own feeds can be removed, own topics edited or
+ * deleted, "Eigene Quelle" adds a feed to any topic.
  *
- * @param expanded ids of the topics whose feeds are shown.
+ * @param blocked the sites the reader cannot show (their feeds are left out with "readable only").
+ * @param status the last fetch of each source by id.
+ * @param expanded ids of the topics whose sources are shown.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SourcesSection(
     settings: AppSettings,
+    blocked: Set<String>,
+    status: Map<String, SourceStatus>,
     expanded: Set<String>,
     onToggleExpanded: (String) -> Unit,
     actions: SourcesActions,
     modifier: Modifier = Modifier,
 ) {
-    val topics = remember(settings) { Topics.catalogue(settings) }
-    val region = remember(settings.region) { Regions.byKey(settings.region) }
+    val lang = LocalAppLanguage.current
+    val strings = sourcesStrings()
+    val groups = remember(settings, blocked, lang) { SourcesLogic.groups(settings, blocked, lang) }
+    val edition = remember(settings.edition, lang) { EditionLabels.option(settings.edition, lang) }
     GlassCard(modifier = modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconBadge(Icons.Rounded.Map)
-            Spacer(Modifier.width(14.dp))
-            ValueRow(
-                label = "Deine Region",
-                value = "${region.name} · ${region.feeds.joinToString(", ") { it.name }}",
-                onClick = actions.onPickRegion,
-                modifier = Modifier.weight(1f),
+        Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            FlagTile(edition.flag, size = 36.dp)
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = strings.sourcesFor("${edition.country} · ${edition.language}"),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         HorizontalDivider(
             modifier = Modifier.padding(vertical = 6.dp),
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
         )
-        topics.forEachIndexed { index, topic ->
-            key(topic.id) {
+        groups.forEachIndexed { index, group ->
+            key(group.topic.id) {
                 if (index > 0) {
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 54.dp),
@@ -109,12 +118,12 @@ internal fun SourcesSection(
                     )
                 }
                 TopicSourcesRow(
-                    topic = topic,
-                    sources = remember(settings, topic.id) { FeedCatalog.allSourcesFor(topic.id, settings) },
-                    disabled = settings.disabledFeeds,
-                    hidden = topic.id !in Topics.followedIds(settings),
-                    expanded = topic.id in expanded,
-                    onToggleExpanded = { onToggleExpanded(topic.id) },
+                    group = group,
+                    settings = settings,
+                    status = status,
+                    lang = lang,
+                    expanded = group.topic.id in expanded,
+                    onToggleExpanded = { onToggleExpanded(group.topic.id) },
                     actions = actions,
                 )
             }
@@ -125,22 +134,23 @@ internal fun SourcesSection(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TopicSourcesRow(
-    topic: Topic,
-    sources: List<FeedSource>,
-    disabled: Set<String>,
-    hidden: Boolean,
+    group: TopicSourcesGroup,
+    settings: AppSettings,
+    status: Map<String, SourceStatus>,
+    lang: AppLanguage,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     actions: SourcesActions,
 ) {
+    val strings = sourcesStrings()
+    val common = commonStrings()
     val colors = MaterialTheme.colorScheme
-    val enabledCount = sources.count { it.id !in disabled }
+    val topic = group.topic
+    val disabled = settings.disabledFeeds
+    val enabledCount = group.sources.count { it.id !in disabled }
+    val failing = group.sources.count { it.id !in disabled && SourcesLogic.health(status[it.id]) is SourceHealth.Failed }
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "sourcesChevron")
-    val summary = when {
-        sources.isEmpty() -> "Noch keine Quelle – füge eine hinzu"
-        enabledCount == sources.size -> "${sources.size} ${if (sources.size == 1) "Quelle" else "Quellen"}"
-        else -> "$enabledCount von ${sources.size} Quellen an"
-    } + if (hidden) " · Thema ausgeblendet" else ""
+    val summary = remember(group, disabled, lang) { SourcesLogic.summary(group, disabled, lang) }
 
     Column(Modifier.fillMaxWidth()) {
         Row(
@@ -148,7 +158,7 @@ private fun TopicSourcesRow(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(18.dp))
                 .clickable(role = Role.Button, onClick = onToggleExpanded)
-                .semantics { stateDescription = if (expanded) "ausgeklappt" else "eingeklappt" }
+                .semantics { stateDescription = if (expanded) strings.expanded else strings.collapsed }
                 .heightIn(min = 60.dp)
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -158,6 +168,16 @@ private fun TopicSourcesRow(
             Column(Modifier.weight(1f)) {
                 Text(topic.title, style = MaterialTheme.typography.titleMedium, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(summary, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (failing > 0) {
+                Icon(
+                    Icons.Rounded.ErrorOutline,
+                    contentDescription = null,
+                    tint = StatusPalette.attention(),
+                    modifier = Modifier
+                        .padding(end = 6.dp)
+                        .size(18.dp),
+                )
             }
             Icon(
                 imageVector = Icons.Rounded.ExpandMore,
@@ -174,36 +194,46 @@ private fun TopicSourcesRow(
             exit = shrinkVertically() + fadeOut(),
         ) {
             Column(Modifier.padding(start = 4.dp, bottom = 10.dp)) {
-                sources.forEach { source ->
+                group.sources.forEach { source ->
                     key(source.id) {
                         SourceRow(
                             source = source,
+                            title = if (source.isGoogleNews) SourcesLogic.describe(SourcesLogic.googleLine(source, settings), lang) else source.name,
+                            health = SourcesLogic.health(status[source.id]),
+                            lang = lang,
                             enabled = source.id !in disabled,
                             onEnabled = { actions.onSourceEnabled(source.id, it) },
-                            onRemove = if (source.isCustom) { { actions.onRemoveFeed(source.id) } } else null,
+                            onRemove = if (source.isCustom) ({ actions.onRemoveFeed(source.id) }) else null,
                         )
                     }
                 }
-                if (sources.isEmpty()) {
+                if (group.sources.isEmpty()) {
                     Text(
-                        text = "Dieses Thema hat noch keine Quelle.",
+                        text = strings.noSourceInTopic,
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
+                }
+                if (group.hiddenUnreadable > 0) {
+                    Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.VisibilityOff, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(strings.hiddenUnreadable(group.hiddenUnreadable), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    }
                 }
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(top = 8.dp),
                 ) {
-                    GlassPillButton("Eigene Quelle", onClick = { actions.onAddFeed(topic) }, icon = Icons.Rounded.Add, style = PillStyle.Tonal)
-                    if (enabledCount < sources.size) {
-                        GlassPillButton("Alle an", onClick = { actions.onEnableAll(topic.id) }, style = PillStyle.Quiet)
+                    GlassPillButton(strings.addFeed, onClick = { actions.onAddFeed(topic) }, icon = Icons.Rounded.Add, style = PillStyle.Tonal)
+                    if (enabledCount < group.sources.size) {
+                        GlassPillButton(strings.allOn, onClick = { actions.onEnableAll(topic.id) }, style = PillStyle.Quiet)
                     }
                     if (topic.custom) {
-                        GlassPillButton("Bearbeiten", onClick = { actions.onEditTopic(topic) }, icon = Icons.Rounded.Edit, style = PillStyle.Quiet)
-                        GlassPillButton("Löschen", onClick = { actions.onDeleteTopic(topic) }, icon = Icons.Rounded.DeleteOutline, style = PillStyle.Quiet)
+                        GlassPillButton(strings.edit, onClick = { actions.onEditTopic(topic) }, icon = Icons.Rounded.Edit, style = PillStyle.Quiet)
+                        GlassPillButton(common.delete, onClick = { actions.onDeleteTopic(topic) }, icon = Icons.Rounded.DeleteOutline, style = PillStyle.Quiet)
                     }
                 }
             }
@@ -211,11 +241,21 @@ private fun TopicSourcesRow(
     }
 }
 
-/** One feed: name, host, a switch — and a bin for own feeds. */
+/** One source: a small tile (feed or Google News), its name, host and last fetch, a switch – and a bin for own feeds. */
 @Composable
-private fun SourceRow(source: FeedSource, enabled: Boolean, onEnabled: (Boolean) -> Unit, onRemove: (() -> Unit)?) {
+private fun SourceRow(
+    source: FeedSource,
+    title: String,
+    health: SourceHealth?,
+    lang: AppLanguage,
+    enabled: Boolean,
+    onEnabled: (Boolean) -> Unit,
+    onRemove: (() -> Unit)?,
+) {
+    val strings = sourcesStrings()
     val colors = MaterialTheme.colorScheme
     val haptic = rememberToggleHaptics()
+    val failed = health is SourceHealth.Failed
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -228,27 +268,46 @@ private fun SourceRow(source: FeedSource, enabled: Boolean, onEnabled: (Boolean)
                     onEnabled(value)
                 },
             )
-            .heightIn(min = 52.dp)
-            .padding(vertical = 4.dp),
+            .heightIn(min = 56.dp)
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f).graphicsLayer { alpha = if (enabled) 1f else 0.55f }) {
-            Text(source.name, style = MaterialTheme.typography.bodyLarge, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        IconTile(
+            icon = if (source.isGoogleNews) Icons.Rounded.TravelExplore else Icons.Rounded.RssFeed,
+            tint = if (source.isGoogleNews) colors.tertiary else colors.primary,
+            size = 32.dp,
+            modifier = Modifier.graphicsLayer { alpha = if (enabled) 1f else 0.55f },
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(
+            Modifier
+                .weight(1f)
+                .graphicsLayer { alpha = if (enabled) 1f else 0.55f },
+        ) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                text = hostOf(source.url) + if (source.isCustom) " · eigene Quelle" else "",
+                text = hostOf(source.url) + if (source.isCustom) " · ${strings.ownSource}" else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (health != null && enabled) {
+                Text(
+                    text = SourcesLogic.healthLabel(health, lang),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (failed) StatusPalette.attention() else StatusPalette.ok(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         if (onRemove != null) {
             IconButton(onClick = onRemove) {
-                Icon(Icons.Rounded.DeleteOutline, contentDescription = "Quelle entfernen", tint = colors.onSurfaceVariant)
+                Icon(Icons.Rounded.DeleteOutline, contentDescription = strings.removeSource, tint = colors.onSurfaceVariant)
             }
         }
         Spacer(Modifier.width(6.dp))
         GlassSwitch(checked = enabled)
-        Spacer(Modifier.height(0.dp))
     }
 }
