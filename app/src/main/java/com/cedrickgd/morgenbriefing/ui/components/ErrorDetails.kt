@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.cedrickgd.morgenbriefing.i18n.componentStrings
 import kotlinx.coroutines.launch
 
 /**
@@ -54,17 +55,18 @@ fun ErrorDetails(detail: String, modifier: Modifier = Modifier, color: Color = M
     val clipboard = LocalClipboard.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val strings = componentStrings()
     Column(modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .clip(MaterialTheme.shapes.small)
-                .clickable(role = Role.Button, onClickLabel = if (open) "Details ausblenden" else "Details zeigen") { open = !open }
+                .clickable(role = Role.Button, onClickLabel = if (open) strings.hideDetails else strings.showDetails) { open = !open }
                 .heightIn(min = 48.dp)
                 .padding(end = 8.dp)
-                .semantics { stateDescription = if (open) "aufgeklappt" else "zugeklappt" },
+                .semantics { stateDescription = if (open) strings.expanded else strings.collapsed },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Details", style = MaterialTheme.typography.labelLarge, color = color)
+            Text(strings.details, style = MaterialTheme.typography.labelLarge, color = color)
             Spacer(Modifier.width(2.dp))
             Icon(if (open) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
         }
@@ -80,17 +82,17 @@ fun ErrorDetails(detail: String, modifier: Modifier = Modifier, color: Color = M
                 TextButton(
                     onClick = {
                         scope.launch {
-                            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Fehlerdetails", detail)))
+                            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(strings.errorDetailsClip, detail)))
                             // Android 13+ confirms copies itself.
                             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                Toast.makeText(context, "Details kopiert", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, strings.detailsCopied, Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
                 ) {
                     Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Kopieren")
+                    Text(strings.copy)
                 }
             }
         }

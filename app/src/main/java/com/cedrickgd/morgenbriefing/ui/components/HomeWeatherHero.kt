@@ -45,12 +45,15 @@ import com.cedrickgd.morgenbriefing.domain.Condition
 import com.cedrickgd.morgenbriefing.domain.Fmt
 import com.cedrickgd.morgenbriefing.domain.WeatherInsights
 import com.cedrickgd.morgenbriefing.domain.precipKind
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.ComponentStrings
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.WeatherStrings
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.OffsetDateTime
-import java.util.Locale
 import kotlin.math.roundToInt
 
 /** Wind gusts from this speed on are worth mentioning. */
@@ -72,6 +75,8 @@ fun HomeWeatherHero(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
     val condition = Condition.fromCode(current.code)
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
+    val language = LocalAppLanguage.current
+    val strings = ComponentStrings.of(language)
 
     GlassCard(
         modifier = modifier.fillMaxWidth(),
@@ -83,7 +88,7 @@ fun HomeWeatherHero(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
             val time = Fmt.clock(home.current.time)
             Row {
                 Text(
-                    text = "VOR DER TÜR · ${home.place.name.uppercase(Locale.GERMAN)}",
+                    text = strings.outsideAt(home.place.name).uppercase(language.locale),
                     style = overline,
                     color = colors.onSurfaceVariant,
                     maxLines = 1,
@@ -95,7 +100,7 @@ fun HomeWeatherHero(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
                 }
             }
 
-            val summary = heroDescription(home, condition)
+            val summary = heroDescription(home, condition, language)
             Column(Modifier.clearAndSetSemantics { contentDescription = summary }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CountUpTemperature(
@@ -112,7 +117,7 @@ fun HomeWeatherHero(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
                     FloatingEmoji(condition.emoji(current.isDay))
                 }
                 Text(
-                    text = "gefühlt ${Fmt.temp(current.feels)} · ${condition.labelFor(current.isDay)}",
+                    text = "${WeatherStrings.of(language).feelsLike(Fmt.temp(current.feels))} · ${condition.labelFor(current.isDay, language)}",
                     style = typography.bodyLarge,
                     color = colors.onSurfaceVariant,
                 )
@@ -123,7 +128,7 @@ fun HomeWeatherHero(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                for (chip in heroChips(home)) {
+                for (chip in heroChips(home, language)) {
                     Pill(
                         text = chip.text,
                         emoji = chip.emoji,
@@ -132,7 +137,7 @@ fun HomeWeatherHero(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
                 }
             }
 
-            val note = WeatherInsights.homeNote(snapshot)
+            val note = WeatherInsights.homeNote(snapshot, language)
             if (note.isNotBlank()) {
                 Spacer(Modifier.height(14.dp))
                 Text(text = note, style = typography.bodyMedium, color = colors.onSurface)
@@ -198,26 +203,30 @@ private fun FloatingEmoji(emoji: String) {
 
 private data class HeroChip(val emoji: String, val text: String)
 
-private fun heroChips(home: HomeWeather): List<HeroChip> = buildList {
+/** A number never wraps away from its unit inside a chip ("80 %", "12 km/h"). */
+private fun String.keepUnits(): String = replace(" %", " %").replace(" km", " km")
+
+private fun heroChips(home: HomeWeather, lang: AppLanguage): List<HeroChip> = buildList {
+    val strings = ComponentStrings.of(lang)
     val current = home.current
     val maxPop = home.nextHours.maxOfOrNull { it.pop } ?: 0
     // "Schnee 80 %" on a snowy morning, "Schneeregen" when both fall: the word follows the weather codes.
     val kind = precipKind(home)
-    add(HeroChip(kind.emoji, "${kind.word} ${maxPop.coerceIn(0, 100)} %"))
+    add(HeroChip(kind.emoji, "${kind.word(lang)} ${Fmt.percent(maxPop.coerceIn(0, 100), lang)}".keepUnits()))
 
-    val wind = "Wind ${current.windKmh.roundToInt()} km/h"
+    val wind = strings.wind(current.windKmh.roundToInt()).keepUnits()
     add(
         HeroChip(
             "💨",
-            if (current.gustKmh >= GUST_NOTE_KMH) "$wind · Böen ${current.gustKmh.roundToInt()}" else wind,
+            if (current.gustKmh >= GUST_NOTE_KMH) "$wind · ${strings.gusts(current.gustKmh.roundToInt())}" else wind,
         ),
     )
 
-    sunChip(home)?.let(::add)
+    sunChip(home, strings)?.let(::add)
 
     val visibility = current.visibilityM
     if (visibility != null && visibility < LOW_VISIBILITY_M) {
-        add(HeroChip("👁️", "Sicht ${String.format(Locale.GERMANY, "%.1f", visibility / 1000.0)} km"))
+        add(HeroChip("👁️", strings.visibility(Fmt.decimal(visibility / 1000.0, 1, lang)).keepUnits()))
     }
 }
 
@@ -225,7 +234,7 @@ private fun heroChips(home: HomeWeather): List<HeroChip> = buildList {
  * 🌅 sunrise while it is still dark before sunrise, 🌇 sunset during the day — and after sunset
  * tomorrow's 🌅 sunrise, never a sunset that is hours past.
  */
-private fun sunChip(home: HomeWeather): HeroChip? {
+private fun sunChip(home: HomeWeather, strings: ComponentStrings): HeroChip? {
     val now = localTimeOf(home.current.time)
     val sunrise = parseClock(home.sunrise)
     val sunset = parseClock(home.sunset)
@@ -239,10 +248,14 @@ private fun sunChip(home: HomeWeather): HeroChip? {
     }
 }
 
-private fun heroDescription(home: HomeWeather, condition: Condition): String {
+private fun heroDescription(home: HomeWeather, condition: Condition, lang: AppLanguage): String {
     val current: CurrentConditions = home.current
-    return "Vor der Tür in ${home.place.name}: ${Fmt.temp(current.temp)}, " +
-        "gefühlt ${Fmt.temp(current.feels)}, ${condition.labelFor(current.isDay)}"
+    return ComponentStrings.of(lang).outsideDescription(
+        place = home.place.name,
+        temp = Fmt.temp(current.temp),
+        feels = Fmt.temp(current.feels),
+        condition = condition.labelFor(current.isDay, lang),
+    )
 }
 
 /** Local time of an ISO timestamp with or without offset; null when unparsable. */

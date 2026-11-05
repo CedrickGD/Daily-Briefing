@@ -1,37 +1,20 @@
 package com.cedrickgd.morgenbriefing.update
 
 import com.cedrickgd.morgenbriefing.domain.Fmt
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.FormatStrings
+import com.cedrickgd.morgenbriefing.i18n.UpdateStrings
 import java.time.Duration
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
-/** German texts of the updater (settings row and notification). Pure, unit-tested. */
+/** Texts of the updater (settings row and notification) in the interface language. Pure, unit-tested. */
 object UpdateText {
 
-    /** Friendly German explanation for [error]; [debugBuild] tailors the wrong-package case. */
-    fun errorMessage(error: UpdateError, debugBuild: Boolean = false): String = when (error) {
-        UpdateError.UNAUTHORIZED ->
-            "GitHub lässt die Anfrage gerade nicht durch. Versuch's in ein paar Minuten nochmal."
-        UpdateError.NOT_FOUND -> "Noch kein Release auf GitHub gefunden. Sobald eins veröffentlicht ist, taucht es hier auf."
-        UpdateError.RATE_LIMITED -> "GitHub bremst gerade. Versuch's in ein paar Minuten nochmal."
-        UpdateError.NETWORK -> "Keine Verbindung zu GitHub – bist du online?"
-        UpdateError.SERVER -> "GitHub hat unerwartet geantwortet. Versuch's gleich nochmal."
-        UpdateError.INVALID_RELEASE -> "Das neueste Release hat keine gültige Versionsnummer."
-        UpdateError.NO_APK -> "Das neueste Release enthält keine APK zum Installieren."
-        UpdateError.INCOMPLETE_DOWNLOAD -> "Der Download kam unvollständig an. Versuch's nochmal."
-        UpdateError.STORAGE -> "Nicht genug freier Speicher für das Update."
-        UpdateError.APK_UNREADABLE -> "Die heruntergeladene Datei ist keine gültige App."
-        UpdateError.WRONG_PACKAGE -> if (debugBuild) {
-            "Das ist die Debug-Version – sie kann keine Release-Updates installieren."
-        } else {
-            "Die Datei gehört zu einer anderen App. Sie wird nicht installiert."
-        }
-        UpdateError.WRONG_SIGNATURE ->
-            "Das Update ist nicht mit deinem Schlüssel signiert. Aus Sicherheitsgründen wird es nicht installiert."
-        UpdateError.NOT_NEWER -> "Die heruntergeladene Version ist nicht neuer als deine."
-        UpdateError.INSTALLER_MISSING -> "Der Paket-Installer von Android ließ sich nicht öffnen."
-    }
+    /** Friendly explanation for [error] in [lang]; [debugBuild] tailors the wrong-package case. */
+    fun errorMessage(error: UpdateError, lang: AppLanguage, debugBuild: Boolean = false): String =
+        UpdateStrings.of(lang).error(error, debugBuild)
 
     /**
      * A short plain-text excerpt of GitHub release notes: markdown headings, emphasis, links and
@@ -69,27 +52,29 @@ object UpdateText {
         return line.trim()
     }
 
-    /** "12,3 MB" (decimal megabytes, German comma). */
-    fun megabytes(bytes: Long): String {
+    /** "12,3 MB" / "12.3 MB" (decimal megabytes, the language's separator). */
+    fun megabytes(bytes: Long, lang: AppLanguage): String {
         val mb = (bytes.coerceAtLeast(0) / 1_000_000.0).coerceAtLeast(if (bytes > 0) 0.1 else 0.0)
-        return String.format(Locale.GERMANY, "%.1f MB", mb)
+        return "${Fmt.decimal(mb, 1, lang)} MB"
     }
 
-    /** "42 %" — rounded down, so 100 % only shows when everything arrived. */
-    fun percent(fraction: Float): String = "${(fraction.coerceIn(0f, 1f) * 100).toInt()} %"
+    /** "42 %" / "42%" — rounded down, so 100 % only shows when everything arrived. */
+    fun percent(fraction: Float, lang: AppLanguage): String = Fmt.percent((fraction.coerceIn(0f, 1f) * 100).toInt(), lang)
 
     /** "Zuletzt geprüft: heute um 14:32" etc.; "Noch nicht geprüft" for null. */
-    fun lastCheck(now: ZonedDateTime, checkedAt: ZonedDateTime?): String {
-        if (checkedAt == null) return "Noch nicht geprüft"
+    fun lastCheck(now: ZonedDateTime, checkedAt: ZonedDateTime?, lang: AppLanguage): String {
+        val strings = UpdateStrings.of(lang)
+        if (checkedAt == null) return strings.neverChecked
         val at = checkedAt.withZoneSameInstant(now.zone)
         val ago = Duration.between(at, now)
-        if (!ago.isNegative && ago < Duration.ofMinutes(1)) return "Zuletzt geprüft: gerade eben"
-        val time = String.format(Locale.GERMANY, "%02d:%02d", at.hour, at.minute)
+        if (!ago.isNegative && ago < Duration.ofMinutes(1)) return strings.checkedJustNow
+        val time = String.format(Locale.ROOT, "%02d:%02d", at.hour, at.minute)
+        val format = FormatStrings.of(lang)
         val day = when (ChronoUnit.DAYS.between(at.toLocalDate(), now.toLocalDate())) {
-            0L -> "heute"
-            1L -> "gestern"
-            else -> Fmt.shortDate(at.toLocalDate())
+            0L -> format.today
+            1L -> format.yesterday
+            else -> Fmt.shortDate(at.toLocalDate(), lang)
         }
-        return "Zuletzt geprüft: $day um $time"
+        return strings.checkedAt(day, time)
     }
 }

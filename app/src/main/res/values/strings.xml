@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only the app name and the notification channel names live here: Android shows them outside
+  the app (launcher, system settings) in the phone's language. Every text inside the app comes
+  from the typed strings files in i18n/ and follows the language chosen in the app.
+  Default (this folder) = English; values-de, values-fr, values-es, values-it translate it.
+-->
 <resources>
-    <string name="app_name">Morgenbriefing</string>
-    <string name="channel_morning_name">Morgenbriefing</string>
-    <string name="channel_morning_desc">Dein tägliches Briefing mit Wetter und News</string>
-    <string name="channel_sync_name">Aktualisierung</string>
-    <string name="channel_sync_desc">Kurzer Hinweis, während das Briefing geladen wird</string>
+    <string name="app_name" translatable="false">Daily Briefing</string>
+    <string name="channel_morning_name">Morning briefing</string>
+    <string name="channel_morning_desc">Your daily briefing with weather and news</string>
+    <string name="channel_sync_name">Updating</string>
+    <string name="channel_sync_desc">A short notice while the briefing is loading</string>
+    <string name="channel_updates_name">App updates</string>
+    <string name="channel_updates_desc">Lets you know when a new version of Daily Briefing is ready</string>
 </resources>

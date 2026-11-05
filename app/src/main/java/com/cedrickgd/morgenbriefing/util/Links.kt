@@ -17,11 +17,14 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.ComponentStrings
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 
 /** Opening and sharing links. Article URLs come from feeds, so only http(s) is ever opened. */
 internal object Links {
     const val OPEN_METEO = "https://open-meteo.com/"
-    const val SOURCE_CODE = "https://github.com/CedrickGD/Morgenbriefing"
+    const val SOURCE_CODE = "https://github.com/CedrickGD/Daily-Briefing"
 
     /** True for an absolute `http(s)://host…` URL without whitespace. Pure, unit-tested. */
     fun isWebUrl(url: String): Boolean {
@@ -40,10 +43,10 @@ internal object Links {
 
     /**
      * Opens [url] in a Custom Tab tinted with [toolbarColor] (share button on). Falls back to any
-     * browser via ACTION_VIEW and finally tells the user that nothing could open it.
+     * browser via ACTION_VIEW and finally tells the user (in [lang]) that nothing could open it.
      */
-    fun openInApp(context: Context, url: String, @ColorInt toolbarColor: Int, darkTheme: Boolean) {
-        val uri = webUriOrNull(url) ?: return toast(context, "Dieser Link lässt sich nicht öffnen.")
+    fun openInApp(context: Context, url: String, @ColorInt toolbarColor: Int, darkTheme: Boolean, lang: AppLanguage) {
+        val uri = webUriOrNull(url) ?: return toast(context, ComponentStrings.of(lang).linkCannotOpen)
         val colors = CustomTabColorSchemeParams.Builder()
             .setToolbarColor(toolbarColor)
             .setNavigationBarColor(toolbarColor)
@@ -64,17 +67,17 @@ internal object Links {
         } catch (e: SecurityException) {
             // Misbehaving default browser; try a plain VIEW intent.
         }
-        openExternal(context, uri)
+        openExternal(context, uri, lang)
     }
 
     /** Opens [url] in the default browser. */
-    fun openExternal(context: Context, url: String) {
-        val uri = webUriOrNull(url) ?: return toast(context, "Dieser Link lässt sich nicht öffnen.")
-        openExternal(context, uri)
+    fun openExternal(context: Context, url: String, lang: AppLanguage) {
+        val uri = webUriOrNull(url) ?: return toast(context, ComponentStrings.of(lang).linkCannotOpen)
+        openExternal(context, uri, lang)
     }
 
     /** System share sheet with "headline\nurl" as plain text. */
-    fun share(context: Context, headline: String, url: String) {
+    fun share(context: Context, headline: String, url: String, lang: AppLanguage) {
         val text = listOf(headline.trim(), url.trim()).filter { it.isNotEmpty() }.joinToString("\n")
         if (text.isEmpty()) return
         val send = Intent(Intent.ACTION_SEND).apply {
@@ -82,24 +85,24 @@ internal object Links {
             putExtra(Intent.EXTRA_TEXT, text)
             if (headline.isNotBlank()) putExtra(Intent.EXTRA_TITLE, headline.trim())
         }
-        val chooser = Intent.createChooser(send, "Meldung teilen")
+        val chooser = Intent.createChooser(send, ComponentStrings.of(lang).shareChooser)
         if (context.findActivity() == null) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(chooser)
         } catch (e: ActivityNotFoundException) {
-            toast(context, "Teilen ist auf diesem Gerät gerade nicht möglich.")
+            toast(context, ComponentStrings.of(lang).shareUnavailable)
         }
     }
 
-    private fun openExternal(context: Context, uri: Uri) {
+    private fun openExternal(context: Context, uri: Uri, lang: AppLanguage) {
         val view = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
         if (context.findActivity() == null) view.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(view)
         } catch (e: ActivityNotFoundException) {
-            toast(context, "Kein Browser gefunden, der den Link öffnen kann.")
+            toast(context, ComponentStrings.of(lang).noBrowser)
         } catch (e: SecurityException) {
-            toast(context, "Kein Browser gefunden, der den Link öffnen kann.")
+            toast(context, ComponentStrings.of(lang).noBrowser)
         }
     }
 
@@ -116,13 +119,14 @@ class LinkActions internal constructor(
     private val context: Context,
     @param:ColorInt private val toolbarColor: Int,
     private val darkTheme: Boolean,
+    private val lang: AppLanguage,
 ) {
     /** In-app browser (Custom Tab). */
-    fun open(url: String) = Links.openInApp(context, url, toolbarColor, darkTheme)
+    fun open(url: String) = Links.openInApp(context, url, toolbarColor, darkTheme, lang)
 
     fun openArticle(item: NewsItem) = open(item.url)
 
-    fun shareArticle(item: NewsItem) = Links.share(context, item.headline, item.url)
+    fun shareArticle(item: NewsItem) = Links.share(context, item.headline, item.url, lang)
 }
 
 /** [LinkActions] whose Custom Tab toolbar matches the current theme's surface color. */
@@ -132,5 +136,6 @@ fun rememberLinkActions(): LinkActions {
     val surface = MaterialTheme.colorScheme.surface
     val toolbarColor = surface.toArgb()
     val darkTheme = surface.luminance() < 0.5f
-    return remember(context, toolbarColor, darkTheme) { LinkActions(context, toolbarColor, darkTheme) }
+    val lang = LocalAppLanguage.current
+    return remember(context, toolbarColor, darkTheme, lang) { LinkActions(context, toolbarColor, darkTheme, lang) }
 }

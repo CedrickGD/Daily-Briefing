@@ -169,7 +169,7 @@ class UpdateCheckerTest {
             installed = SemVer(1, 0, 0),
         )
         val release = (result as UpdateCheckResult.Available).release
-        assertEquals("Morgenbriefing 2.0.0", release.title)
+        assertEquals("Daily Briefing 2.0.0", release.title)
         assertEquals("", release.notes)
         assertNull(release.publishedAt)
         assertEquals(0L, release.apk.size)

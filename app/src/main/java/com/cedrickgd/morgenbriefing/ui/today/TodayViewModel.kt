@@ -206,7 +206,7 @@ class TodayViewModel(
             ensureActive()
             val snapshot = result.getOrNull()
             if (snapshot != null) {
-                val ui = withContext(Dispatchers.Default) { snapshot.toWeatherUi() }
+                val ui = withContext(Dispatchers.Default) { snapshot.toWeatherUi(container.settings.current().language) }
                 ensureActive()
                 _state.update { it.copy(weather = ui, weatherLoading = false, weatherFailed = false) }
             } else {
@@ -258,7 +258,7 @@ class TodayViewModel(
         val cached = attempt { container.weather.cached() }
             .onFailure { Log.w(TAG, "Cached weather unavailable", it) }
             .getOrNull() ?: return
-        val ui = withContext(Dispatchers.Default) { cached.toWeatherUi() }
+        val ui = withContext(Dispatchers.Default) { cached.toWeatherUi(container.settings.current().language) }
         // Never overwrite a live result that arrived first.
         _state.update { if (it.weather == null) it.copy(weather = ui) else it }
     }

@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.ui.settings
 
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import androidx.compose.runtime.Immutable
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
@@ -70,7 +71,7 @@ internal fun placeWeather(
         PlaceWeather(
             emoji = Condition.fromCode(current.code).emoji(current.isDay),
             temp = Fmt.temp(current.temp),
-            caption = Fmt.relative(snapshot.fetchedAt, now) ?: "zuletzt",
+            caption = Fmt.relative(snapshot.fetchedAt, now, AppLanguage.DE) ?: "zuletzt",
         )
     } else {
         null

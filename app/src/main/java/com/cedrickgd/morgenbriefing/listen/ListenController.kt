@@ -18,12 +18,23 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.cedrickgd.morgenbriefing.MorgenbriefingApp
+import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.ListenStrings
 import com.cedrickgd.morgenbriefing.util.findActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.abs
 
@@ -32,7 +43,10 @@ enum class ListenIssue {
     /** No text-to-speech engine on the device, or it refused to start. */
     NO_ENGINE,
 
-    /** The engine has neither a German voice nor one for the device language (voice data missing). */
+    /**
+     * The engine has neither a voice for the news language ([ListenState.voiceLanguage]) nor one
+     * for the device language (voice data missing).
+     */
     MISSING_VOICE,
 }
 
@@ -60,10 +74,12 @@ data class ListenState(
     /** Set after a failed attempt; cleared by [ListenController.stop]. */
     val issue: ListenIssue? = null,
     /**
-     * The engine only has a German voice that needs the internet (no offline voice installed):
-     * reading works now, but not offline — the mini player offers to install one.
+     * The engine only has a voice for the news language that needs the internet (no offline
+     * voice installed): reading works now, but not offline — the mini player offers to install one.
      */
     val onlineVoiceOnly: Boolean = false,
+    /** ISO 639-1 code of the language the voice reads in (the news edition's language). */
+    val voiceLanguage: String = NewsEdition.GERMANY.language,
 ) {
     /** Something is loaded: reading, preparing or paused. */
     val active: Boolean get() = speaking || paused
@@ -73,10 +89,11 @@ data class ListenState(
 }
 
 /**
- * "Zuhören" (docs/AI.md, Vorlesen): reads headline, lead, body and sources of an article with
- * Android TextToSpeech (German; the device language if there is no German voice), in chunks
- * below `getMaxSpeechInputLength()`. One instance per process (`context.listen`), safe to call
- * from any thread (everything runs on the main thread).
+ * "Zuhören" (Vorlesen): reads headline, lead, body and sources of an article with Android
+ * TextToSpeech in chunks below `getMaxSpeechInputLength()`. The voice speaks the language of the
+ * news edition from the settings (the articles are written in it; the device language if there
+ * is no such voice), see [ListenLanguages]. One instance per process (`context.listen`), safe to
+ * call from any thread (everything runs on the main thread).
  *
  * * The engine is created on the first [play] and shut down after a minute without reading.
  * * Audio focus: any loss pauses; a short one (call, navigation prompt) resumes by itself.
@@ -95,8 +112,17 @@ class ListenController(context: Context) {
 
     private enum class Engine { OFF, STARTING, READY }
 
+    /** The news edition (voice language) and interface language, kept in sync with the settings. */
+    private var edition: NewsEdition = NewsEdition.GERMANY
+    private var uiLanguage: AppLanguage = AppLanguage.system()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     private var tts: TextToSpeech? = null
     private var engine = Engine.OFF
+
+    /** The locale the ready engine was set to; a different edition re-picks the voice. */
+    private var engineLocale: Locale? = null
 
     /** The ready engine reads German only with a network voice (see [ListenState.onlineVoiceOnly]). */
     private var voiceOnlineOnly = false
@@ -165,6 +191,24 @@ class ListenController(context: Context) {
     /** The running script reads the article's full text (the reader), not only the teaser. */
     private var scriptIsFull = false
 
+    init {
+        val settings = (app as? MorgenbriefingApp)?.container?.settings?.settings
+        if (settings != null) {
+            scope.launch {
+                settings
+                    .map { it.edition to it.language }
+                    .distinctUntilChanged()
+                    .catch { Log.w(TAG, "Settings unavailable; reading with the last known languages", it) }
+                    .collect { (newEdition, newLanguage) ->
+                        edition = newEdition
+                        uiLanguage = newLanguage
+                        // An idle hint names the voice of the current edition.
+                        mutableState.update { if (it.active) it else it.copy(voiceLanguage = newEdition.language) }
+                    }
+            }
+        }
+    }
+
     /**
      * Reads [item] aloud — with [body] (the reader's full text) the whole article, else headline
      * and teaser. Another article that is being read is replaced; the same article keeps reading
@@ -179,7 +223,7 @@ class ListenController(context: Context) {
             return@onMain
         }
         val maxLength = runCatching { TextToSpeech.getMaxSpeechInputLength() }.getOrDefault(ListenScript.DEFAULT_MAX_LENGTH)
-        val next = ListenScript.from(item, maxLength, body)
+        val next = ListenScript.from(item, ListenLanguages.scriptLanguage(uiLanguage, edition), maxLength, body)
         if (next.isEmpty) return@onMain
 
         session++
@@ -192,13 +236,19 @@ class ListenController(context: Context) {
         mutableState.value = ListenState(
             available = true,
             speaking = true,
-            title = item.headline.trim().ifEmpty { "Artikel" },
+            title = item.headline.trim().ifEmpty { ListenStrings.of(uiLanguage).articleFallback },
             articleKey = key,
             articleUrl = item.url,
             preparing = engine != Engine.READY,
             onlineVoiceOnly = voiceOnlineOnly,
             estimatedSeconds = next.estimatedSeconds,
+            voiceLanguage = edition.language,
         )
+        // The edition changed since the engine started: switch the voice before reading.
+        if (engine == Engine.READY && engineLocale !in ListenLanguages.voiceLocales(edition)) {
+            val engineTts = tts
+            if (engineTts == null || !applyVoice(engineTts)) return@onMain
+        }
         begin()
     }
 
@@ -220,7 +270,7 @@ class ListenController(context: Context) {
         resumeOnFocusGain = false
         abandonFocus()
         unregisterNoisy()
-        mutableState.value = ListenState(available = mutableState.value.available)
+        mutableState.value = ListenState(available = mutableState.value.available, voiceLanguage = edition.language)
         scheduleRelease()
     }
 
@@ -246,7 +296,7 @@ class ListenController(context: Context) {
             }
         }
         if (!launched) {
-            Toast.makeText(app, "Installiere eine deutsche Stimme unter Einstellungen › Sprachausgabe.", Toast.LENGTH_LONG).show()
+            Toast.makeText(app, ListenStrings.of(uiLanguage).installVoiceHint(edition.language), Toast.LENGTH_LONG).show()
         }
         onMain {
             stop()
@@ -306,7 +356,7 @@ class ListenController(context: Context) {
         resumeOnFocusGain = false
         abandonFocus()
         unregisterNoisy()
-        mutableState.value = ListenState(available = true)
+        mutableState.value = ListenState(available = true, voiceLanguage = edition.language)
         scheduleRelease()
     }
 
@@ -398,12 +448,7 @@ class ListenController(context: Context) {
             Log.w(TAG, "TextToSpeech init failed ($status)")
             return failEngine(ListenIssue.NO_ENGINE)
         }
-        val language = pickLanguage(engineTts)
-        if (language == null) {
-            Log.w(TAG, "No German (or device language) voice available")
-            return failEngine(ListenIssue.MISSING_VOICE)
-        }
-        voiceOnlineOnly = !preferOfflineVoice(engineTts, language)
+        if (!applyVoice(engineTts)) return
         try {
             engineTts.setAudioAttributes(AudioFocus.attributes)
             engineTts.setOnUtteranceProgressListener(progressListener)
@@ -423,11 +468,32 @@ class ListenController(context: Context) {
         }
     }
 
-    /** German first (spec: Locale.GERMAN), else the device language; null when neither has a voice. */
+    /**
+     * Sets the engine to the voice of the current edition (see [pickLanguage]) and prefers an
+     * offline voice. False after failing the engine with [ListenIssue.MISSING_VOICE].
+     */
+    private fun applyVoice(engineTts: TextToSpeech): Boolean {
+        val language = pickLanguage(engineTts)
+        if (language == null) {
+            Log.w(TAG, "No voice for ${edition.language} (nor the device language) available")
+            failEngine(ListenIssue.MISSING_VOICE)
+            return false
+        }
+        engineLocale = language
+        voiceOnlineOnly = !preferOfflineVoice(engineTts, language)
+        mutableState.update { it.copy(onlineVoiceOnly = voiceOnlineOnly) }
+        return true
+    }
+
+    /**
+     * The edition's language in its country ("en-US"), else the plain language ("en"), else the
+     * device language; null when none of them has a voice.
+     */
     private fun pickLanguage(engineTts: TextToSpeech): Locale? {
-        if (setLanguage(engineTts, Locale.GERMAN) >= TextToSpeech.LANG_AVAILABLE) return Locale.GERMAN
+        val wanted = ListenLanguages.voiceLocales(edition)
+        wanted.firstOrNull { setLanguage(engineTts, it) >= TextToSpeech.LANG_AVAILABLE }?.let { return it }
         val fallback = Locale.getDefault()
-        if (fallback.language != Locale.GERMAN.language && setLanguage(engineTts, fallback) >= TextToSpeech.LANG_AVAILABLE) {
+        if (wanted.none { it.language == fallback.language } && setLanguage(engineTts, fallback) >= TextToSpeech.LANG_AVAILABLE) {
             return fallback
         }
         return null
@@ -480,7 +546,7 @@ class ListenController(context: Context) {
         resumeOnFocusGain = false
         abandonFocus()
         unregisterNoisy()
-        mutableState.value = ListenState(available = false, issue = issue)
+        mutableState.value = ListenState(available = false, issue = issue, voiceLanguage = edition.language)
     }
 
     private fun scheduleRelease() {
@@ -499,6 +565,7 @@ class ListenController(context: Context) {
         val old = tts
         tts = null
         engine = Engine.OFF
+        engineLocale = null
         engineGeneration++
         if (old != null) {
             try {

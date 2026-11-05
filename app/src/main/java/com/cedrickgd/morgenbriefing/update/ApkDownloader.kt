@@ -43,8 +43,8 @@ class ApkDownloader(
         .addNetworkInterceptor(TokenHostGuard(apiUrl.host))
         .build()
 
-    /** Where [release] ends up: `Morgenbriefing-{tag}.apk`. */
-    fun targetFile(release: ReleaseInfo): File = File(directory, "Morgenbriefing-${safeName(release.tag)}.apk")
+    /** Where [release] ends up: `DailyBriefing-{tag}.apk`. */
+    fun targetFile(release: ReleaseInfo): File = File(directory, "DailyBriefing-${safeName(release.tag)}.apk")
 
     /**
      * Downloads [release]'s APK and returns the finished file. A complete file from an earlier

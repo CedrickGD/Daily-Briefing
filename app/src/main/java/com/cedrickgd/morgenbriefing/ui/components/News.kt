@@ -31,6 +31,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cedrickgd.morgenbriefing.i18n.ComponentStrings
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.componentStrings
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
@@ -42,11 +45,13 @@ import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
  * @param stand "07:12" of the last fetch, or empty.
  */
 @Composable
-fun NewsSectionTitle(stand: String, modifier: Modifier = Modifier, title: String = "Deine Nachrichten") {
+fun NewsSectionTitle(stand: String, modifier: Modifier = Modifier, title: String = componentStrings().yourNews) {
     val colors = MaterialTheme.colorScheme
+    val language = LocalAppLanguage.current
+    val strings = ComponentStrings.of(language)
     Column(modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
         Text(
-            text = if (stand.isBlank()) "AKTUELL" else "AKTUELL · STAND $stand",
+            text = (if (stand.isBlank()) strings.latest else strings.latestAsOf(stand)).uppercase(language.locale),
             style = MaterialTheme.typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
             color = headerOverlineColor(colors.onSurfaceVariant, colors.onSurface),
         )
@@ -115,7 +120,7 @@ fun NoticeBanner(
  * @param line the small info line; blank lines are left out.
  */
 @Composable
-fun PageFooter(line: String, modifier: Modifier = Modifier, farewell: String = "Bis später") {
+fun PageFooter(line: String, modifier: Modifier = Modifier, farewell: String = componentStrings().farewell) {
     val colors = MaterialTheme.colorScheme
     Column(
         modifier = modifier

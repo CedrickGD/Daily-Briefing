@@ -8,6 +8,7 @@ import com.cedrickgd.morgenbriefing.domain.Condition
 import com.cedrickgd.morgenbriefing.domain.Fmt
 import com.cedrickgd.morgenbriefing.domain.WeatherInsights
 import com.cedrickgd.morgenbriefing.domain.WeatherWarning
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 
 private const val TAG = "WeatherUi"
 
@@ -30,17 +31,20 @@ data class WeatherUi(
     val clothing: ClothingAdvice?,
     /** `HH:mm` of the fetch, for "aktualisiert 05:31"; empty if unknown. */
     val updatedClock: String,
+    /** The language the texts above are written in; re-derive when the interface language changes. */
+    val language: AppLanguage,
 )
 
-/** Builds the [WeatherUi]; pure apart from logging, safe to call on any thread. */
-fun WeatherSnapshot.toWeatherUi(): WeatherUi = WeatherUi(
+/** Builds the [WeatherUi] with texts in [lang]; pure apart from logging, safe to call on any thread. */
+fun WeatherSnapshot.toWeatherUi(lang: AppLanguage): WeatherUi = WeatherUi(
     snapshot = this,
     condition = Condition.fromCode(home.current.code),
     isDay = home.current.isDay,
-    headline = derive("headline", "") { WeatherInsights.headline(this) },
-    warnings = derive("warnings", emptyList()) { WeatherInsights.warnings(this) },
-    clothing = derive<ClothingAdvice?>("clothing", null) { WeatherInsights.clothing(this) },
+    headline = derive("headline", "") { WeatherInsights.headline(this, lang) },
+    warnings = derive("warnings", emptyList()) { WeatherInsights.warnings(this, lang) },
+    clothing = derive<ClothingAdvice?>("clothing", null) { WeatherInsights.clothing(this, lang) },
     updatedClock = derive("clock", "") { Fmt.clock(fetchedAt) },
+    language = lang,
 )
 
 private inline fun <T> derive(what: String, fallback: T, block: () -> T): T =

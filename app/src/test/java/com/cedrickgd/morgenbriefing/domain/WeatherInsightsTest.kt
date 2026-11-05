@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.domain
 
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.data.model.CurrentConditions
 import com.cedrickgd.morgenbriefing.data.model.HomeWeather
 import com.cedrickgd.morgenbriefing.data.model.Place
@@ -30,7 +31,7 @@ class WeatherInsightsTest {
 
     @Test
     fun `foggy autumn headline mentions fog and the golden October`() {
-        val headline = WeatherInsights.headline(foggyAutumn)
+        val headline = WeatherInsights.headline(foggyAutumn, AppLanguage.DE)
         assertContains(headline, "Nebel")
         assertContains(headline, "goldener Oktober mit 21°")
         assertTrue(headline.endsWith("."))
@@ -39,7 +40,7 @@ class WeatherInsightsTest {
 
     @Test
     fun `foggy autumn home note covers darkness, dryness and visibility`() {
-        val note = WeatherInsights.homeNote(foggyAutumn)
+        val note = WeatherInsights.homeNote(foggyAutumn, AppLanguage.DE)
         assertEquals(
             "Noch dunkel, Sonnenaufgang 07:18 – neblig, aber die nächsten Stunden trocken. " +
                 "Sicht stellenweise nur gut 1 km – beim Fahren Licht an.",
@@ -51,13 +52,13 @@ class WeatherInsightsTest {
     fun `foggy autumn day summary`() {
         assertEquals(
             "Von 13° auf 21°, ab Mittag Sonne pur, kein Regen, kaum Wind.",
-            WeatherInsights.daySummary(foggyAutumn),
+            WeatherInsights.daySummary(foggyAutumn, AppLanguage.DE),
         )
     }
 
     @Test
     fun `foggy autumn clothing - jacket to t-shirt, sunglasses, no umbrella`() {
-        val advice = WeatherInsights.clothing(foggyAutumn)
+        val advice = WeatherInsights.clothing(foggyAutumn, AppLanguage.DE)
         assertEquals(listOf("Jacke", "T-Shirt", "Sonnenbrille"), advice.labels())
         assertFalse(advice.labels().contains("Schirm"))
         assertEquals(
@@ -70,7 +71,7 @@ class WeatherInsightsTest {
 
     @Test
     fun `foggy autumn warns about fog only`() {
-        val warnings = WeatherInsights.warnings(foggyAutumn)
+        val warnings = WeatherInsights.warnings(foggyAutumn, AppLanguage.DE)
         assertEquals(1, warnings.size)
         val fog = warnings.single()
         assertEquals(WarningLevel.CAUTION, fog.level)
@@ -82,13 +83,13 @@ class WeatherInsightsTest {
     @Test
     fun `foggy autumn notification with headlines`() {
         val headlines = listOf("Euro fällt auf Jahrestief", "KI-Taskforce startet", "Bundestag beschließt Haushalt", "Vierte Meldung")
-        val n = WeatherInsights.notification(foggyAutumn, headlines)
+        val n = WeatherInsights.notification(foggyAutumn, headlines, AppLanguage.DE)
         assertEquals("🌫️ 9° in Bad Düben · gefühlt 8°", n.title)
         assertEquals("Leipzig 10–18 Uhr: 13→21°, sonnig · Morgens Jacke, ab Mittag T-Shirt, kein Schirm", n.text)
         val lines = n.bigText.lines()
         assertEquals(4, lines.size)
-        assertEquals(WeatherInsights.homeNote(foggyAutumn), lines[0])
-        assertEquals("Leipzig 10–18 Uhr: " + WeatherInsights.daySummary(foggyAutumn), lines[1])
+        assertEquals(WeatherInsights.homeNote(foggyAutumn, AppLanguage.DE), lines[0])
+        assertEquals("Leipzig 10–18 Uhr: " + WeatherInsights.daySummary(foggyAutumn, AppLanguage.DE), lines[1])
         // The first advised item (the jacket) leads the clothing line.
         assertEquals("🧥 Morgens Jacke, ab Mittag T-Shirt, kein Schirm.", lines[2])
         // At most three headlines.
@@ -97,19 +98,19 @@ class WeatherInsightsTest {
 
     @Test
     fun `notification without headlines points to the app`() {
-        val none = WeatherInsights.notification(foggyAutumn, emptyList())
+        val none = WeatherInsights.notification(foggyAutumn, emptyList(), AppLanguage.DE)
         assertEquals("📰 Die Nachrichten warten in der App.", none.bigText.lines().last())
     }
 
     @Test
     fun `notification without weather still works`() {
-        val n = WeatherInsights.notification(null, listOf("Euro fällt auf Jahrestief"))
-        assertEquals("☀️ Dein Morgenbriefing", n.title)
+        val n = WeatherInsights.notification(null, listOf("Euro fällt auf Jahrestief"), AppLanguage.DE)
+        assertEquals("☀️ Dein Daily Briefing", n.title)
         assertEquals("Euro fällt auf Jahrestief", n.text)
         assertTrue(n.bigText.lines().last().startsWith("📰 Euro fällt auf Jahrestief"))
 
-        val empty = WeatherInsights.notification(null, emptyList())
-        assertEquals("☀️ Dein Morgenbriefing", empty.title)
+        val empty = WeatherInsights.notification(null, emptyList(), AppLanguage.DE)
+        assertEquals("☀️ Dein Daily Briefing", empty.title)
         assertTrue(empty.text.isNotBlank())
         assertEquals("📰 Die Nachrichten warten in der App.", empty.bigText.lines().last())
     }
@@ -118,7 +119,7 @@ class WeatherInsightsTest {
 
     @Test
     fun `freezing rain is a severe ice warning listed first`() {
-        val warnings = WeatherInsights.warnings(frostyWinter)
+        val warnings = WeatherInsights.warnings(frostyWinter, AppLanguage.DE)
         val first = warnings.first()
         assertEquals(WarningLevel.SEVERE, first.level)
         assertEquals("Glatteis", first.title)
@@ -128,7 +129,7 @@ class WeatherInsightsTest {
 
     @Test
     fun `frosty winter clothing - full winter gear with gloves and sturdy shoes`() {
-        val advice = WeatherInsights.clothing(frostyWinter)
+        val advice = WeatherInsights.clothing(frostyWinter, AppLanguage.DE)
         val labels = advice.labels()
         assertTrue(labels.toString(), "Handschuhe" in labels)
         assertTrue(labels.toString(), "Wintermantel" in labels)
@@ -142,7 +143,7 @@ class WeatherInsightsTest {
 
     @Test
     fun `frosty winter home note warns about black ice`() {
-        val note = WeatherInsights.homeNote(frostyWinter)
+        val note = WeatherInsights.homeNote(frostyWinter, AppLanguage.DE)
         assertContains(note, "Noch dunkel, Sonnenaufgang 08:08")
         assertContains(note, "gefrierender Regen")
         assertContains(note, "spiegelglatt")
@@ -150,17 +151,17 @@ class WeatherInsightsTest {
 
     @Test
     fun `frosty winter headline mentions ice and never shows minus zero`() {
-        val headline = WeatherInsights.headline(frostyWinter)
+        val headline = WeatherInsights.headline(frostyWinter, AppLanguage.DE)
         assertContains(headline, "Glatteis")
         assertNotContains(headline, "-0°")
-        assertEquals("Von 0° auf 2°, Regen bis 12 Uhr, danach trocken.", WeatherInsights.daySummary(frostyWinter))
+        assertEquals("Von 0° auf 2°, Regen bis 12 Uhr, danach trocken.", WeatherInsights.daySummary(frostyWinter, AppLanguage.DE))
     }
 
     // --- Summer heat with thunder ---------------------------------------------------------------
 
     @Test
     fun `summer heat warns about heat, thunder and UV`() {
-        val warnings = WeatherInsights.warnings(summerThunder)
+        val warnings = WeatherInsights.warnings(summerThunder, AppLanguage.DE)
         val titles = warnings.map { it.title }
         assertTrue(titles.toString(), "Hitze" in titles)
         assertTrue(titles.toString(), "Gewitter" in titles)
@@ -172,7 +173,7 @@ class WeatherInsightsTest {
 
     @Test
     fun `summer heat clothing recommends sunscreen`() {
-        val advice = WeatherInsights.clothing(summerThunder)
+        val advice = WeatherInsights.clothing(summerThunder, AppLanguage.DE)
         val labels = advice.labels()
         assertTrue(labels.toString(), "Sonnencreme" in labels)
         assertTrue(labels.toString(), "kurze Hose" in labels)
@@ -183,25 +184,25 @@ class WeatherInsightsTest {
     @Test
     fun `the notification's clothing line starts with the first advised item`() {
         listOf(foggyAutumn, frostyWinter, summerThunder, rainyWindy, tomorrowEvening).forEach { snapshot ->
-            val advice = WeatherInsights.clothing(snapshot)
-            val line = WeatherInsights.notification(snapshot, emptyList()).bigText.lines()
+            val advice = WeatherInsights.clothing(snapshot, AppLanguage.DE)
+            val line = WeatherInsights.notification(snapshot, emptyList(), AppLanguage.DE).bigText.lines()
                 .single { it.endsWith(advice.short) }
             assertEquals("${advice.items.first().emoji} ${advice.short}", line)
         }
         // A T-shirt day keeps the T-shirt.
-        assertEquals("👕", WeatherInsights.clothingMarker(WeatherInsights.clothing(summerThunder)))
+        assertEquals("👕", WeatherInsights.clothingMarker(WeatherInsights.clothing(summerThunder, AppLanguage.DE)))
         // Without any item the T-shirt stands in.
         assertEquals("👕", WeatherInsights.clothingMarker(ClothingAdvice(items = emptyList(), text = "", short = "")))
     }
 
     @Test
     fun `summer heat headline and summary name the thunderstorm hour`() {
-        assertEquals("Heiß bis 31°, ab 16 Uhr Gewitter.", WeatherInsights.headline(summerThunder))
+        assertEquals("Heiß bis 31°, ab 16 Uhr Gewitter.", WeatherInsights.headline(summerThunder, AppLanguage.DE))
         assertEquals(
             "Von 26° auf 31°, erst viel Sonne, ab 16 Uhr Gewitter möglich.",
-            WeatherInsights.daySummary(summerThunder),
+            WeatherInsights.daySummary(summerThunder, AppLanguage.DE),
         )
-        val n = WeatherInsights.notification(summerThunder, emptyList())
+        val n = WeatherInsights.notification(summerThunder, emptyList(), AppLanguage.DE)
         assertTrue(n.text, n.text.startsWith("Leipzig 10–18 Uhr: 26→31°, Gewitter ab 16 Uhr · "))
     }
 
@@ -209,7 +210,7 @@ class WeatherInsightsTest {
 
     @Test
     fun `rainy windy day - rain jacket instead of umbrella`() {
-        val advice = WeatherInsights.clothing(rainyWindy)
+        val advice = WeatherInsights.clothing(rainyWindy, AppLanguage.DE)
         val labels = advice.labels()
         assertTrue(labels.toString(), "Regenjacke" in labels)
         assertFalse(labels.toString(), "Schirm" in labels)
@@ -222,12 +223,12 @@ class WeatherInsightsTest {
 
     @Test
     fun `rainy windy day headline and summary`() {
-        assertEquals("Windig und nass – heute lieber Kapuze.", WeatherInsights.headline(rainyWindy))
+        assertEquals("Windig und nass – heute lieber Kapuze.", WeatherInsights.headline(rainyWindy, AppLanguage.DE))
         assertEquals(
             "Von 12° auf 14°, Regen fast den ganzen Tag, bis 80 %, Böen bis 50 km/h.",
-            WeatherInsights.daySummary(rainyWindy),
+            WeatherInsights.daySummary(rainyWindy, AppLanguage.DE),
         )
-        val note = WeatherInsights.homeNote(rainyWindy)
+        val note = WeatherInsights.homeNote(rainyWindy, AppLanguage.DE)
         assertContains(note, "es regnet")
     }
 
@@ -235,16 +236,16 @@ class WeatherInsightsTest {
 
     @Test
     fun `tomorrow's window gets the Morgen prefix`() {
-        val headline = WeatherInsights.headline(tomorrowEvening)
+        val headline = WeatherInsights.headline(tomorrowEvening, AppLanguage.DE)
         assertTrue(headline, headline.startsWith("Morgen: "))
         assertEquals("Morgen: Grauer Tag bei 15°, ab 14 Uhr Regen.", headline)
-        val n = WeatherInsights.notification(tomorrowEvening, emptyList())
+        val n = WeatherInsights.notification(tomorrowEvening, emptyList(), AppLanguage.DE)
         assertTrue(n.text, n.text.startsWith("Leipzig morgen 10–18 Uhr: 12→15°, Regen ab 14 Uhr · "))
     }
 
     @Test
     fun `tomorrow's clothing ignores tonight's dry conditions but sees the rain`() {
-        val advice = WeatherInsights.clothing(tomorrowEvening)
+        val advice = WeatherInsights.clothing(tomorrowEvening, AppLanguage.DE)
         // Jacket in the morning, lighter jacket later: nothing extra to carry, but the umbrella.
         assertEquals(listOf("Jacke", "Schirm"), advice.labels())
         assertContains(advice.text, "ab 14 Uhr wird's nass")
@@ -260,8 +261,8 @@ class WeatherInsightsTest {
                 nextHours = foggyAutumn.home.nextHours.map { it.copy(code = 1, visibilityM = 30_000.0) },
             ),
         )
-        assertTrue(WeatherInsights.warnings(calm).isEmpty())
-        assertEquals("Sonnig, die nächsten Stunden bleibt's trocken.", WeatherInsights.homeNote(calm))
+        assertTrue(WeatherInsights.warnings(calm, AppLanguage.DE).isEmpty())
+        assertEquals("Sonnig, die nächsten Stunden bleibt's trocken.", WeatherInsights.homeNote(calm, AppLanguage.DE))
     }
 
     @Test
@@ -272,7 +273,7 @@ class WeatherInsightsTest {
                 maxGustKmh = 85.0,
             ),
         )
-        val warnings = WeatherInsights.warnings(stormy)
+        val warnings = WeatherInsights.warnings(stormy, AppLanguage.DE)
         assertEquals("Sturm", warnings.first().title)
         assertEquals(WarningLevel.SEVERE, warnings.first().level)
         assertEquals(warnings.map { it.title }.distinct(), warnings.map { it.title })
@@ -283,13 +284,13 @@ class WeatherInsightsTest {
         val heavy = rainyWindy.copy(
             day = rainyWindy.day.copy(hours = rainyWindy.day.hours.mapIndexed { i, h -> if (i == 4) h.copy(code = 82, precipMm = 7.4) else h }),
         )
-        val rain = WeatherInsights.warnings(heavy).first { it.title == "Starkregen" }
+        val rain = WeatherInsights.warnings(heavy, AppLanguage.DE).first { it.title == "Starkregen" }
         assertEquals("Ab 14 Uhr bis 7 l/m² pro Stunde – Unterführungen und Senken meiden.", rain.text)
 
         val scorcher = summerThunder.copy(
             day = summerThunder.day.copy(hours = summerThunder.day.hours.map { it.copy(temp = it.temp + 5) }),
         )
-        val heat = WeatherInsights.warnings(scorcher).first { it.title.contains("Hitze") }
+        val heat = WeatherInsights.warnings(scorcher, AppLanguage.DE).first { it.title.contains("Hitze") }
         assertEquals(WarningLevel.SEVERE, heat.level)
         assertEquals("Starke Hitze", heat.title)
     }
@@ -306,12 +307,12 @@ class WeatherInsightsTest {
                 sunrise = "07:55",
             ),
         )
-        val ice = WeatherInsights.warnings(frosty).first { it.emoji == "🧊" }
+        val ice = WeatherInsights.warnings(frosty, AppLanguage.DE).first { it.emoji == "🧊" }
         assertEquals("Glätte", ice.title)
         assertEquals(WarningLevel.CAUTION, ice.level)
         assertContains(ice.text, "Reifglätte")
-        assertContains(WeatherInsights.homeNote(frosty), "Glättegefahr bei -1°")
-        assertTrue(WeatherInsights.headline(frosty), WeatherInsights.headline(frosty).startsWith("Frostiger Start, später "))
+        assertContains(WeatherInsights.homeNote(frosty, AppLanguage.DE), "Glättegefahr bei -1°")
+        assertTrue(WeatherInsights.headline(frosty, AppLanguage.DE), WeatherInsights.headline(frosty, AppLanguage.DE).startsWith("Frostiger Start, später "))
     }
 
     @Test
@@ -333,7 +334,7 @@ class WeatherInsightsTest {
             ),
             day = WeatherFixtures.day("2026-12-02", hours),
         )
-        val headline = WeatherInsights.headline(snowing)
+        val headline = WeatherInsights.headline(snowing, AppLanguage.DE)
         assertNotContains(headline, "später")
         assertContains(headline, "Schnee")
         assertEquals("Frostiger Start, dazu Schnee bei -1°.", headline)
@@ -347,29 +348,29 @@ class WeatherInsightsTest {
             codes = List(9) { 3 },
         )
         val s = summerThunder.copy(day = WeatherFixtures.day("2026-09-01", hours, uvMax = 2.0))
-        val advice = WeatherInsights.clothing(s)
+        val advice = WeatherInsights.clothing(s, AppLanguage.DE)
         assertEquals(listOf("T-Shirt", "Jacke"), advice.labels())
         assertContains(advice.text, "Ab 16 Uhr wird's kühler – dann Jacke oder Fleece.")
         assertEquals("Erst T-Shirt, ab 16 Uhr Jacke, kein Schirm.", advice.short)
-        assertTrue(WeatherInsights.daySummary(s).startsWith("Erst 22°, später nur noch 10°"))
+        assertTrue(WeatherInsights.daySummary(s, AppLanguage.DE).startsWith("Erst 22°, später nur noch 10°"))
     }
 
     @Test
     fun `flat temperatures read as um`() {
         val hours = WeatherFixtures.window("2026-11-21", 10, temps = List(9) { 8.0 }, codes = List(9) { 3 })
         val s = foggyAutumn.copy(day = WeatherFixtures.day("2026-11-21", hours))
-        assertTrue(WeatherInsights.daySummary(s).startsWith("Um die 8°, meist grau"))
-        val text = WeatherInsights.notification(s, emptyList()).text
+        assertTrue(WeatherInsights.daySummary(s, AppLanguage.DE).startsWith("Um die 8°, meist grau"))
+        val text = WeatherInsights.notification(s, emptyList(), AppLanguage.DE).text
         assertTrue(text, text.startsWith("Leipzig 10–18 Uhr: um 8°, bedeckt · "))
     }
 
     @Test
     fun `empty day window does not crash`() {
         val empty = foggyAutumn.copy(day = foggyAutumn.day.copy(hours = emptyList()))
-        assertTrue(WeatherInsights.headline(empty).isNotBlank())
-        assertTrue(WeatherInsights.daySummary(empty).startsWith("Zwischen "))
-        assertTrue(WeatherInsights.clothing(empty).items.size in 2..5)
-        assertNotNull(WeatherInsights.notification(empty, emptyList()))
+        assertTrue(WeatherInsights.headline(empty, AppLanguage.DE).isNotBlank())
+        assertTrue(WeatherInsights.daySummary(empty, AppLanguage.DE).startsWith("Zwischen "))
+        assertTrue(WeatherInsights.clothing(empty, AppLanguage.DE).items.size in 2..5)
+        assertNotNull(WeatherInsights.notification(empty, emptyList(), AppLanguage.DE))
     }
 
     // --- Invariants over many synthetic days --------------------------------------------------
@@ -416,13 +417,13 @@ class WeatherInsightsTest {
 
         for (s in all) {
             val ctx = "${s.day.date} ${s.home.current} ${s.day.hours.map { it.code }}"
-            val headline = WeatherInsights.headline(s)
+            val headline = WeatherInsights.headline(s, AppLanguage.DE)
             assertTrue("headline too long: $headline | $ctx", headline.length <= 60)
             assertTrue(headline, headline.endsWith("."))
             assertTrue(headline, headline.first().isUpperCase())
             if (s.day.isTomorrow) assertTrue(headline, headline.startsWith("Morgen: "))
 
-            val clothing = WeatherInsights.clothing(s)
+            val clothing = WeatherInsights.clothing(s, AppLanguage.DE)
             assertTrue("short too long: ${clothing.short} | $ctx", clothing.short.wordCount() <= 8)
             assertTrue("items: ${clothing.items} | $ctx", clothing.items.size in 2..5)
             assertEquals(clothing.items.map { it.label }.distinct(), clothing.items.map { it.label })
@@ -433,16 +434,16 @@ class WeatherInsightsTest {
                 clothing.items.any { it.label == "Schirm" } && clothing.items.any { it.label == "Regenjacke" },
             )
 
-            val note = WeatherInsights.homeNote(s)
+            val note = WeatherInsights.homeNote(s, AppLanguage.DE)
             val noteSentences = Regex("[.!?](\\s|$)").findAll(note).count()
             assertTrue("home note: $note", noteSentences in 1..2)
 
-            val warnings = WeatherInsights.warnings(s)
+            val warnings = WeatherInsights.warnings(s, AppLanguage.DE)
             assertEquals(warnings.map { it.title }.distinct(), warnings.map { it.title })
             assertEquals(warnings.sortedByDescending { it.level.ordinal }, warnings)
 
-            val n = WeatherInsights.notification(s, emptyList())
-            val texts = listOf(headline, note, WeatherInsights.daySummary(s), clothing.text, clothing.short, n.title, n.text, n.bigText) +
+            val n = WeatherInsights.notification(s, emptyList(), AppLanguage.DE)
+            val texts = listOf(headline, note, WeatherInsights.daySummary(s, AppLanguage.DE), clothing.text, clothing.short, n.title, n.text, n.bigText) +
                 warnings.map { it.text }
             for (text in texts) {
                 assertNotContains(text, "-0°")

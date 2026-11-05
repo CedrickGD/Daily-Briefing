@@ -87,7 +87,7 @@ class ApkDownloaderTest {
         val progress = mutableListOf<DownloadProgress>()
         val file = downloader().download(release(apk.size.toLong())) { progress += it }
 
-        assertEquals("Morgenbriefing-v1.2.0.apk", file.name)
+        assertEquals("DailyBriefing-v1.2.0.apk", file.name)
         assertArrayEquals(apk, file.readBytes())
         assertEquals(listOf(file), directory.listFiles()!!.toList())
 
@@ -168,9 +168,9 @@ class ApkDownloaderTest {
     @Test
     fun `old downloads are deleted and a complete file is reused`() = runTest {
         directory.mkdirs()
-        val stale = File(directory, "Morgenbriefing-v1.1.0.apk").apply { writeText("old") }
-        val broken = File(directory, "Morgenbriefing-v1.2.0.apk.part").apply { writeText("half") }
-        val complete = File(directory, "Morgenbriefing-v1.2.0.apk").apply { writeBytes(ByteArray(5) { 1 }) }
+        val stale = File(directory, "DailyBriefing-v1.1.0.apk").apply { writeText("old") }
+        val broken = File(directory, "DailyBriefing-v1.2.0.apk.part").apply { writeText("half") }
+        val complete = File(directory, "DailyBriefing-v1.2.0.apk").apply { writeBytes(ByteArray(5) { 1 }) }
 
         val file = downloader().download(release(size = 5)) { }
 

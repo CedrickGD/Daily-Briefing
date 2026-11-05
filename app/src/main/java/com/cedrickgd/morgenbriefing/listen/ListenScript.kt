@@ -1,7 +1,30 @@
 package com.cedrickgd.morgenbriefing.listen
 
+import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.news.HtmlText
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.ListenStrings
+import java.util.Locale
+
+/**
+ * Which languages "Zuhören" speaks. The articles are read in the language of the news edition
+ * (that is the language they are written in), so the voice follows the edition, not the
+ * interface. The voice's own few words ("Quelle: …") must match the voice: in the interface
+ * language when it is the edition's language, else in the edition's language when the app
+ * speaks it, else in English.
+ */
+internal object ListenLanguages {
+    /** Language of the script's connecting words for an [edition] read by a user of [ui]. */
+    fun scriptLanguage(ui: AppLanguage, edition: NewsEdition): AppLanguage = when {
+        ui.code == edition.language -> ui
+        else -> AppLanguage.fromCode(edition.language) ?: AppLanguage.EN
+    }
+
+    /** The voice for [edition]: its language in its country ("en-US"), a plain language as fallback. */
+    fun voiceLocales(edition: NewsEdition): List<Locale> =
+        listOf(edition.locale, Locale.forLanguageTag(edition.language)).distinct()
+}
 
 /**
  * One utterance handed to TextToSpeech, followed by [pauseAfterMs] of silence (a natural break
@@ -60,10 +83,11 @@ internal class ListenScript(val parts: List<SpeechPart>) {
         const val PAUSE_SECTION_MS = 650
 
         /**
-         * Builds the script for [item]. [maxLength] is the engine's hard limit per utterance
-         * (`TextToSpeech.getMaxSpeechInputLength()`); every part stays below it.
+         * Builds the script for [item]; the voice's own words ("Quelle: …") are in [lang] (see
+         * [ListenLanguages.scriptLanguage]). [maxLength] is the engine's hard limit per
+         * utterance (`TextToSpeech.getMaxSpeechInputLength()`); every part stays below it.
          */
-        fun from(item: NewsItem, maxLength: Int = DEFAULT_MAX_LENGTH, body: String? = null): ListenScript {
+        fun from(item: NewsItem, lang: AppLanguage, maxLength: Int = DEFAULT_MAX_LENGTH, body: String? = null): ListenScript {
             val builder = Builder(maxLength)
             builder.add(item.headline, PAUSE_HEADLINE_MS)
             // The reader's full text (paragraphs separated by blank lines) replaces the teaser.
@@ -73,7 +97,7 @@ internal class ListenScript(val parts: List<SpeechPart>) {
             } else {
                 paragraphs.forEachIndexed { i, paragraph -> builder.add(paragraph, if (i == 0) PAUSE_LEAD_MS else PAUSE_PARAGRAPH_MS) }
             }
-            sourcesSentence(item)?.let { sentence ->
+            sourcesSentence(item, lang)?.let { sentence ->
                 builder.breathe(PAUSE_SECTION_MS)
                 builder.add(sentence, 0)
             }
@@ -85,11 +109,11 @@ internal class ListenScript(val parts: List<SpeechPart>) {
 
         private val PARAGRAPH_BREAK = Regex("\\n\\s*\\n")
 
-        /** "Quelle: tagesschau." — null when no source is known. */
-        internal fun sourcesSentence(item: NewsItem): String? {
+        /** "Quelle: tagesschau." ("Source: BBC.") — null when no source is known. */
+        internal fun sourcesSentence(item: NewsItem, lang: AppLanguage): String? {
             val name = cleanForSpeech(item.source)
             if (name.isEmpty()) return null
-            return "Quelle: $name."
+            return ListenStrings.of(lang).sourceSentence(name)
         }
     }
 
@@ -135,14 +159,19 @@ private const val CLOSERS = "\"'“”„«»‘’)]"
 private val CLAUSE_BREAKS = charArrayOf(';', ':', ',', '–', '—')
 
 /**
- * German abbreviations whose dot does not end a sentence ("z. B.", "Dr.", "bzw."); lowercase,
- * without the dot. Single letters and numbers ("am 3. Oktober") are handled separately.
+ * Abbreviations whose dot does not end a sentence ("z. B.", "Dr.", "bzw.", "Sen.", "Dott.");
+ * lowercase, without the dot. German first, then the ones English, French, Spanish and Italian
+ * news use in running text. Single letters and numbers ("am 3. Oktober") are handled separately.
  */
 private val ABBREVIATIONS = setOf(
     "abs", "abt", "allg", "bspw", "bzgl", "bzw", "ca", "chr", "co", "corp", "dr", "etc", "evtl",
     "fr", "geb", "gegr", "gem", "gest", "ggf", "hr", "inc", "inkl", "insb", "jh", "jhd", "jr",
     "kap", "lt", "ltd", "max", "mind", "min", "mio", "mr", "mrd", "mrs", "ms", "nr", "prof", "sog",
     "sr", "st", "std", "str", "tel", "usw", "vgl", "vs", "zb", "zt", "ziff",
+    // English
+    "approx", "col", "dept", "gen", "gov", "rep", "rev", "sen", "sgt",
+    // French, Spanish, Italian
+    "mme", "mlle", "sra", "srta", "dña", "avv", "dott", "ing",
 )
 
 /**

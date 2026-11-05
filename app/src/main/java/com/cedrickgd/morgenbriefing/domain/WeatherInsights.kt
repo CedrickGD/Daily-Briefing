@@ -2,11 +2,23 @@ package com.cedrickgd.morgenbriefing.domain
 
 import com.cedrickgd.morgenbriefing.data.model.DayWeather
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.BeforeRain
+import com.cedrickgd.morgenbriefing.i18n.Connector
+import com.cedrickgd.morgenbriefing.i18n.DryDay
+import com.cedrickgd.morgenbriefing.i18n.DrySky
+import com.cedrickgd.morgenbriefing.i18n.FormatStrings
+import com.cedrickgd.morgenbriefing.i18n.ThunderBase
+import com.cedrickgd.morgenbriefing.i18n.VisibilityBand
+import com.cedrickgd.morgenbriefing.i18n.WeatherStrings
 import kotlin.math.max
 
 /**
- * Pure, deterministic German texts derived from a [WeatherSnapshot]. No Android APIs,
- * fully unit-tested in WeatherInsightsTest.
+ * Pure, deterministic texts derived from a [WeatherSnapshot] in the interface language. No
+ * Android APIs, fully unit-tested in WeatherInsightsTest.
+ *
+ * This object decides WHAT to say (thresholds, order, which facts matter); [WeatherStrings]
+ * decides how each language says it.
  *
  * Wording varies a little from day to day (chosen by a hash of the window's date), but the
  * same snapshot always produces the same texts.
@@ -17,13 +29,14 @@ object WeatherInsights {
     private const val CLOTHING_MARKER = "👕"
 
     /** Friendly one-liner for the serif headline, e.g. "Nebel zum Start, dann goldener Oktober mit 21°." */
-    fun headline(s: WeatherSnapshot): String {
+    fun headline(s: WeatherSnapshot, lang: AppLanguage): String {
+        val w = WeatherStrings.of(lang)
         val day = DayFacts(s.day)
         val seed = s.day.date
-        val prefix = if (s.day.isTomorrow) "Morgen: " else ""
-        val start = if (s.day.isTomorrow) tomorrowStart(day, seed) else todayStart(HomeFacts(s.home), day, seed)
+        val prefix = if (s.day.isTomorrow) w.tomorrowPrefix else ""
+        val start = if (s.day.isTomorrow) tomorrowStart(w, day, seed) else todayStart(w, HomeFacts(s.home), day, seed)
 
-        val all = dayCandidates(day, start, seed).mapNotNull { candidate ->
+        val all = dayCandidates(w, day, start, seed).mapNotNull { candidate ->
             when (candidate) {
                 is Candidate.Alone -> candidate.text
                 is Candidate.After -> start?.let { "${it.text}, ${candidate.text}" }
@@ -33,49 +46,51 @@ object WeatherInsights {
         val texts = if (prefix.isEmpty()) all else all.filter { ':' !in it }.ifEmpty { all }
         val chosen = texts.firstOrNull { prefix.length + it.length + 1 <= HEADLINE_MAX }
             ?: texts.minByOrNull { it.length }
-            ?: "Dein Wetter für heute"
+            ?: w.headlineFallback
         return "$prefix$chosen."
     }
 
     /** One or two sentences about stepping outside at home right now. */
-    fun homeNote(s: WeatherSnapshot): String {
+    fun homeNote(s: WeatherSnapshot, lang: AppLanguage): String {
+        val w = WeatherStrings.of(lang)
         val home = HomeFacts(s.home)
         val light = when {
-            home.beforeSunrise ->
-                if (home.sunrise != null) "Noch dunkel, Sonnenaufgang ${Fmt.clock(s.home.sunrise)}" else "Noch dunkel"
-            home.afterSunset -> "Schon dunkel"
+            home.beforeSunrise -> w.stillDark(if (home.sunrise != null) Fmt.clock(s.home.sunrise) else null)
+            home.afterSunset -> w.alreadyDark
             else -> null
         }
-        val weather = weatherClause(home)
+        val weather = weatherClause(w, home)
         val first = (if (light != null) "$light – $weather" else weather.capitalizeFirst()) + "."
-        return listOfNotNull(first, hazardSentence(home)).joinToString(" ")
+        return listOfNotNull(first, hazardSentence(w, home)).joinToString(" ")
     }
 
     /** One sentence about the day window, e.g. "Von 13° auf 21°, ab Mittag Sonne pur, trocken." */
-    fun daySummary(s: WeatherSnapshot): String {
+    fun daySummary(s: WeatherSnapshot, lang: AppLanguage): String {
+        val w = WeatherStrings.of(lang)
         val day = DayFacts(s.day)
-        val parts = mutableListOf(temperatureTrend(day))
-        skyPhrase(day)?.let(parts::add)
-        parts += precipitationPhrase(day)
-        windPhrase(day)?.let(parts::add)
+        val parts = mutableListOf(temperatureTrend(w, day))
+        skyPhrase(w, day)?.let(parts::add)
+        parts += precipitationPhrase(w, day)
+        windPhrase(w, day)?.let(parts::add)
         return parts.joinToString(", ").capitalizeFirst() + "."
     }
 
-    fun clothing(s: WeatherSnapshot): ClothingAdvice = ClothingAdvisor.advise(s)
+    fun clothing(s: WeatherSnapshot, lang: AppLanguage): ClothingAdvice = ClothingAdvisor.advise(s, lang)
 
     /** Fog/visibility, ice, storm, thunder, heavy rain, heat, strong UV — empty on a calm day. */
-    fun warnings(s: WeatherSnapshot): List<WeatherWarning> {
+    fun warnings(s: WeatherSnapshot, lang: AppLanguage): List<WeatherWarning> {
+        val w = WeatherStrings.of(lang)
         val home = HomeFacts(s.home)
         val day = DayFacts(s.day)
         val out = mutableListOf<WeatherWarning>()
 
-        iceWarning(home, day)?.let(out::add)
-        fogWarning(home)?.let(out::add)
-        gustWarning(home, day)?.let(out::add)
-        thunderWarning(home, day)?.let(out::add)
-        heavyRainWarning(home, day)?.let(out::add)
-        heatWarning(day)?.let(out::add)
-        uvWarning(s.day)?.let(out::add)
+        iceWarning(w, home, day)?.let(out::add)
+        fogWarning(w, lang, home)?.let(out::add)
+        gustWarning(w, home, day)?.let(out::add)
+        thunderWarning(w, home, day)?.let(out::add)
+        heavyRainWarning(w, home, day)?.let(out::add)
+        heatWarning(w, day)?.let(out::add)
+        uvWarning(w, s.day)?.let(out::add)
 
         // Stable sort: within a level the order above (most pressing for the morning) is kept.
         return out.distinctBy { it.title }.sortedByDescending { it.level.ordinal }
@@ -85,27 +100,31 @@ object WeatherInsights {
      * Text for the morning notification. [headlines] are the top stories of the morning (may be
      * empty when nothing could be fetched).
      */
-    fun notification(s: WeatherSnapshot?, headlines: List<String>): NotificationText {
-        val news = newsLine(headlines)
+    fun notification(s: WeatherSnapshot?, headlines: List<String>, lang: AppLanguage): NotificationText {
+        val w = WeatherStrings.of(lang)
+        val news = newsLine(w, headlines)
         if (s == null) {
-            val text = headlines.firstOrNull()?.trim()?.takeIf { it.isNotBlank() }
-                ?: "Wetter gerade nicht erreichbar – öffne die App für ein Update."
-            val bigText = listOf("🌦️ Das Wetter ließ sich gerade nicht laden – in der App gibt's gleich ein Update.", news)
-            return NotificationText(title = "☀️ Dein Morgenbriefing", text = text, bigText = bigText.joinToString("\n"))
+            val text = headlines.firstOrNull()?.trim()?.takeIf { it.isNotBlank() } ?: w.noWeatherText
+            val bigText = listOf(w.noWeatherBigText, news)
+            return NotificationText(title = w.noWeatherTitle, text = text, bigText = bigText.joinToString("\n"))
         }
 
         val current = s.home.current
         val condition = Condition.fromCode(current.code)
-        val title = "${condition.emoji(current.isDay)} ${Fmt.temp(current.temp)} in ${s.home.place.name} · " +
-            "gefühlt ${Fmt.temp(current.feels)}"
+        val title = w.notificationTitle(
+            emoji = condition.emoji(current.isDay),
+            temp = Fmt.temp(current.temp),
+            place = s.home.place.name,
+            feels = Fmt.temp(current.feels),
+        )
 
         val day = DayFacts(s.day)
-        val window = windowLabel(s.day)
-        val clothing = clothing(s)
-        val text = "$window: ${shortTrend(day)}, ${conditionLabel(day)} · ${clothing.short.removeSuffix(".")}"
+        val window = w.window(s.day.place.name, s.day.isTomorrow, s.day.startHour, s.day.endHour)
+        val clothing = clothing(s, lang)
+        val text = "$window: ${shortTrend(w, day)}, ${conditionLabel(w, day)} · ${clothing.short.removeSuffix(".")}"
         val bigText = listOf(
-            homeNote(s),
-            "$window: ${daySummary(s)}",
+            homeNote(s, lang),
+            "$window: ${daySummary(s, lang)}",
             "${clothingMarker(clothing)} ${clothing.short}",
             news,
         ).joinToString("\n")
@@ -125,7 +144,7 @@ object WeatherInsights {
     // ---------------------------------------------------------------------------------------
 
     /** How the morning starts; [connector] links it to the rest of the day ("dann", "später"). */
-    private data class Start(val kind: StartKind, val text: String, val connector: String)
+    private data class Start(val kind: StartKind, val text: String, val connector: Connector)
 
     private enum class StartKind { ICE, FOG, WET, FROST }
 
@@ -138,207 +157,160 @@ object WeatherInsights {
         data class After(val text: String) : Candidate
     }
 
-    private fun todayStart(home: HomeFacts, day: DayFacts, seed: String): Start? {
+    /** "<connector> <phrase>"; a language may leave a connector empty ("Frosty start, snow at -1°"). */
+    private fun joined(w: WeatherStrings, connector: Connector, phrase: String): String {
+        val word = w.connector(connector)
+        return if (word.isEmpty()) phrase else "$word $phrase"
+    }
+
+    private fun todayStart(w: WeatherStrings, home: HomeFacts, day: DayFacts, seed: String): Start? {
         // Snowing (or raining) already on a wet day: the wet day is no "later" — "Frostiger Start,
         // dazu Schnee bei -1°", not "…, später Schnee …" while it snows.
-        val frostConnector = if (home.wetNow && day.isWetDay) "dazu" else "später"
+        val frostConnector = if (home.wetNow && day.isWetDay) Connector.ALSO else Connector.LATER
         return when {
-            home.freezingRain -> Start(StartKind.ICE, "Glatteis am Morgen", "später")
-            home.condition == Condition.FOG -> Start(StartKind.FOG, pick(seed, 1, listOf("Nebel zum Start", "Erst Nebel")), "dann")
+            home.freezingRain -> Start(StartKind.ICE, w.iceStart, Connector.LATER)
+            home.condition == Condition.FOG -> Start(StartKind.FOG, pick(seed, 1, w.fogStarts), Connector.THEN)
             home.wetNow && !day.isWetDay && day.thunder == null ->
-                Start(StartKind.WET, if (home.condition.isWintry) "Schnee zum Start" else "Nass zum Start", "danach")
-            home.now.temp <= -6 -> Start(StartKind.FROST, "Eisiger Start", frostConnector)
-            home.now.temp <= 0 -> Start(StartKind.FROST, "Frostiger Start", frostConnector)
+                Start(StartKind.WET, if (home.condition.isWintry) w.snowStart else w.wetStart, Connector.AFTERWARDS)
+            home.now.temp <= -6 -> Start(StartKind.FROST, w.icyStart, frostConnector)
+            home.now.temp <= 0 -> Start(StartKind.FROST, w.frostyStart, frostConnector)
             else -> null
         }
     }
 
     /** For tomorrow's window the current evening says nothing; look at the window's first hour. */
-    private fun tomorrowStart(day: DayFacts, seed: String): Start? {
+    private fun tomorrowStart(w: WeatherStrings, day: DayFacts, seed: String): Start? {
         val first = day.hours.firstOrNull() ?: return null
         return when {
-            first.condition == Condition.FOG ->
-                Start(StartKind.FOG, pick(seed, 1, listOf("Nebel zum Start", "Erst Nebel")), "dann")
-            first.temp <= 0 -> Start(StartKind.FROST, "Frostiger Start", "später")
+            first.condition == Condition.FOG -> Start(StartKind.FOG, pick(seed, 1, w.fogStarts), Connector.THEN)
+            first.temp <= 0 -> Start(StartKind.FROST, w.frostyStart, Connector.LATER)
             else -> null
         }
     }
 
     /** Candidates ordered by preference; the first one that fits [HEADLINE_MAX] wins. */
-    private fun dayCandidates(d: DayFacts, start: Start?, seed: String): List<Candidate> {
+    private fun dayCandidates(w: WeatherStrings, d: DayFacts, start: Start?, seed: String): List<Candidate> {
         val t = Fmt.temp(d.maxTemp)
-        val conn = start?.connector ?: "dann"
+        val conn = start?.connector ?: Connector.THEN
         val out = mutableListOf<Candidate>()
         val thunder = d.thunder
         when {
             thunder != null -> {
-                val (base, baseLower) = when {
-                    d.maxTemp >= 30 -> "Heiß bis $t" to "heiß bis $t"
-                    d.maxTemp >= 25 -> "Schwül bis $t" to "schwül bis $t"
-                    else -> "Wechselhaft bei $t" to "wechselhaft bei $t"
-                }
+                val base = w.thunderBase(
+                    when {
+                        d.maxTemp >= 30 -> ThunderBase.HOT
+                        d.maxTemp >= 25 -> ThunderBase.SULTRY
+                        else -> ThunderBase.CHANGEABLE
+                    },
+                    t,
+                )
                 if (thunder !== d.hours.first()) {
-                    val h = thunder.hour
-                    out += Candidate.After("$conn $baseLower, ab $h Uhr Gewitter")
-                    out += Candidate.After("ab $h Uhr Gewitter")
-                    out += Candidate.Alone("$base, ab $h Uhr Gewitter")
-                    out += Candidate.Alone("Ab $h Uhr Gewitter")
+                    val from = w.thunderFrom(thunder.hour)
+                    out += Candidate.After(joined(w, conn, "$base, $from"))
+                    out += Candidate.After(from)
+                    out += Candidate.Alone("$base, $from".capitalizeFirst())
+                    out += Candidate.Alone(from.capitalizeFirst())
                 } else {
-                    out += Candidate.After("$conn Gewitter bei bis zu $t")
-                    out += Candidate.Alone("Gewittriger Tag bei bis zu $t")
-                    out += Candidate.Alone("Gewittrig bei $t")
+                    out += Candidate.After(joined(w, conn, w.thunderUpTo(t)))
+                    out += Candidate.Alone(w.thunderyDay(t))
+                    out += Candidate.Alone(w.thunderyAt(t))
                 }
             }
             d.freezing != null -> {
-                out += Candidate.After("$conn gefrierender Regen")
-                out += Candidate.Alone("Gefrierender Regen – heute wird's glatt")
-                out += Candidate.Alone("Achtung, Eisregen")
+                out += Candidate.After(joined(w, conn, w.freezingRainPhrase))
+                out += Candidate.Alone(w.freezingRainSlippery)
+                out += Candidate.Alone(w.freezingRainAlert)
             }
             d.isWetDay && d.maxGust >= 50 -> {
-                if (d.wetKind.isWintry) {
-                    out += Candidate.After("$conn Schneetreiben")
-                    out += Candidate.Alone("Schneetreiben – heute lieber Kapuze")
-                    out += Candidate.Alone("Schneetreiben bei $t")
-                } else {
-                    out += Candidate.After("$conn windig und nass")
-                    out += Candidate.Alone("Windig und nass – heute lieber Kapuze")
-                    out += Candidate.Alone("Windig und nass bei $t")
-                }
+                val wintry = d.wetKind.isWintry
+                out += Candidate.After(joined(w, conn, w.blowing(wintry)))
+                out += Candidate.Alone(w.blowingHood(wintry))
+                out += Candidate.Alone(w.blowingAt(wintry, t))
             }
-            d.isWetDay -> wetCandidates(d, conn, t, seed, out)
-            else -> dryCandidates(d, start, conn, t, seed, out)
+            d.isWetDay -> wetCandidates(w, d, conn, t, seed, out)
+            else -> dryCandidates(w, d, start, conn, t, seed, out)
         }
         return out
     }
 
-    private fun wetCandidates(d: DayFacts, conn: String, t: String, seed: String, out: MutableList<Candidate>) {
-        val noun = precipNoun(d.wetKind)
+    private fun wetCandidates(
+        w: WeatherStrings,
+        d: DayFacts,
+        conn: Connector,
+        t: String,
+        seed: String,
+        out: MutableList<Candidate>,
+    ) {
+        val kind = d.wetKind
         val firstWet = d.firstWet
         val dryFrom = d.dryFrom
         when {
             d.rainStartsLater && firstWet != null -> {
-                val h = firstWet.hour
                 val before = dominantCondition(d.hours.takeWhile { it !== firstWet }.map { it.condition })
                 val base = when {
-                    before?.isSunny == true -> "Erst freundlich"
-                    before == Condition.PARTLY_CLOUDY -> "Erst trocken"
-                    else -> "Grauer Tag"
+                    before?.isSunny == true -> BeforeRain.FRIENDLY
+                    before == Condition.PARTLY_CLOUDY -> BeforeRain.DRY
+                    else -> BeforeRain.GREY
                 }
-                out += Candidate.After("ab $h Uhr $noun")
-                out += Candidate.Alone("$base bei $t, ab $h Uhr $noun")
-                out += Candidate.Alone("$base, ab $h Uhr $noun")
-                out += Candidate.Alone("Ab $h Uhr $noun")
+                val from = w.precipFrom(kind, firstWet.hour)
+                out += Candidate.After(from)
+                out += Candidate.Alone("${w.beforeRainAt(base, t)}, $from")
+                out += Candidate.Alone("${w.beforeRain(base)}, $from")
+                out += Candidate.Alone(from.capitalizeFirst())
             }
             dryFrom != null -> {
-                out += Candidate.After("$conn $noun, ab $dryFrom Uhr trocken")
-                out += Candidate.After("ab $dryFrom Uhr trocken")
-                out += Candidate.Alone("Erst $noun, ab $dryFrom Uhr trocken bei $t")
-                out += Candidate.Alone("Erst $noun, ab $dryFrom Uhr trocken")
+                out += Candidate.After(joined(w, conn, w.precipThenDry(kind, dryFrom)))
+                out += Candidate.After(w.dryFrom(dryFrom))
+                out += Candidate.Alone(w.precipUntilDryHeadline(kind, dryFrom, t).capitalizeFirst())
+                out += Candidate.Alone(w.precipUntilDryHeadline(kind, dryFrom, null).capitalizeFirst())
             }
             else -> {
-                out += Candidate.After("$conn $noun bei $t")
-                val alone = when (d.wetKind) {
-                    Condition.DRIZZLE -> listOf("Nieselgrau bei höchstens $t", "Trüb mit Niesel bei $t")
-                    Condition.SHOWERS -> listOf("Schauerwetter bei bis zu $t", "Immer wieder Schauer bei $t")
-                    Condition.HEAVY_RAIN -> listOf("Kräftiger Regen bei höchstens $t", "Sehr nass bei $t")
-                    Condition.SNOW -> listOf("Schneetag bei höchstens $t", "Winterlich mit Schnee bei $t")
-                    Condition.SNOW_SHOWERS -> listOf("Immer wieder Schneeschauer bei $t", "Schneeschauer bei $t")
-                    else -> listOf("Regnerischer Tag bei höchstens $t", "Nass und grau bei höchstens $t")
-                }
+                out += Candidate.After(joined(w, conn, w.precipAt(kind, t)))
+                val alone = w.wetDay(kind, t)
                 val first = pick(seed, 2, alone)
                 out += Candidate.Alone(first)
                 alone.filter { it != first }.forEach { out += Candidate.Alone(it) }
-                out += Candidate.Alone(noun.capitalizeFirst())
+                out += Candidate.Alone(w.precipName(kind).capitalizeFirst())
             }
         }
     }
 
     private fun dryCandidates(
+        w: WeatherStrings,
         d: DayFacts,
         start: Start?,
-        conn: String,
+        conn: Connector,
         t: String,
         seed: String,
         out: MutableList<Candidate>,
     ) {
         val month = d.month
-        val after: List<String>
-        val alone: List<String>
-        when {
-            d.maxTemp >= 30 -> {
-                after = listOf("$conn heiß bis $t")
-                alone = listOf("Hitze bis $t – ab in den Schatten", "Heiß bei bis zu $t")
-            }
-            d.mostlySunny && d.maxTemp >= 25 -> {
-                after = listOf("$conn Sommer pur mit $t", "$conn sommerlich bei $t")
-                alone = if (d.allSunny && !d.showersPossible) {
-                    listOf("Sommer pur: bis $t und kaum eine Wolke", "Sommerlich bei bis zu $t")
-                } else {
-                    listOf("Sommerlich mit viel Sonne bei $t", "Sommerlich bei bis zu $t")
-                }
-            }
-            month != null && month in 9..11 && d.mostlySunny && d.maxTemp >= 15 -> {
-                val name = if (month == 10) "goldener Oktober" else "goldener Herbst"
-                after = listOf("$conn $name mit $t")
-                alone = listOf("${name.capitalizeFirst()}: Sonne satt bei $t", "${name.capitalizeFirst()} mit $t")
-            }
-            month != null && month in 3..5 && d.mostlySunny && d.maxTemp >= 15 -> {
-                after = listOf("$conn frühlingshaft bei $t")
-                alone = listOf("Frühling pur: Sonne bei bis zu $t", "Frühlingshaft bei $t")
-            }
-            d.mostlySunny && d.maxTemp <= 2 -> {
-                after = listOf("$conn sonnig, aber kalt bei $t")
-                alone = listOf("Kalt, aber sonnig bei höchstens $t", "Sonnig, aber kalt bei $t")
-            }
-            d.mostlySunny && d.maxTemp < 15 -> {
-                after = listOf("$conn freundlich bei $t")
-                alone = listOf(
-                    pick(seed, 3, listOf("Freundlich und sonnig bei bis zu $t", "Viel Sonne bei kühlen $t")),
-                    "Freundlich bei $t",
-                )
-            }
-            d.mostlySunny -> {
-                after = listOf("$conn sonnig bei $t", "$conn viel Sonne bei $t")
-                alone = listOf(
-                    pick(seed, 4, listOf("Viel Sonne bei bis zu $t", "Sonnig und angenehm bei $t")),
-                    "Sonnig bei $t",
-                )
-            }
-            d.maxTemp < 0 -> {
-                after = if (start?.kind == StartKind.FROST) emptyList() else listOf("$conn Dauerfrost bei $t")
-                alone = listOf("Dauerfrost bei höchstens $t", "Eisig bei $t")
-            }
-            d.main == Condition.FOG -> {
-                if (start?.kind == StartKind.FOG) {
-                    after = emptyList()
-                    alone = listOf("Zäher Nebel, kaum mehr als $t", "Neblig-trüb bei $t")
-                } else {
-                    after = listOf("$conn trüb bei $t")
-                    alone = listOf("Trüber Nebeltag bei höchstens $t", "Neblig-trüb bei $t")
-                }
-            }
-            d.main == Condition.OVERCAST -> {
-                after = listOf("$conn grau bei $t")
-                alone = listOf(
-                    pick(seed, 5, listOf("Grauer Tag bei höchstens $t", "Grau in grau bei bis zu $t")),
-                    "Grau bei $t",
-                )
-            }
-            d.main.isWet -> {
-                after = listOf("$conn wechselhaft bei $t")
-                alone = listOf("Wechselhaft bei bis zu $t", "Wechselhaft bei $t")
-            }
-            else -> {
-                after = listOf("$conn locker bewölkt bei $t")
-                alone = listOf(
-                    pick(seed, 6, listOf("Mal Sonne, mal Wolken bei bis zu $t", "Sonne und Wolken im Wechsel, bis $t")),
-                    "Wolkig mit Sonne bei $t",
-                )
-            }
+        val kind = when {
+            d.maxTemp >= 30 -> DryDay.HOT
+            d.mostlySunny && d.maxTemp >= 25 -> if (d.allSunny && !d.showersPossible) DryDay.SUMMER_CLEAR else DryDay.SUMMER
+            month != null && month in 9..11 && d.mostlySunny && d.maxTemp >= 15 ->
+                if (month == 10) DryDay.GOLDEN_OCTOBER else DryDay.GOLDEN_AUTUMN
+            month != null && month in 3..5 && d.mostlySunny && d.maxTemp >= 15 -> DryDay.SPRING
+            d.mostlySunny && d.maxTemp <= 2 -> DryDay.SUNNY_COLD
+            d.mostlySunny && d.maxTemp < 15 -> DryDay.SUNNY_COOL
+            d.mostlySunny -> DryDay.SUNNY
+            d.maxTemp < 0 -> DryDay.PERMAFROST
+            d.main == Condition.FOG -> if (start?.kind == StartKind.FOG) DryDay.FOG_AGAIN else DryDay.FOG
+            d.main == Condition.OVERCAST -> DryDay.OVERCAST
+            d.main.isWet -> DryDay.CHANGEABLE
+            else -> DryDay.MIXED
         }
+        val phrases = w.dry(kind, t)
+        // A frosty start already says "Frost"; "…, später Dauerfrost" adds nothing.
+        val after = if (kind == DryDay.PERMAFROST && start?.kind == StartKind.FROST) {
+            emptyList()
+        } else {
+            phrases.after.map { joined(w, conn, it) }
+        }
+        val alone = listOf(pick(seed, PICK_SALT[kind] ?: 0, phrases.aloneChoice)) + phrases.aloneRest
 
         val tail = when {
-            d.showersPossible || d.main.isWet -> if (d.maxTemp <= 2) "vereinzelt Flocken" else "vereinzelt Schauer"
+            d.showersPossible || d.main.isWet -> w.isolated(snow = d.maxTemp <= 2)
             else -> null
         }
         if (tail != null) {
@@ -350,90 +322,72 @@ object WeatherInsights {
         alone.forEach { out += Candidate.Alone(it) }
     }
 
+    /** Salt of the daily wording choice per dry kind (kept stable so the German texts never change). */
+    private val PICK_SALT = mapOf(DryDay.SUNNY_COOL to 3, DryDay.SUNNY to 4, DryDay.OVERCAST to 5, DryDay.MIXED to 6)
+
     // ---------------------------------------------------------------------------------------
     // Home note
     // ---------------------------------------------------------------------------------------
 
-    private fun weatherClause(home: HomeFacts): String {
+    private fun weatherClause(w: WeatherStrings, home: HomeFacts): String {
         val soon = home.wetSoon
         return when {
-            home.wetNow -> {
-                val verb = when (home.condition) {
-                    Condition.DRIZZLE -> "es nieselt"
-                    Condition.SNOW, Condition.SNOW_SHOWERS -> "es schneit"
-                    Condition.FREEZING_RAIN -> "es fällt gefrierender Regen"
-                    Condition.THUNDER -> "es gewittert"
-                    Condition.HEAVY_RAIN -> "es schüttet"
-                    Condition.RAIN, Condition.SHOWERS -> "es regnet"
-                    else -> "es regnet leicht"
-                }
-                val dry = home.dryAgain
-                if (dry != null) "$verb, gegen ${dry.hour} Uhr wird's trocken" else "$verb und das hält erst mal an"
-            }
-            soon != null -> {
-                val time = if (soon === home.upcoming.firstOrNull()) "gleich" else "ab ${soon.hour} Uhr"
-                when (soon.condition) {
-                    Condition.FREEZING_RAIN -> "noch trocken, $time droht Eisregen"
-                    Condition.SNOW, Condition.SNOW_SHOWERS -> "noch trocken, $time kann's schneien"
-                    Condition.THUNDER -> "noch trocken, $time kann's gewittern"
-                    else -> "noch trocken, $time kann's regnen"
-                }
-            }
-            home.condition == Condition.FOG -> "neblig, aber die nächsten Stunden trocken"
-            home.condition == Condition.OVERCAST -> "grau, aber die nächsten Stunden trocken"
-            home.condition.isSunny && home.now.isDay -> "sonnig, die nächsten Stunden bleibt's trocken"
-            else -> "die nächsten Stunden bleibt's trocken"
+            home.wetNow -> w.wetNow(home.condition, home.dryAgain?.hour)
+            soon != null -> w.wetSoon(soon.condition, if (soon === home.upcoming.firstOrNull()) null else soon.hour)
+            home.condition == Condition.FOG -> w.dryNow(DrySky.FOG)
+            home.condition == Condition.OVERCAST -> w.dryNow(DrySky.GREY)
+            home.condition.isSunny && home.now.isDay -> w.dryNow(DrySky.SUNNY)
+            else -> w.dryNow(DrySky.PLAIN)
         }
     }
 
-    private fun hazardSentence(home: HomeFacts): String? {
+    private fun hazardSentence(w: WeatherStrings, home: HomeFacts): String? {
         val temp = Fmt.temp(home.now.temp)
         val visibility = home.visibilityNow
         return when {
             // The first sentence already says that freezing rain is falling right now.
-            home.freezingRain && home.condition == Condition.FREEZING_RAIN ->
-                "Gehwege und Straßen werden spiegelglatt – langsam machen und Zeit einplanen."
-            home.freezingRain -> "Gefrierender Regen in Sicht: Gehwege und Straßen werden spiegelglatt – langsam machen."
-            home.slippery -> "Glättegefahr bei $temp – vorsichtig auf Gehwegen und Brücken."
-            visibility != null && visibility < 2000 ->
-                "Sicht stellenweise nur ${visibilityPhrase(visibility)} – beim Fahren Licht an."
-            home.foggy -> "Nebel – beim Fahren Licht an und Abstand halten."
-            home.maxGust >= 45 -> "Böen bis ${roundHalfUp(home.maxGust)} km/h – der Schirm hat's heute schwer."
-            home.now.temp <= 0 -> "Frost bei $temp – Autoscheibe kratzen einplanen."
+            home.freezingRain && home.condition == Condition.FREEZING_RAIN -> w.iceNowHazard
+            home.freezingRain -> w.iceSoonHazard
+            home.slippery -> w.slipperyHazard(temp)
+            visibility != null && visibility < 2000 -> w.visibilityHazard(visibilityPhrase(w, visibility))
+            home.foggy -> w.fogHazard
+            home.maxGust >= 45 -> w.gustHazard(roundHalfUp(home.maxGust))
+            home.now.temp <= 0 -> w.frostHazard(temp)
             else -> null
         }
     }
 
     /** "gut 1 km", "etwa 400 m" — for running text. */
-    private fun visibilityPhrase(meters: Double): String = when {
-        meters < 100 -> "unter 100 m"
-        meters < 1000 -> "etwa ${roundHalfUp(meters / 100) * 100} m"
-        meters < 1250 -> "gut 1 km"
-        meters < 1750 -> "rund 1,5 km"
-        else -> "knapp 2 km"
+    private fun visibilityPhrase(w: WeatherStrings, meters: Double): String = when {
+        meters < 100 -> w.visibility(VisibilityBand.UNDER_100_M, 0)
+        meters < 1000 -> w.visibility(VisibilityBand.ABOUT_METERS, roundHalfUp(meters / 100) * 100)
+        meters < 1250 -> w.visibility(VisibilityBand.JUST_OVER_1_KM, 0)
+        meters < 1750 -> w.visibility(VisibilityBand.ABOUT_1_5_KM, 0)
+        else -> w.visibility(VisibilityBand.NEARLY_2_KM, 0)
     }
 
-    /** "~1 km", "~400 m", "~1,5 km" — for the compact warning text. */
-    private fun approxDistance(meters: Double): String {
+    /** "~1 km", "~400 m", "~1,5 km" ("~1.5 km") — for the compact warning text. */
+    private fun approxDistance(lang: AppLanguage, meters: Double): String {
         if (meters < 950) return "~${max(100, roundHalfUp(meters / 100) * 100)} m"
         val halfKm = roundHalfUp(meters / 500)
-        return if (halfKm % 2 == 0) "~${halfKm / 2} km" else "~${halfKm / 2},5 km"
+        val separator = FormatStrings.of(lang).decimalSeparator
+        return if (halfKm % 2 == 0) "~${halfKm / 2} km" else "~${halfKm / 2}${separator}5 km"
     }
 
     // ---------------------------------------------------------------------------------------
     // Day summary
     // ---------------------------------------------------------------------------------------
 
-    private fun temperatureTrend(d: DayFacts): String {
-        if (!d.hasHours) return "zwischen ${Fmt.temp(d.minTemp)} und ${Fmt.temp(d.maxTemp)}"
+    private fun temperatureTrend(w: WeatherStrings, d: DayFacts): String {
+        if (!d.hasHours) return w.between(Fmt.temp(d.minTemp), Fmt.temp(d.maxTemp))
         val start = roundHalfUp(d.startTemp)
         val peak = roundHalfUp(d.maxTemp)
         val end = roundHalfUp(d.endTemp)
         val peakIndex = d.hours.indexOf(d.peak)
         return when {
-            peak - start >= 2 && peakIndex > 0 -> "von ${Fmt.temp(d.startTemp)} auf ${Fmt.temp(d.maxTemp)}"
-            start - end >= 2 -> "erst ${Fmt.temp(d.startTemp)}, später nur noch ${Fmt.temp(d.endTemp)}"
-            else -> "um die ${Fmt.temp((d.minTemp + d.maxTemp) / 2)}"
+            peak - start >= 2 && peakIndex > 0 -> w.rising(Fmt.temp(d.startTemp), Fmt.temp(d.maxTemp))
+            start - end >= 2 -> w.falling(Fmt.temp(d.startTemp), Fmt.temp(d.endTemp))
+            else -> w.around(Fmt.temp((d.minTemp + d.maxTemp) / 2))
         }
     }
 
@@ -441,7 +395,7 @@ object WeatherInsights {
      * Sky development. On wet or thundery days only the dry stretch before the first event is
      * described, and only when it is sunny.
      */
-    private fun skyPhrase(d: DayFacts): String? {
+    private fun skyPhrase(w: WeatherStrings, d: DayFacts): String? {
         if (!d.hasHours) return null
         val firstEvent = listOfNotNull(
             d.thunder?.let(d.hours::indexOf),
@@ -451,64 +405,63 @@ object WeatherInsights {
             val before = d.conditions.take(firstEvent)
             return when {
                 before.size < 2 -> null
-                before.all { it == Condition.CLEAR } -> "erst Sonne pur"
-                before.count { it.isSunny } * 3 >= before.size * 2 -> "erst viel Sonne"
+                before.all { it == Condition.CLEAR } -> w.sunPureFirst
+                before.count { it.isSunny } * 3 >= before.size * 2 -> w.sunMuchFirst
                 else -> null
             }
         }
 
         val conditions = d.conditions
-        if (conditions.all { it == Condition.CLEAR }) return "Sonne pur"
-        if (conditions.all { it.isSunny }) return "viel Sonne"
+        if (conditions.all { it == Condition.CLEAR }) return w.sunPure
+        if (conditions.all { it.isSunny }) return w.sunMuch
 
         // Turning sunny: everything from index i on is sunny (at least two hours of it).
         val sunnyFrom = (1..conditions.size - 2).firstOrNull { i -> conditions.drop(i).all { it.isSunny } }
         if (sunnyFrom != null) {
-            val what = if (conditions.drop(sunnyFrom).all { it == Condition.CLEAR }) "Sonne pur" else "viel Sonne"
-            return "${fromHour(d.hours[sunnyFrom].hour)} $what"
+            val pure = conditions.drop(sunnyFrom).all { it == Condition.CLEAR }
+            return w.sunFrom(d.hours[sunnyFrom].hour, pure)
         }
         // Clouding over: a sunny start of at least two hours, then at least two hours without sun.
         val cloudsFrom = (2..conditions.size - 2).firstOrNull { j ->
             conditions.take(j).all { it.isSunny } && conditions.drop(j).none { it.isSunny }
         }
-        if (cloudsFrom != null) return "erst Sonne, ${fromHour(d.hours[cloudsFrom].hour)} Wolken"
-        if (conditions.count { it.isSunny } * 2 >= conditions.size) return "viel Sonne"
+        if (cloudsFrom != null) return w.sunThenClouds(d.hours[cloudsFrom].hour)
+        if (conditions.count { it.isSunny } * 2 >= conditions.size) return w.sunMuch
         return when (dominantCondition(conditions)) {
-            Condition.PARTLY_CLOUDY -> "mal Sonne, mal Wolken"
-            Condition.OVERCAST -> "meist grau"
-            Condition.FOG -> "trüb und neblig"
-            else -> "wechselhaft"
+            Condition.PARTLY_CLOUDY -> w.sunAndClouds
+            Condition.OVERCAST -> w.mostlyGrey
+            Condition.FOG -> w.dullFoggy
+            else -> w.changeable
         }
     }
 
-    private fun precipitationPhrase(d: DayFacts): String {
+    private fun precipitationPhrase(w: WeatherStrings, d: DayFacts): String {
         val thunder = d.thunder
         if (thunder != null) {
             val hail = d.hours.any { isHailCode(it.code) }
-            val what = if (hail) "Gewitter mit Hagel möglich" else "Gewitter möglich"
-            return if (thunder === d.hours.first()) what else "ab ${thunder.hour} Uhr $what"
+            return w.thunderPossible(hail, if (thunder === d.hours.first()) null else thunder.hour)
         }
         val firstWet = d.firstWet
         val dryFrom = d.dryFrom
         if (d.isWetDay && firstWet != null) {
-            val noun = precipNoun(d.wetKind)
+            val kind = d.wetKind
             return when {
-                d.rainStartsLater -> "$noun ab ${firstWet.hour} Uhr, bis ${d.maxPop} %"
-                dryFrom != null -> "$noun bis $dryFrom Uhr, danach trocken"
-                d.wetHours.size * 10 >= d.hours.size * 7 -> "$noun fast den ganzen Tag, bis ${d.maxPop} %"
-                else -> "immer wieder $noun, bis ${d.maxPop} %"
+                d.rainStartsLater -> w.precipFromPop(kind, firstWet.hour, d.maxPop)
+                dryFrom != null -> w.precipUntilDry(kind, dryFrom)
+                d.wetHours.size * 10 >= d.hours.size * 7 -> w.precipMostOfDay(kind, d.maxPop)
+                else -> w.precipOnAndOff(kind, d.maxPop)
             }
         }
         return when {
-            d.showersPossible -> if (d.maxTemp <= 1) "vereinzelt Schneeflocken möglich" else "einzelne Schauer möglich"
-            d.maxTemp <= 2 -> "trocken"
-            else -> "kein Regen"
+            d.showersPossible -> if (d.maxTemp <= 1) w.flakesPossible else w.showersPossible
+            d.maxTemp <= 2 -> w.dryWord
+            else -> w.noRain
         }
     }
 
-    private fun windPhrase(d: DayFacts): String? = when {
-        d.maxGust >= 50 -> "Böen bis ${roundHalfUp(d.maxGust)} km/h"
-        d.hasHours && d.maxGust < 20 && d.maxWind < 10 -> "kaum Wind"
+    private fun windPhrase(w: WeatherStrings, d: DayFacts): String? = when {
+        d.maxGust >= 50 -> w.gustsUpTo(roundHalfUp(d.maxGust))
+        d.hasHours && d.maxGust < 20 && d.maxWind < 10 -> w.littleWind
         else -> null
     }
 
@@ -516,156 +469,121 @@ object WeatherInsights {
     // Warnings
     // ---------------------------------------------------------------------------------------
 
-    private fun iceWarning(home: HomeFacts, day: DayFacts): WeatherWarning? {
+    private fun iceWarning(w: WeatherStrings, home: HomeFacts, day: DayFacts): WeatherWarning? {
         val dayFreezing = day.freezing
         val dayIcy = day.hours.firstOrNull { it.temp <= 1.0 && (it.isWetPoint() || (it.condition.isWet && it.pop >= 30)) }
         return when {
-            home.freezingRain -> WeatherWarning(
-                WarningLevel.SEVERE, "🧊", "Glatteis",
-                "Gefrierender Regen – Wege und Straßen werden spiegelglatt. Langsam machen und Zeit einplanen.",
-            )
-            dayFreezing != null -> WeatherWarning(
-                WarningLevel.SEVERE, "🧊", "Glatteis",
-                "Ab ${dayFreezing.hour} Uhr gefrierender Regen – Wege und Straßen werden spiegelglatt.",
-            )
+            home.freezingRain -> WeatherWarning(WarningLevel.SEVERE, "🧊", w.titleBlackIce, w.freezingRainNow)
+            dayFreezing != null -> WeatherWarning(WarningLevel.SEVERE, "🧊", w.titleBlackIce, w.freezingRainFrom(dayFreezing.hour))
             home.slippery -> {
                 val temp = Fmt.temp(home.now.temp)
                 val wet = home.wetNow || home.upcoming.any { it.temp <= 1.0 && it.isWetPoint() }
                 val text = if (wet) {
-                    val what = if (home.condition.isWintry || home.wintryPrecip) "Schnee" else "Nässe"
-                    "Bei $temp und $what können Wege und Straßen glatt sein – langsam machen."
+                    w.slipperyWet(temp, snow = home.condition.isWintry || home.wintryPrecip)
                 } else {
-                    "Bei $temp und feuchter Luft ist Reifglätte möglich, vor allem auf Brücken."
+                    w.hoarFrost(temp)
                 }
-                WeatherWarning(WarningLevel.CAUTION, "🧊", "Glätte", text)
+                WeatherWarning(WarningLevel.CAUTION, "🧊", w.titleSlippery, text)
             }
             dayIcy != null -> WeatherWarning(
-                WarningLevel.CAUTION, "🧊", "Glätte",
-                "Ab ${dayIcy.hour} Uhr ${precipNoun(dayIcy.condition.takeIf { it.isWet } ?: Condition.RAIN)} " +
-                    "bei ${Fmt.temp(dayIcy.temp)} – es kann glatt werden.",
+                WarningLevel.CAUTION, "🧊", w.titleSlippery,
+                w.icyFrom(dayIcy.hour, dayIcy.condition.takeIf { it.isWet } ?: Condition.RAIN, Fmt.temp(dayIcy.temp)),
             )
             else -> null
         }
     }
 
-    private fun fogWarning(home: HomeFacts): WeatherWarning? {
+    private fun fogWarning(w: WeatherStrings, lang: AppLanguage, home: HomeFacts): WeatherWarning? {
         val fogCode = home.condition == Condition.FOG || home.upcoming.any { it.condition == Condition.FOG }
         val visibility = home.minVisibility
         if (!fogCode && (visibility == null || visibility >= 1000)) return null
         val text = if (visibility != null && visibility < 2000) {
-            "Sicht teils nur ${approxDistance(visibility)} – Abblendlicht an und Abstand halten."
+            w.fogVisibility(approxDistance(lang, visibility))
         } else {
-            "Nebel möglich – Abblendlicht an und Abstand halten."
+            w.fogPossible
         }
-        return WeatherWarning(WarningLevel.CAUTION, "🌫️", "Nebel", text)
+        return WeatherWarning(WarningLevel.CAUTION, "🌫️", w.titleFog, text)
     }
 
-    private fun gustWarning(home: HomeFacts, day: DayFacts): WeatherWarning? {
+    private fun gustWarning(w: WeatherStrings, home: HomeFacts, day: DayFacts): WeatherWarning? {
         val gust = max(home.maxGust, day.maxGust)
         val kmh = roundHalfUp(gust)
         return when {
-            gust >= 80 -> WeatherWarning(
-                WarningLevel.SEVERE, "💨", "Sturm",
-                "Sturmböen bis $kmh km/h – Wald und Alleen meiden, lose Sachen sichern.",
-            )
-            gust >= 60 -> WeatherWarning(
-                WarningLevel.CAUTION, "💨", "Starke Böen",
-                "Böen bis $kmh km/h – lose Sachen sichern und auf herabfallende Äste achten.",
-            )
+            gust >= 80 -> WeatherWarning(WarningLevel.SEVERE, "💨", w.titleStorm, w.stormText(kmh))
+            gust >= 60 -> WeatherWarning(WarningLevel.CAUTION, "💨", w.titleGusts, w.gustText(kmh))
             else -> null
         }
     }
 
-    private fun thunderWarning(home: HomeFacts, day: DayFacts): WeatherWarning? {
+    private fun thunderWarning(w: WeatherStrings, home: HomeFacts, day: DayFacts): WeatherWarning? {
         val homeHour = home.upcoming.firstOrNull { it.condition == Condition.THUNDER }
         val dayHour = day.thunder
         val hail = (home.upcoming + day.hours).any { it.condition == Condition.THUNDER && isHailCode(it.code) } ||
             isHailCode(home.now.code)
-        val what = if (hail) "Gewitter mit Hagel möglich" else "Gewitter möglich"
         val text = when {
-            home.condition == Condition.THUNDER -> "Gerade Gewitter – bei Blitz und Donner lieber drinnen bleiben."
-            homeHour != null -> "Ab ${homeHour.hour} Uhr $what – bei Blitz und Donner rein ins Haus."
-            dayHour != null -> "Ab ${dayHour.hour} Uhr $what – bei Blitz und Donner rein ins Haus."
+            home.condition == Condition.THUNDER -> w.thunderNow
+            homeHour != null -> w.thunderWarning(homeHour.hour, hail)
+            dayHour != null -> w.thunderWarning(dayHour.hour, hail)
             else -> return null
         }
-        return WeatherWarning(WarningLevel.CAUTION, "⛈️", "Gewitter", text)
+        return WeatherWarning(WarningLevel.CAUTION, "⛈️", w.titleThunder, text)
     }
 
-    private fun heavyRainWarning(home: HomeFacts, day: DayFacts): WeatherWarning? {
+    private fun heavyRainWarning(w: WeatherStrings, home: HomeFacts, day: DayFacts): WeatherWarning? {
         val heavy = (home.upcoming + day.hours).filter { isHeavyRainCode(it.code) || it.precipMm >= 5 }
         val first = heavy.firstOrNull() ?: return null
         val maxMm = heavy.maxOf { it.precipMm }
-        val text = if (maxMm >= 5) {
-            "Ab ${first.hour} Uhr bis ${roundHalfUp(maxMm)} l/m² pro Stunde – Unterführungen und Senken meiden."
-        } else {
-            "Ab ${first.hour} Uhr kräftige Güsse – Unterführungen und Senken meiden."
-        }
-        return WeatherWarning(WarningLevel.CAUTION, "🌧️", "Starkregen", text)
+        val text = if (maxMm >= 5) w.heavyRainAmount(first.hour, roundHalfUp(maxMm)) else w.heavyRainBursts(first.hour)
+        return WeatherWarning(WarningLevel.CAUTION, "🌧️", w.titleHeavyRain, text)
     }
 
-    private fun heatWarning(day: DayFacts): WeatherWarning? {
+    private fun heatWarning(w: WeatherStrings, day: DayFacts): WeatherWarning? {
         val temp = Fmt.temp(day.maxTemp)
         return when {
-            day.maxTemp >= 35 -> WeatherWarning(
-                WarningLevel.SEVERE, "🌡️", "Starke Hitze",
-                "Bis $temp – viel trinken, Anstrengung meiden und im Schatten bleiben.",
-            )
-            day.maxTemp >= 30 -> WeatherWarning(
-                WarningLevel.CAUTION, "🌡️", "Hitze",
-                "Bis $temp – viel trinken und die Mittagssonne meiden.",
-            )
+            day.maxTemp >= 35 -> WeatherWarning(WarningLevel.SEVERE, "🌡️", w.titleExtremeHeat, w.extremeHeat(temp))
+            day.maxTemp >= 30 -> WeatherWarning(WarningLevel.CAUTION, "🌡️", w.titleHeat, w.heat(temp))
             else -> null
         }
     }
 
-    private fun uvWarning(day: DayWeather): WeatherWarning? {
+    private fun uvWarning(w: WeatherStrings, day: DayWeather): WeatherWarning? {
         if (day.uvMax < 6) return null
         val index = roundHalfUp(day.uvMax)
         // WHO scale on the rounded index the text shows: 6–7 high, 8+ very high.
-        val title = if (index >= 8) "Sehr hohe UV-Belastung" else "Hohe UV-Belastung"
-        return WeatherWarning(
-            WarningLevel.INFO, "🔆", title,
-            "UV-Index bis $index – Sonnencreme und Kopfbedeckung nicht vergessen.",
-        )
+        return WeatherWarning(WarningLevel.INFO, "🔆", w.titleUv(veryHigh = index >= 8), w.uv(index))
     }
 
     // ---------------------------------------------------------------------------------------
     // Notification
     // ---------------------------------------------------------------------------------------
 
-    /** "Leipzig 10–18 Uhr" or "Leipzig morgen 10–18 Uhr". */
-    private fun windowLabel(day: DayWeather): String {
-        val tomorrow = if (day.isTomorrow) "morgen " else ""
-        return "${day.place.name} $tomorrow${day.startHour}–${day.endHour} Uhr"
-    }
-
     /** "13→21°" (start to peak), start to end when it only gets colder, "um 8°" when flat. */
-    private fun shortTrend(d: DayFacts): String {
+    private fun shortTrend(w: WeatherStrings, d: DayFacts): String {
         val from = if (d.hasHours) d.startTemp else d.minTemp
         val to = when {
             !d.hasHours -> d.maxTemp
             roundHalfUp(d.maxTemp) > roundHalfUp(d.startTemp) -> d.maxTemp
             else -> d.endTemp
         }
-        if (roundHalfUp(from) == roundHalfUp(to)) return "um ${Fmt.temp(to)}"
+        if (roundHalfUp(from) == roundHalfUp(to)) return w.shortAround(Fmt.temp(to))
         return "${Fmt.temp(from).removeSuffix("°")}→${Fmt.temp(to)}"
     }
 
-    private fun conditionLabel(d: DayFacts): String {
+    private fun conditionLabel(w: WeatherStrings, d: DayFacts): String {
         val thunder = d.thunder
         val firstWet = d.firstWet
         val dryFrom = d.dryFrom
         return when {
-            thunder != null && thunder !== d.hours.first() -> "Gewitter ab ${thunder.hour} Uhr"
-            thunder != null -> "Gewitter"
-            d.rainStartsLater && firstWet != null -> "${d.wetKind.labelFor(true)} ab ${firstWet.hour} Uhr"
-            dryFrom != null -> "${d.wetKind.labelFor(true)} bis $dryFrom Uhr"
-            else -> d.main.labelFor(true)
+            thunder != null && thunder !== d.hours.first() -> w.thunderFromShort(thunder.hour)
+            thunder != null -> w.thunderShort
+            d.rainStartsLater && firstWet != null -> w.labelFrom(w.condition(d.wetKind, true), firstWet.hour)
+            dryFrom != null -> w.labelUntil(w.condition(d.wetKind, true), dryFrom)
+            else -> w.condition(d.main, true)
         }
     }
 
-    private fun newsLine(headlines: List<String>): String {
+    private fun newsLine(w: WeatherStrings, headlines: List<String>): String {
         val top = headlines.map { it.trim() }.filter { it.isNotEmpty() }.take(3)
-        return if (top.isEmpty()) "📰 Die Nachrichten warten in der App." else "📰 " + top.joinToString(" · ")
+        return if (top.isEmpty()) w.noNews else "📰 " + top.joinToString(" · ")
     }
 }

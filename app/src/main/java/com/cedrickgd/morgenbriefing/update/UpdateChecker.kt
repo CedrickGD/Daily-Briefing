@@ -96,7 +96,7 @@ internal object ReleaseSelection {
             ReleaseInfo(
                 tag = release.tagName.trim(),
                 version = version.toString(),
-                title = release.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Morgenbriefing $version",
+                title = release.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Daily Briefing $version",
                 notes = release.body?.trim().orEmpty(),
                 publishedAt = release.publishedAt?.takeIf { it.isNotBlank() },
                 apk = ApkAsset(id = asset.id, name = asset.name.trim(), size = asset.size.coerceAtLeast(0)),

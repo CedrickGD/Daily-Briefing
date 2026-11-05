@@ -19,6 +19,7 @@ import com.cedrickgd.morgenbriefing.data.BERLIN
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -32,7 +33,8 @@ import java.util.concurrent.TimeUnit
 /**
  * Runs at the morning alarm (or "Test-Benachrichtigung"): fetches live weather and the feeds
  * of the visible topics, then posts the notification with the weather, the clothing tip and
- * the top headlines. Both fetches are cached, so the app opens on fresh content right away.
+ * the top headlines, written in the interface language of the settings. Both fetches are
+ * cached, so the app opens on fresh content right away.
  */
 class MorningWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -49,8 +51,17 @@ class MorningWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     }
 
     /** Shown while the expedited work runs as a foreground service (below API 31). */
-    override suspend fun getForegroundInfo(): ForegroundInfo =
-        Notifications.syncForegroundInfo(applicationContext)
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val language = try {
+            applicationContext.container.settings.current().language
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Settings unavailable for the sync notice, using the phone's language", e)
+            AppLanguage.system()
+        }
+        return Notifications.syncForegroundInfo(applicationContext, language)
+    }
 
     private suspend fun deliver(force: Boolean): Result {
         val context = applicationContext
@@ -78,7 +89,7 @@ class MorningWorker(context: Context, params: WorkerParameters) : CoroutineWorke
 
         val snapshot = liveWeather ?: cachedWeather(container)
         val headlines = topHeadlines(container.news.state.value.topics, settings)
-        val text = morningText(snapshot, headlines)
+        val text = morningText(snapshot, headlines, settings.language)
         if (!Notifications.canPost(context)) {
             // Data is fetched and cached for the app; there is just nothing we may show.
             Log.i(TAG, "Notifications are blocked, briefing prepared without notification")

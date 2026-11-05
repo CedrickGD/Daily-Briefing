@@ -1,29 +1,31 @@
 package com.cedrickgd.morgenbriefing.domain
 
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.WeatherStrings
+
 /** Coarse weather condition derived from a WMO code; drives icons, backdrop and texts. */
-enum class Condition(val label: String, val emojiDay: String, val emojiNight: String) {
-    CLEAR("klar", "☀️", "🌙"),
-    MOSTLY_CLEAR("überwiegend sonnig", "🌤️", "🌙"),
-    PARTLY_CLOUDY("teils bewölkt", "⛅", "☁️"),
-    OVERCAST("bedeckt", "☁️", "☁️"),
-    FOG("Nebel", "🌫️", "🌫️"),
-    DRIZZLE("Nieselregen", "🌦️", "🌧️"),
-    RAIN("Regen", "🌧️", "🌧️"),
-    HEAVY_RAIN("Starkregen", "🌧️", "🌧️"),
-    FREEZING_RAIN("gefrierender Regen", "🧊", "🧊"),
-    SNOW("Schnee", "🌨️", "🌨️"),
-    SHOWERS("Schauer", "🌦️", "🌧️"),
-    SNOW_SHOWERS("Schneeschauer", "🌨️", "🌨️"),
-    THUNDER("Gewitter", "⛈️", "⛈️");
+enum class Condition(val emojiDay: String, val emojiNight: String) {
+    CLEAR("☀️", "🌙"),
+    MOSTLY_CLEAR("🌤️", "🌙"),
+    PARTLY_CLOUDY("⛅", "☁️"),
+    OVERCAST("☁️", "☁️"),
+    FOG("🌫️", "🌫️"),
+    DRIZZLE("🌦️", "🌧️"),
+    RAIN("🌧️", "🌧️"),
+    HEAVY_RAIN("🌧️", "🌧️"),
+    FREEZING_RAIN("🧊", "🧊"),
+    SNOW("🌨️", "🌨️"),
+    SHOWERS("🌦️", "🌧️"),
+    SNOW_SHOWERS("🌨️", "🌨️"),
+    THUNDER("⛈️", "⛈️");
 
     fun emoji(isDay: Boolean): String = if (isDay) emojiDay else emojiNight
 
-    /** "sonnig" reads better than "klar" during the day; at night nothing is "sonnig". */
-    fun labelFor(isDay: Boolean): String = when {
-        this == CLEAR && isDay -> "sonnig"
-        this == MOSTLY_CLEAR && !isDay -> "überwiegend klar"
-        else -> label
-    }
+    /**
+     * Short name in [lang] ("teils bewölkt", "partly cloudy"). "sonnig" reads better than "klar"
+     * during the day; at night nothing is "sonnig".
+     */
+    fun labelFor(isDay: Boolean, lang: AppLanguage): String = WeatherStrings.of(lang).condition(this, isDay)
 
     val isWet: Boolean
         get() = this in setOf(DRIZZLE, RAIN, HEAVY_RAIN, FREEZING_RAIN, SHOWERS, SNOW, SNOW_SHOWERS, THUNDER)

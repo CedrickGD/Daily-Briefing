@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.domain
 
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.data.model.CurrentConditions
 import com.cedrickgd.morgenbriefing.data.model.HomeWeather
 import com.cedrickgd.morgenbriefing.data.model.Place
@@ -24,11 +25,11 @@ class PrecipKindTest {
     fun `the precipitation chip names snow and sleet by the weather codes`() {
         // Snow now and later: "Schnee", never "Regen".
         assertEquals(PrecipKind.SNOW, precipKind(home(73, 73, 75, 85, 71)))
-        assertEquals("Schnee", precipKind(home(73, 73, 75, 85, 71)).word)
+        assertEquals("Schnee", precipKind(home(73, 73, 75, 85, 71)).word(AppLanguage.DE))
         // Snow next to rain or drizzle: "Schneeregen".
         assertEquals(PrecipKind.SLEET, precipKind(home(71, 61, 71, 3, 3)))
         assertEquals(PrecipKind.SLEET, precipKind(home(51, 85, 3, 3, 3)))
-        assertEquals("Schneeregen", PrecipKind.SLEET.word)
+        assertEquals("Schneeregen", PrecipKind.SLEET.word(AppLanguage.DE))
         // Rain, freezing rain, showers and thunder are rain; dry hours do not count.
         assertEquals(PrecipKind.RAIN, precipKind(home(61, 63, 80, 95, 66)))
         assertEquals(PrecipKind.RAIN, precipKind(home(0, 0, 1, 2, 3)))

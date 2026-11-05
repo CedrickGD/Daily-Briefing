@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.ui.settings
 
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import android.os.Build
 import androidx.compose.runtime.Immutable
 import com.cedrickgd.morgenbriefing.data.model.AccentId
@@ -137,7 +138,7 @@ internal fun dayWord(now: ZonedDateTime, next: ZonedDateTime): String =
         0L -> "heute"
         1L -> "morgen"
         2L -> "übermorgen"
-        else -> "am ${Fmt.shortDate(next.toLocalDate())}"
+        else -> "am ${Fmt.shortDate(next.toLocalDate(), AppLanguage.DE)}"
     }
 
 /**

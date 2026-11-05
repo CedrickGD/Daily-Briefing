@@ -58,6 +58,9 @@ import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
 import com.cedrickgd.morgenbriefing.domain.Condition
 import com.cedrickgd.morgenbriefing.domain.Fmt
 import com.cedrickgd.morgenbriefing.domain.WeatherInsights
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.i18n.ComponentStrings
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
 import kotlinx.coroutines.delay
@@ -65,7 +68,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 
@@ -78,7 +80,7 @@ private const val POP_LABEL_FROM = 30
 private const val MIN_TEMP_RANGE = 6.0
 
 /**
- * "Leipzig · 10–18 Uhr": hand-drawn temperature curve + rain bars + day summary, on a glass card.
+ * "Leipzig · 10–18 Uhr" (in the interface language): hand-drawn temperature curve + rain bars + day summary, on a glass card.
  *
  * The chart is one Canvas: a smooth, non-overshooting temperature line with a soft fill, hour
  * dots with labels, condition emojis, rain-probability bars and a dashed "jetzt" marker while
@@ -90,6 +92,8 @@ fun DayCurveCard(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     val hours = remember(day.hours) { day.hours.sortedBy { it.time } }
+    val language = LocalAppLanguage.current
+    val strings = ComponentStrings.of(language)
 
     GlassCard(
         modifier = modifier.fillMaxWidth(),
@@ -101,7 +105,7 @@ fun DayCurveCard(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = dayCurveTitle(day),
+                    text = strings.dayCurveTitle(day.place.name, day.startHour, day.endHour, day.isTomorrow).uppercase(language.locale),
                     style = typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
                     color = colors.onSurfaceVariant,
                     // Large font sizes: a second line instead of losing "UHR" silently.
@@ -130,14 +134,14 @@ fun DayCurveCard(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
                 )
             } else {
                 Text(
-                    text = "Für dieses Zeitfenster gibt es gerade keine Stundenwerte.",
+                    text = strings.noHourlyValues,
                     style = typography.bodyMedium,
                     color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
             }
 
-            val summary = WeatherInsights.daySummary(snapshot)
+            val summary = WeatherInsights.daySummary(snapshot, language)
             if (summary.isNotBlank()) {
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -206,13 +210,15 @@ private fun DayCurveChart(day: DayWeather, hours: List<HourPoint>, modifier: Mod
     val nowStyle = typography.labelSmall.copy(color = colors.onPrimary, fontWeight = FontWeight.SemiBold, letterSpacing = 0.3.sp)
     val emojiStyle = TextStyle(fontSize = 15.sp)
 
-    val labels = remember(hours, tempStyle, hourStyle, popStyle, nowStyle, measurer) {
+    val language = LocalAppLanguage.current
+    val nowLabel = ComponentStrings.of(language).now
+    val labels = remember(hours, tempStyle, hourStyle, popStyle, nowStyle, measurer, language) {
         ChartLabels(
             temps = hours.map { measurer.measure(Fmt.temp(it.temp), tempStyle) },
             hours = hours.map { measurer.measure(it.hour.toString(), hourStyle) },
             emojis = hours.map { measurer.measure(Condition.fromCode(it.code).emoji(it.isDay), emojiStyle) },
-            pops = hours.map { if (it.pop >= POP_LABEL_FROM) measurer.measure("${it.pop} %", popStyle) else null },
-            now = measurer.measure("jetzt", nowStyle),
+            pops = hours.map { if (it.pop >= POP_LABEL_FROM) measurer.measure(Fmt.percent(it.pop, language).replace(" %", " %"), popStyle) else null },
+            now = measurer.measure(nowLabel, nowStyle),
         )
     }
 
@@ -221,7 +227,7 @@ private fun DayCurveChart(day: DayWeather, hours: List<HourPoint>, modifier: Mod
 
     val now by rememberBerlinMinute()
     val nowIndex = remember(day, hours, now) { nowFraction(day, hours, now) }
-    val description = remember(day, hours) { chartDescription(day, hours) }
+    val description = remember(day, hours, language) { chartDescription(day, hours, language) }
 
     // Draw-in once per day window; remembered across recompositions and list recycling.
     val skip = motionDisabled()
@@ -414,25 +420,13 @@ private fun DayCurveChart(day: DayWeather, hours: List<HourPoint>, modifier: Mod
     )
 }
 
-/** "LEIPZIG · 10–18 UHR", with "MORGEN · " in front for tomorrow's window. */
-private fun dayCurveTitle(day: DayWeather): String {
-    val place = day.place.name.uppercase(Locale.GERMAN)
-    val title = "$place · ${day.startHour}–${day.endHour} UHR"
-    return if (day.isTomorrow) "MORGEN · $title" else title
-}
-
-/** Spoken summary of the chart for screen readers. */
-private fun chartDescription(day: DayWeather, hours: List<HourPoint>): String = buildString {
-    append("Temperaturverlauf ")
-    if (day.isTomorrow) append("morgen ")
-    append("in ${day.place.name} von ${day.startHour} bis ${day.endHour} Uhr: ")
-    append(
-        hours.joinToString(", ") { hour ->
-            val rain = if (hour.pop >= POP_LABEL_FROM) ", Regen ${hour.pop} Prozent" else ""
-            "${hour.hour} Uhr ${Fmt.temp(hour.temp)}$rain"
-        },
-    )
-    append('.')
+/** Spoken summary of the chart for screen readers, in [lang]. */
+private fun chartDescription(day: DayWeather, hours: List<HourPoint>, lang: AppLanguage): String {
+    val strings = ComponentStrings.of(lang)
+    val points = hours.map { hour ->
+        strings.chartPoint(hour.hour, Fmt.temp(hour.temp), hour.pop.takeIf { it >= POP_LABEL_FROM })
+    }
+    return strings.chartDescription(day.place.name, day.startHour, day.endHour, day.isTomorrow, points)
 }
 
 /**
