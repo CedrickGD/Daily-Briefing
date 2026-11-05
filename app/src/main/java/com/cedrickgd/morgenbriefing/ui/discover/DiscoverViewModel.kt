@@ -162,7 +162,7 @@ class DiscoverViewModel(
         placeJob = viewModelScope.launch {
             delay(PLACE_DEBOUNCE_MS)
             _placeSearch.update { it.copy(loading = true, failed = false) }
-            val result = attempt { container.openMeteo.searchPlaces(text) }
+            val result = attempt { container.openMeteo.searchPlaces(text, (settingsFlow.value ?: container.settings.current()).language) }
             _placeSearch.update { current ->
                 if (current.query.trim() != text) {
                     current

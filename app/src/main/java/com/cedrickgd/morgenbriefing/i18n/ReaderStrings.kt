@@ -141,7 +141,7 @@ interface ReaderStrings {
         override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?): String {
             val who = site.ifBlank { "La rédaction" }
             return when (outcome) {
-                ReadOutcome.PAYWALL -> "$who réserve cet article à ses abonnés. Vous pouvez vous connecter dans le navigateur."
+                ReadOutcome.PAYWALL -> "$who réserve cet article à ses abonnés. Tu peux te connecter dans le navigateur."
                 ReadOutcome.CONSENT -> "$who n'affiche le texte qu'après acceptation des cookies sur son propre site."
                 ReadOutcome.BLOCKED -> "$who n'accepte pas les applis de lecture sur son site${code(httpCode)} – dans le navigateur, ça marche."
                 ReadOutcome.NOT_ARTICLE -> if (httpCode == 404 || httpCode == 410) {
@@ -150,9 +150,9 @@ interface ReaderStrings {
                     "Cette page ne contient pas de texte lisible – peut-être une vidéo, un podcast ou une page d'accueil."
                 }
                 ReadOutcome.NETWORK -> when {
-                    httpCode == 429 -> "Trop de requêtes en ce moment${code(httpCode)} – réessayez dans un instant."
+                    httpCode == 429 -> "Trop de requêtes en ce moment${code(httpCode)} – réessaie dans un instant."
                     httpCode != null -> "Le serveur de la rédaction ne répond pas${code(httpCode)}."
-                    else -> "La page est injoignable pour le moment. Êtes-vous connecté ?"
+                    else -> "La page est injoignable pour le moment. Es-tu connecté ?"
                 }
                 ReadOutcome.OK, null -> "L'article n'a pas pu être chargé pour le moment."
             }

@@ -13,7 +13,17 @@ data class Place(
     val region: String = "",
     /** ISO 3166-1 alpha-2 (`DE`), for the little flag; empty when unknown. */
     val countryCode: String = "",
+    /**
+     * The name in the language of the place's country ([NewsEdition.forCountry]) when [name]
+     * (in the interface language) differs: "Milano" for "Mailand". Local news are searched with
+     * it ([newsName]); empty when it is the same or unknown (places stored before v3.0).
+     */
+    val localName: String = "",
 ) {
+    /** The name to search news of this place with in an edition of [language] (ISO 639-1). */
+    fun newsName(language: String): String =
+        localName.takeIf { it.isNotBlank() && NewsEdition.forCountry(countryCode)?.language == language } ?: name
+
     companion object {
         val BERLIN = Place("Berlin", 52.5244, 13.4105, "Berlin, Deutschland", "DE")
         val LEIPZIG = Place("Leipzig", 51.3397, 12.3731, "Sachsen, Deutschland", "DE")

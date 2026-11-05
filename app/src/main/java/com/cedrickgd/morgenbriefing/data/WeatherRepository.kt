@@ -5,6 +5,7 @@ import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
 import com.cedrickgd.morgenbriefing.data.remote.OpenMeteoClient
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,8 +56,8 @@ class WeatherRepository(
         return _latest.value ?: stored
     }
 
-    suspend fun search(query: String): Result<List<Place>> = try {
-        Result.success(client.searchPlaces(query))
+    suspend fun search(query: String, lang: AppLanguage): Result<List<Place>> = try {
+        Result.success(client.searchPlaces(query, lang))
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

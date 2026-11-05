@@ -4,6 +4,7 @@ import com.cedrickgd.morgenbriefing.data.local.WeatherStore
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.remote.OpenMeteoClient
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -74,7 +75,7 @@ class WeatherRepositoryTest {
         server.enqueue(MockResponse().setBody("""{"results":[{"name":"Leipzig","latitude":51.34,"longitude":12.37,"admin1":"Sachsen","country":"Deutschland"}]}"""))
         server.enqueue(MockResponse().setResponseCode(500))
 
-        assertEquals(listOf("Leipzig"), repo.search("Leipzig").getOrThrow().map { it.name })
-        assertTrue(repo.search("Leipzig").isFailure)
+        assertEquals(listOf("Leipzig"), repo.search("Leipzig", AppLanguage.DE).getOrThrow().map { it.name })
+        assertTrue(repo.search("Leipzig", AppLanguage.DE).isFailure)
     }
 }

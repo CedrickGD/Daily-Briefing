@@ -89,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.data.model.ArticleImage
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.Topic
+import com.cedrickgd.morgenbriefing.domain.ItemEdition
 import com.cedrickgd.morgenbriefing.i18n.FeedStrings
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
@@ -192,6 +193,8 @@ fun FeedEntry(
     }
     val badge by remember(hints, item.id) { derivedStateOf { cardBadge(hints.status(item.id)) } }
     val visualItem = remember(item, hero) { hero?.let { item.copy(image = ArticleImage(it)) } ?: item }
+    // Hyphenate in the article's own language (English local news under a German edition).
+    val textLanguage = remember(item.sourceId) { ItemEdition.languageOf(item) }
 
     Column(modifier.fillMaxWidth()) {
         Column(
@@ -233,14 +236,14 @@ fun FeedEntry(
             }
             Text(
                 text = item.headline,
-                style = Reading.feedHeadline(),
+                style = Reading.feedHeadline(language = textLanguage),
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.semantics { heading() },
             )
             if (item.summary.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
-                LeadText(item.summary, more = strings.readMore)
+                LeadText(item.summary, more = strings.readMore, language = textLanguage)
             }
         }
         FeedMetaRow(
@@ -314,8 +317,8 @@ private fun TopicOverline(article: FeedArticle) {
  * ellipsis. Measured once per text and width.
  */
 @Composable
-internal fun LeadText(text: String, more: String, modifier: Modifier = Modifier, maxLines: Int = 3) {
-    val style = Reading.feedLead()
+internal fun LeadText(text: String, more: String, modifier: Modifier = Modifier, maxLines: Int = 3, language: String? = null) {
+    val style = Reading.feedLead(language = language)
     // A quiet continuation: lighter than the lead, never bolder.
     val suffix = SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontWeight = FontWeight.Medium)
     val measurer = rememberTextMeasurer(cacheSize = 8)

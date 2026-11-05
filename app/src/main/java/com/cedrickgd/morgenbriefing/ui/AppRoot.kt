@@ -42,7 +42,7 @@ import com.cedrickgd.morgenbriefing.container
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.domain.Condition
-import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.ui.components.ProvideAppLanguage
 import com.cedrickgd.morgenbriefing.ui.glass.AmbientSky
 import com.cedrickgd.morgenbriefing.ui.glass.LocalGlassState
 import com.cedrickgd.morgenbriefing.ui.nav.AppNavHost
@@ -120,8 +120,9 @@ fun AppRoot(
         ThemeMode.DARK -> true
     }
 
-    // Every feature strings file reads the interface language from here (i18n/AppLanguage.kt).
-    CompositionLocalProvider(LocalAppLanguage provides settings.language) {
+    // Every feature strings file reads the interface language from here (i18n/AppLanguage.kt);
+    // Material's own texts follow it through the localized resources.
+    ProvideAppLanguage(settings.language) {
         MorgenbriefingTheme(themeMode = settings.themeMode, accent = settings.accent) {
             SystemBarsEffect(darkTheme = darkTheme)
             AppShell(

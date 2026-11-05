@@ -61,15 +61,16 @@ object TopicSources {
 
     /**
      * The search behind [topicId]'s endless list: the topic's query in its edition (places: the
-     * place's name), or null when the topic cannot page (top stories, own feeds only).
+     * place's name in the edition's language, "Milano" not "Mailand" – see [Place.newsName]), or
+     * null when the topic cannot page (top stories, own feeds only).
      */
     fun pagingQuery(topicId: String, settings: AppSettings): PagingQuery? {
         if (topicId == Topics.TOP_ID) return null
         val edition = editionFor(topicId, settings)
         val query = when {
-            Topics.isLocalId(topicId) -> Topics.placeFor(topicId, settings)?.let { quoted(it.name) }
+            Topics.isLocalId(topicId) -> Topics.placeFor(topicId, settings)?.let { quoted(it.newsName(edition.language)) }
             Topics.isCustomId(topicId) -> settings.customTopics.firstOrNull { it.id == topicId }?.query?.takeIf { it.isNotBlank() }
-            topicId == Topics.REGION_ID -> settings.home.name.takeIf { it.isNotBlank() }?.let(::quoted)
+            topicId == Topics.REGION_ID -> settings.home.takeIf { it.name.isNotBlank() }?.let { quoted(it.newsName(edition.language)) }
             else -> Taxonomy.byId(topicId)?.queryFor(edition)
         } ?: return null
         return PagingQuery(query, edition, googleNewsId(topicId, edition))

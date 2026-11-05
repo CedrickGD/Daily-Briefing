@@ -5,8 +5,8 @@ import androidx.compose.runtime.ReadOnlyComposable
 
 /**
  * Texts of the shared building blocks in `ui/components` (weather hero, day curve, clothing
- * card, news section header and footer, error details, loading skeleton) and of the link helpers
- * in `util/Links.kt`.
+ * card, news section header and footer, error details, loading skeleton), of the glass page chrome
+ * in `ui/glass` and of the link helpers in `util/Links.kt`.
  */
 interface ComponentStrings {
     // Home weather hero ("Vor der Tür")
@@ -58,6 +58,10 @@ interface ComponentStrings {
     val shareUnavailable: String
     val noBrowser: String
 
+    // Glass page chrome
+    /** Screen-reader action of the tappable top bar ("double-tap to …"). */
+    val scrollToTop: String
+
     companion object {
         fun of(lang: AppLanguage): ComponentStrings = when (lang) {
             AppLanguage.DE -> De
@@ -103,6 +107,7 @@ interface ComponentStrings {
         override val shareChooser = "Meldung teilen"
         override val shareUnavailable = "Teilen ist auf diesem Gerät gerade nicht möglich."
         override val noBrowser = "Kein Browser gefunden, der den Link öffnen kann."
+        override val scrollToTop = "Nach oben scrollen"
     }
 
     private object En : ComponentStrings {
@@ -141,6 +146,7 @@ interface ComponentStrings {
         override val shareChooser = "Share story"
         override val shareUnavailable = "Sharing isn't possible on this device right now."
         override val noBrowser = "No browser found that can open the link."
+        override val scrollToTop = "Scroll to top"
     }
 
     private object Fr : ComponentStrings {
@@ -178,6 +184,7 @@ interface ComponentStrings {
         override val shareChooser = "Partager l'article"
         override val shareUnavailable = "Le partage n'est pas possible sur cet appareil pour le moment."
         override val noBrowser = "Aucun navigateur trouvé pour ouvrir le lien."
+        override val scrollToTop = "Revenir en haut"
     }
 
     private object Es : ComponentStrings {
@@ -215,6 +222,7 @@ interface ComponentStrings {
         override val shareChooser = "Compartir noticia"
         override val shareUnavailable = "Ahora mismo no se puede compartir en este dispositivo."
         override val noBrowser = "No se encontró ningún navegador que pueda abrir el enlace."
+        override val scrollToTop = "Volver arriba"
     }
 
     private object It : ComponentStrings {
@@ -252,6 +260,7 @@ interface ComponentStrings {
         override val shareChooser = "Condividi notizia"
         override val shareUnavailable = "Al momento non è possibile condividere su questo dispositivo."
         override val noBrowser = "Nessun browser trovato per aprire il link."
+        override val scrollToTop = "Torna su"
     }
 }
 
