@@ -16,3 +16,15 @@ data object MainRoute
  */
 @Serializable
 data class ArticleRoute(val url: String, val itemId: String? = null, val topicId: String? = null)
+
+/**
+ * "Themen entdecken", pushed over the pager: the category grid, or straight the category
+ * [categoryId] (a built-in category id such as `wirtschaft`). The screen switches between grid
+ * and category itself; the route only says where it opens.
+ */
+@Serializable
+data class DiscoverRoute(val categoryId: String? = null)
+
+/** The news search, pushed over the pager; [query] runs at once (a followed search, a link). */
+@Serializable
+data class SearchRoute(val query: String? = null)

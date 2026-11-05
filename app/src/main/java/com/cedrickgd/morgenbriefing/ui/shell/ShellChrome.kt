@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
+import com.cedrickgd.morgenbriefing.i18n.ShellStrings
 import com.cedrickgd.morgenbriefing.listen.ListenMiniPlayer
 import com.cedrickgd.morgenbriefing.ui.glass.GlassPageIndicator
 import com.cedrickgd.morgenbriefing.ui.glass.GlassPageIndicatorHeight
@@ -100,8 +102,8 @@ private class BottomPadding(private val bottom: () -> Dp) : PaddingValues {
  * indicator, sliding down into its place whenever the indicator is hidden (scrolling, pushed
  * screens). The slide is read in the draw phase only.
  *
- * With 3-button navigation a soft scrim rises behind the system buttons on the pager pages, so
- * they stay legible over bright pictures ([navScrim]).
+ * With 3-button navigation a soft scrim rises behind the system buttons over the sky (pager pages,
+ * discover, search), so they stay legible over bright pictures ([navScrim]; the reader has its own).
  *
  * @param indicatorVisible pager on top and the chrome not hidden by scrolling.
  * @param playerAllowed false on screens with their own bottom controls (chat input).
@@ -149,9 +151,11 @@ internal fun BoxScope.FloatingChrome(
                 ListenMiniPlayer(onOpenArticle = onOpenArticle)
             }
         }
+        val language = LocalAppLanguage.current
+        val pages = remember(language) { MainPage.specs(ShellStrings.of(language)) }
         GlassPageIndicator(
             pagerState = pagerState,
-            pages = MainPage.specs,
+            pages = pages,
             visible = indicatorVisible,
             onSelect = onSelectPage,
             modifier = Modifier.align(Alignment.BottomCenter),
