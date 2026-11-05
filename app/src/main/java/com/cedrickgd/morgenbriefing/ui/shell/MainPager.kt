@@ -119,10 +119,15 @@ internal fun MainPager(
                         openTodaySignal = openTodaySignal,
                         onOpenSettings = { navigator.showPage(MainPage.SETTINGS) },
                         onOpenArticle = { navigator.openArticle(entry, it.item) },
+                        onOpenSearch = { navigator.openSearch() },
+                        onOpenDiscover = { categoryId -> navigator.openDiscover(categoryId) },
                         viewModel = todayViewModel,
                     )
 
-                    MainPage.SETTINGS -> SettingsScreen(contentPadding = contentPadding)
+                    MainPage.SETTINGS -> SettingsScreen(
+                        contentPadding = contentPadding,
+                        onOpenDiscover = { navigator.openDiscover() },
+                    )
                 }
             }
         }
