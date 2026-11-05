@@ -22,14 +22,24 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Cookie
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.GppBad
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.LinkOff
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,7 +50,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -55,6 +68,8 @@ import coil3.compose.AsyncImage
 import com.cedrickgd.morgenbriefing.data.model.ArticleBlock
 import com.cedrickgd.morgenbriefing.data.model.ArticleContent
 import com.cedrickgd.morgenbriefing.data.model.ArticleImage
+import com.cedrickgd.morgenbriefing.domain.Fmt
+import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
 import com.cedrickgd.morgenbriefing.i18n.readerStrings
 import com.cedrickgd.morgenbriefing.listen
@@ -64,9 +79,12 @@ import com.cedrickgd.morgenbriefing.ui.components.GlassPillButton
 import com.cedrickgd.morgenbriefing.ui.components.LoadingSkeleton
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
 import com.cedrickgd.morgenbriefing.ui.glass.glassContent
+import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleRoute
 import com.cedrickgd.morgenbriefing.ui.news.ArticleVisual
-import com.cedrickgd.morgenbriefing.ui.news.feedMeta
+import com.cedrickgd.morgenbriefing.ui.news.TopicColors
+import com.cedrickgd.morgenbriefing.ui.news.hostOf
+import com.cedrickgd.morgenbriefing.ui.news.rememberTopicColors
 import com.cedrickgd.morgenbriefing.util.rememberLinkActions
 import com.cedrickgd.morgenbriefing.util.statusBarTop
 
@@ -107,6 +125,7 @@ fun ArticleScreen(
         val heroHeight = minOf(statusTop + maxWidth * 0.72f, maxHeight * 0.5f)
         val listState = rememberLazyListState()
         val content = state.content
+        val hero = remember(state.item.image, content) { pickHero(state.item.image?.url, content) }
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -115,12 +134,13 @@ fun ArticleScreen(
                 .glassContent(),
             contentPadding = PaddingValues(bottom = navBottom + 32.dp + playerLift),
         ) {
-            item(key = "hero") { Hero(state, heroHeight) }
+            item(key = "hero") { Hero(state, hero, heroHeight) }
             item(key = "head") { Head(state) }
             when {
                 content != null -> {
-                    itemsIndexed(content.blocks, key = { index, _ -> "block$index" }) { _, block ->
-                        BlockView(block, showImages = state.showImages)
+                    itemsIndexed(content.blocks, key = { index, _ -> "block$index" }, contentType = { _, block -> block.type }) { index, block ->
+                        // A picture that became the hero does not show a second time.
+                        if (index != hero.skipBlock) BlockView(block, showImages = state.showImages)
                     }
                     item(key = "end") { EndNote(state, content, onOpenExternal = openExternal) }
                 }
@@ -128,7 +148,12 @@ fun ArticleScreen(
                 state.loading -> item(key = "skeleton") { BodySkeleton() }
 
                 else -> item(key = "failed") {
-                    LoadFailed(failure = state.failure, onRetry = viewModel::retry, onOpenExternal = openExternal)
+                    LoadFailed(
+                        failure = state.failure,
+                        accent = rememberTopicColors(state.topic),
+                        onRetry = viewModel::retry,
+                        onOpenExternal = openExternal,
+                    )
                 }
             }
         }
@@ -158,12 +183,12 @@ fun ArticleScreen(
 }
 
 @Composable
-private fun Hero(state: ArticleUiState, height: Dp) {
+private fun Hero(state: ArticleUiState, hero: HeroPick, height: Dp) {
     val item = state.item
-    val leadImage = state.content?.image
-    // The feed's picture, else the page's lead picture — both through the same loader and cover.
-    val visualItem = remember(item, leadImage) {
-        if (item.image == null && leadImage != null) item.copy(image = ArticleImage(leadImage)) else item
+    // The feed's picture, else the page's lead picture (see pickHero) — through the same loader and cover.
+    val visualItem = remember(item, hero.url) {
+        val url = hero.url
+        if (item.image == null && url != null) item.copy(image = ArticleImage(url)) else item
     }
     val background = MaterialTheme.colorScheme.background
     Box(
@@ -202,9 +227,14 @@ private fun Head(state: ArticleUiState) {
     val colors = MaterialTheme.colorScheme
     val item = state.item
     val headline = item.headline.ifBlank { state.content?.title.orEmpty() }
+    val lang = LocalAppLanguage.current
+    val meta = remember(item, state.now, lang) {
+        val source = item.source.trim().ifEmpty { item.publisherDomain.ifBlank { hostOf(item.url) } }
+        listOfNotNull(Fmt.relative(item.publishedAt, state.now, lang), source.ifBlank { null }).joinToString(" · ")
+    }
     Column(Modifier.padding(horizontal = 20.dp)) {
         Text(
-            text = feedMeta(item, state.now).uppercase(),
+            text = meta.uppercase(lang.locale),
             style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp),
             color = colors.onSurfaceVariant,
         )
@@ -349,25 +379,45 @@ private fun BodySkeleton() {
     }
 }
 
+/**
+ * Why the article is not here, as a deliberate panel rather than an error: a tile in the topic's
+ * gradient with the reason's symbol (a lock for a paywall, a cookie for a consent wall …), a
+ * short title, one or two sentences and what can be done: "Nochmal versuchen" only where it can
+ * help, "Im Browser öffnen" as the quiet way out. The headline and teaser stay above it.
+ */
 @Composable
-private fun LoadFailed(failure: ArticleFailure?, onRetry: () -> Unit, onOpenExternal: () -> Unit) {
+private fun LoadFailed(failure: ArticleFailure?, accent: TopicColors, onRetry: () -> Unit, onOpenExternal: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val reader = readerStrings()
     val common = commonStrings()
+    val dark = isGlassDark()
+    val tint = if (dark) accent.onContainer else accent.strong
     Column(
         Modifier
             .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 20.dp)
+            .clip(GlassShapes.card)
+            .background(accent.container.copy(alpha = if (dark) 0.55f else 0.7f))
             .padding(horizontal = 24.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        val wall = failure?.isWall == true
-        Text(if (wall) "🍪" else "🗞️", fontSize = 40.sp)
+        Box(
+            Modifier
+                .size(64.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Brush.linearGradient(listOf(accent.coverStart, accent.coverEnd))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(failureIcon(failure).vector(), contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+        }
+        Spacer(Modifier.height(4.dp))
         Text(
             text = reader.failureTitle(failure?.outcome),
             style = MaterialTheme.typography.headlineSmall,
             color = colors.onSurface,
             textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() },
         )
         Text(
             text = reader.failureReason(failure?.outcome, failure?.site.orEmpty(), failure?.httpCode),
@@ -376,7 +426,27 @@ private fun LoadFailed(failure: ArticleFailure?, onRetry: () -> Unit, onOpenExte
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(6.dp))
-        GlassPillButton(text = common.retry, icon = Icons.Rounded.Refresh, onClick = onRetry, filled = true)
-        GlassPillButton(text = common.openInBrowser, icon = Icons.AutoMirrored.Rounded.OpenInNew, onClick = onOpenExternal)
+        failureActions(failure).forEachIndexed { index, action ->
+            when (action) {
+                FailureAction.RETRY -> GlassPillButton(text = common.retry, icon = Icons.Rounded.Refresh, onClick = onRetry, filled = index == 0)
+                FailureAction.OPEN_IN_BROWSER -> GlassPillButton(
+                    text = common.openInBrowser,
+                    icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                    onClick = onOpenExternal,
+                    contentColor = tint,
+                )
+            }
+        }
     }
+}
+
+/** The Material symbol of a [FailureIcon]. */
+private fun FailureIcon.vector(): ImageVector = when (this) {
+    FailureIcon.PAYWALL -> Icons.Rounded.Lock
+    FailureIcon.CONSENT -> Icons.Rounded.Cookie
+    FailureIcon.BLOCKED -> Icons.Rounded.GppBad
+    FailureIcon.GONE -> Icons.Rounded.LinkOff
+    FailureIcon.NOT_ARTICLE -> Icons.Rounded.PlayCircle
+    FailureIcon.OFFLINE -> Icons.Rounded.CloudOff
+    FailureIcon.ERROR -> Icons.Rounded.ErrorOutline
 }

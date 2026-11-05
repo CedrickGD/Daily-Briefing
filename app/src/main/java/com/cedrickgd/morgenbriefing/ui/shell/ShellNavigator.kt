@@ -12,8 +12,11 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.toRoute
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
+import com.cedrickgd.morgenbriefing.ui.nav.ArticleHandoff
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleRoute
+import com.cedrickgd.morgenbriefing.ui.nav.DiscoverRoute
 import com.cedrickgd.morgenbriefing.ui.nav.MainRoute
+import com.cedrickgd.morgenbriefing.ui.nav.SearchRoute
 import com.cedrickgd.morgenbriefing.ui.nav.isMain
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -29,7 +32,8 @@ data class PageRequest(val page: MainPage, val id: Long)
 internal val PageSpring: AnimationSpec<Float> = spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow)
 
 /**
- * The shell's navigation actions: switching pager pages. Event handlers only – nothing here is
+ * The shell's navigation actions: switching pager pages and pushing the screens that lie over
+ * the pager (article reader, "Themen entdecken", search). Event handlers only – nothing here is
  * read during composition.
  */
 @Stable
@@ -69,8 +73,46 @@ class ShellNavigator internal constructor(
      */
     fun openArticle(from: NavBackStackEntry, item: NewsItem) {
         if (!from.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        // Items the repository does not keep (search results) reach the reader this way.
+        ArticleHandoff.put(item)
         navController.navigate(ArticleRoute(url = item.url, itemId = item.id, topicId = item.topicId))
     }
+
+    /**
+     * Opens "Themen entdecken" over the pager: the category grid, or the category [categoryId]
+     * directly. A second tap while it is already open does nothing; coming from the search that
+     * was opened from discover goes back instead of stacking (see [NavPlan]).
+     */
+    fun openDiscover(categoryId: String? = null) = open(DiscoverRoute(categoryId))
+
+    /** Opens the news search over the pager, running [query] at once when given (see [NavPlan]). */
+    fun openSearch(query: String? = null) = open(SearchRoute(query?.trim()?.ifEmpty { null }))
+
+    /** Closes the screen on top (the back arrow of a pushed screen). */
+    fun back() {
+        if (!isMainOnTop) navController.popBackStack()
+    }
+
+    private inline fun <reified T : Any> open(target: T) {
+        chrome.show()
+        val top = navController.currentBackStackEntry?.routeOrNull<T>()
+            ?: navController.currentBackStackEntry?.takeIf { it.isMain() }?.let { MainRoute }
+        val below = try {
+            navController.getBackStackEntry<T>().toRoute<T>()
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+        when (NavPlan.of(top, below, target)) {
+            NavPlan.IGNORE -> Unit
+            NavPlan.RETURN -> navController.popBackStack<T>(inclusive = false)
+            NavPlan.PUSH -> navController.navigate(target) {
+                popUpTo<T> { inclusive = true }
+            }
+        }
+    }
+
+    private inline fun <reified T : Any> NavBackStackEntry.routeOrNull(): T? =
+        if (destination.hasRoute<T>()) toRoute<T>() else null
 
     /** Opens the article at [url] (the mini player) unless it is already on top. */
     fun openArticle(url: String) {

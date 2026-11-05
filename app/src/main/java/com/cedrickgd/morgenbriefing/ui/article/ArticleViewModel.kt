@@ -19,6 +19,7 @@ import com.cedrickgd.morgenbriefing.data.model.ReadOutcome
 import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
+import com.cedrickgd.morgenbriefing.ui.nav.ArticleHandoff
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleRoute
 import com.cedrickgd.morgenbriefing.ui.news.hostOf
 import com.cedrickgd.morgenbriefing.util.attempt
@@ -100,6 +101,8 @@ class ArticleViewModel(
         val known = container.news.state.value.topics.values.asSequence()
             .flatMap { it.items.asSequence() }
             .firstOrNull { (route.itemId != null && it.id == route.itemId) || it.url == route.url }
+            // Search results are not kept by the repository; the search screen hands them over.
+            ?: ArticleHandoff.find(route.itemId, route.url)
         val item = known ?: NewsItem(
             id = route.itemId ?: RssClient.stableId(route.url),
             headline = "",

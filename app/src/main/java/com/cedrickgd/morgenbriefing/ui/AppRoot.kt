@@ -46,6 +46,7 @@ import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.ui.glass.AmbientSky
 import com.cedrickgd.morgenbriefing.ui.glass.LocalGlassState
 import com.cedrickgd.morgenbriefing.ui.nav.AppNavHost
+import com.cedrickgd.morgenbriefing.ui.nav.coversSky
 import com.cedrickgd.morgenbriefing.ui.nav.isMain
 import com.cedrickgd.morgenbriefing.ui.news.newsImageLoader
 import com.cedrickgd.morgenbriefing.ui.shell.ChromeController
@@ -160,6 +161,8 @@ private fun AppShell(
 
     val topEntry by navController.currentBackStackEntryAsState()
     val mainOnTop = topEntry?.isMain() ?: true
+    // Only the reader hides the sky; discover and search are glass over it.
+    val skyCovered = topEntry?.coversSky() ?: false
     LaunchedEffect(mainOnTop) { if (mainOnTop) chrome.show() }
     // The chrome returns once scrolling has come to rest (docs/DESIGN.md §3).
     LaunchedEffect(chrome) { chrome.watchScrollRest() }
@@ -187,7 +190,7 @@ private fun AppShell(
             parallax = { pagerState.currentPage + pagerState.currentPageOffsetFraction - MainPage.TODAY.index },
             // The aurora holds still while content scrolls or pages glide: every frame goes to them.
             paused = { chrome.scrolling || pagerState.isScrollInProgress },
-            covered = !mainOnTop,
+            covered = skyCovered,
         )
         CompositionLocalProvider(
             LocalGlassState provides hazeState,
@@ -198,6 +201,7 @@ private fun AppShell(
                 navController = navController,
                 navigator = navigator,
                 pagePadding = insets.pagePadding,
+                pushedPadding = insets.pushedPadding,
                 openTodaySignal = openTodaySignal,
                 todayViewModel = todayViewModel,
                 modifier = Modifier.fillMaxSize(),
@@ -207,7 +211,7 @@ private fun AppShell(
                 insets = insets,
                 indicatorVisible = mainOnTop && chrome.indicatorVisible && !keyboardOpen,
                 playerAllowed = true,
-                navScrim = mainOnTop,
+                navScrim = !skyCovered,
                 onOpenArticle = { url -> if (readInApp) navigator.openArticle(url) else links.open(url) },
                 onSelectPage = { index ->
                     val page = MainPage.ofIndex(index)
