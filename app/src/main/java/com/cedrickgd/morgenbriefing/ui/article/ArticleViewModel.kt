@@ -35,20 +35,23 @@ import java.time.ZonedDateTime
 
 /**
  * Why the reader shows no article: the typed [outcome] (null = an unexpected error), the
- * newsroom's [site] name and the server's [httpCode]. Turned into text by `ReaderStrings`.
+ * newsroom's [site] name and the server's [httpCode]; [via] names the aggregator (Google News)
+ * that could not be asked for the article's address, [httpCode] is then its status. Turned
+ * into text by `ReaderStrings`.
  */
 @Immutable
 data class ArticleFailure(
     val outcome: ReadOutcome?,
     val site: String = "",
     val httpCode: Int? = null,
+    val via: String? = null,
 ) {
     /** The site keeps the text to itself (paywall, consent, bot block): only the browser helps. */
     val isWall: Boolean get() = outcome?.isWall == true
 
     companion object {
         fun of(error: Throwable, fallbackSite: String): ArticleFailure = when (error) {
-            is ArticleException -> ArticleFailure(error.outcome, error.site.ifBlank { fallbackSite }, error.httpCode)
+            is ArticleException -> ArticleFailure(error.outcome, error.site.ifBlank { fallbackSite }, error.httpCode, error.via)
             else -> ArticleFailure(null, fallbackSite)
         }
     }

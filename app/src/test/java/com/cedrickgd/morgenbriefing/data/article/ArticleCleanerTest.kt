@@ -107,6 +107,78 @@ class ArticleCleanerTest {
     }
 
     @Test
+    fun `date lines are meta, sentences that open with the same word are text`() {
+        listOf(
+            "Stand: 05.11.2026 • 09:03 Uhr", "Veröffentlicht am 5. November 2026", "Aktualisiert vor 2 Stunden",
+            "Zuletzt aktualisiert am Mittwoch, 05.11.2026, 18:03 Uhr", "Updated 2 hours ago", "Posted on November 5, 2026",
+            "Published 5 November 2026 — 3 minute READ", "Erschienen: Die Zeit Nr. 46",
+        ).forEach { assertTrue(it, ArticleCleaner.isNoise(it)) }
+        listOf(
+            "Stand Mittwochabend wurden 23 Verletzte gezählt, teilte die Polizei mit.",
+            "Stand heute sind 23 Menschen gestorben.",
+            "Stand 5. November wurden 23 Verletzte gezählt.",
+            "Veröffentlicht wurde die Studie im Fachblatt Nature.",
+            "Published in Nature, the study found that sleep matters.",
+            "Updated rules apply from 2027 on.",
+        ).forEach { assertFalse(it, ArticleCleaner.isNoise(it)) }
+        // As the lead before the first long paragraph, such a sentence stays.
+        val lead = "Stand heute sind 23 Menschen gestorben."
+        val long = "Die Feuerwehr war mit mehr als hundert Einsatzkräften vor Ort, die Bergungsarbeiten dauerten bis in die Nacht und sollen am Morgen fortgesetzt werden, teilte ein Sprecher mit."
+        val cleaned = ArticleCleaner.clean(listOf(ArticleBlock.paragraph("Stand: 05.11.2026, 09:03 Uhr"), ArticleBlock.paragraph(lead), ArticleBlock.paragraph(long)), "Unglück")
+        assertEquals(listOf(lead, long), cleaned.map { it.text })
+    }
+
+    @Test
+    fun `a consent dialog at the end goes, a closing sentence that opens with Zustimmen stays`() {
+        val text = (1..5).map { ArticleBlock.paragraph("Absatz $it erzählt in aller Ruhe, was im Bundestag beschlossen wurde und warum das für viele Menschen eine Rolle spielt.") }
+        val closing = ArticleBlock.paragraph("Zustimmen muss nun noch der Bundesrat, der am 21. November tagt.")
+        assertEquals(6, ArticleCleaner.clean(text + closing, "Gesetz").size)
+        val dialog = listOf(ArticleBlock.heading("Weiter mit Werbung"), ArticleBlock.paragraph("Zustimmen"))
+        assertEquals((text + closing).map { it.text }, ArticleCleaner.clean(text + closing + dialog, "Gesetz").map { it.text })
+        assertTrue(ArticleCleaner.isConsentLine("Accept all"))
+        assertTrue(ArticleCleaner.isConsentLine("Datenschutzoptionen anpassen"))
+        assertFalse(ArticleCleaner.isConsentLine("Accept the challenge, says the coach"))
+        assertFalse(ArticleCleaner.isConsentLine("Zustimmen muss nun noch der Bundesrat."))
+    }
+
+    @Test
+    fun `an author's bio box at the end goes, a picture of the story near the end stays with the text after it`() {
+        val text = (1..5).map { ArticleBlock.paragraph("Absatz $it erzählt in aller Ruhe, was an der Unfallstelle passiert ist und wie die Helfer vorgegangen sind.") }
+        val story = listOf(
+            ArticleBlock.image("https://img.example.com/unfall.jpg", alt = "Foto von der Unfallstelle"),
+            ArticleBlock.caption("Feuerwehr am Unfallort (Foto: dpa)"),
+            ArticleBlock.paragraph("Die Straße bleibt bis zum Abend gesperrt."),
+            ArticleBlock.paragraph("Die Polizei sucht Zeugen."),
+        )
+        assertEquals(9, ArticleCleaner.clean(text + story, "Unfall").size)
+        val crowd = listOf(ArticleBlock.image("https://img.example.com/demo.jpg", alt = "Bild von Demonstranten vor dem Reichstag"), ArticleBlock.paragraph("Die Demonstranten zogen am Abend weiter."))
+        assertEquals(7, ArticleCleaner.clean(text + crowd, "Demo").size)
+
+        val bio = listOf(
+            ArticleBlock.image("https://img.example.com/k.orland.jpg", alt = "Photo of Kyle Orland"),
+            ArticleBlock.paragraph("Kyle Orland Senior Gaming Editor"),
+            ArticleBlock.paragraph("Kyle Orland has been the Senior Gaming Editor since 2012, writing primarily about the business, tech, and culture behind video games."),
+        )
+        assertEquals(text.map { it.text }, ArticleCleaner.clean(text + bio, "Spiele").map { it.text })
+        // A picture of a person in the story, followed by text about them, is no bio.
+        val person = listOf(
+            ArticleBlock.image("https://img.example.com/merkel.jpg", alt = "Bild von Angela Merkel"),
+            ArticleBlock.paragraph("Angela Merkel sagte am Abend, sie habe mit diesem Ergebnis gerechnet und sei nicht überrascht."),
+        )
+        assertEquals(7, ArticleCleaner.clean(text + person, "Wahl").size)
+    }
+
+    @Test
+    fun `short paragraphs may repeat, long ones may not`() {
+        val q1 = ArticleBlock.paragraph("Haben Sie mit diesem Ergebnis gerechnet?")
+        val q2 = ArticleBlock.paragraph("Werden Sie jetzt zurücktreten?")
+        val no = ArticleBlock.paragraph("Nein.")
+        val long = ArticleBlock.paragraph("Das Interview führte unsere Korrespondentin am Mittwoch in Berlin, kurz nach der Bekanntgabe.")
+        val cleaned = ArticleCleaner.clean(listOf(long, q1, no, q2, no, long), "Interview")
+        assertEquals(listOf(long, q1, no, q2, no).map { it.text }, cleaned.map { it.text })
+    }
+
+    @Test
     fun `title recognition copes with kickers and separators`() {
         assertTrue(ArticleCleaner.isTitle("US-Zwischenwahl Demokraten erobern Mehrheit im Senat", "US-Zwischenwahl: Demokraten erobern Mehrheit im Senat"))
         assertTrue(ArticleCleaner.isTitle("Kongresswahlen in den USA Die Ergebnisse der Midterms in Zahlen und Karten", "Die Ergebnisse der Midterms in den USA in Zahlen und Karten"))

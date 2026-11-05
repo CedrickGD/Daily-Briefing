@@ -46,19 +46,70 @@ class ReadabilityStoreTest {
     }
 
     @Test
-    fun `two walls in a row teach a new blocked site, a success in between does not`() = runBlocking {
+    fun `two consent or bot walls in a row teach a new blocked site, a success in between does not`() = runBlocking {
         val s = store()
-        s.record("www.example-paper.com", ReadOutcome.PAYWALL)
+        s.record("www.example-paper.com", ReadOutcome.CONSENT)
         assertFalse(s.isBlocked("example-paper.com"))
-        s.record("edition.example-paper.com", ReadOutcome.PAYWALL)
+        s.record("edition.example-paper.com", ReadOutcome.CONSENT)
         assertTrue(s.isBlocked("www.example-paper.com"))
-        assertEquals(ReadOutcome.PAYWALL, s.blockReason("example-paper.com"))
+        assertEquals(ReadOutcome.CONSENT, s.blockReason("example-paper.com"))
         assertEquals("learned walls come first", "example-paper.com", s.blockedDomains().first())
 
         s.record("other.de", ReadOutcome.BLOCKED)
         s.record("other.de", ReadOutcome.OK)
         s.record("other.de", ReadOutcome.BLOCKED)
         assertFalse(s.isBlocked("other.de"))
+    }
+
+    @Test
+    fun `paid articles block a site only when (nearly) all of it is paid`() = runBlocking {
+        val s = store()
+        // Fresh install, the first Spiegel items are SPIEGEL+ (about half of them are): still readable.
+        s.record("www.spiegel.de", ReadOutcome.PAYWALL, article = "https://www.spiegel.de/politik/a-1")
+        s.record("www.spiegel.de", ReadOutcome.PAYWALL, article = "https://www.spiegel.de/politik/a-2")
+        assertFalse(s.isBlocked("spiegel.de"))
+        s.record("www.spiegel.de", ReadOutcome.OK, article = "https://www.spiegel.de/politik/a-3")
+        s.record("www.spiegel.de", ReadOutcome.PAYWALL, article = "https://www.spiegel.de/politik/a-4")
+        s.record("www.spiegel.de", ReadOutcome.PAYWALL, article = "https://www.spiegel.de/politik/a-5")
+        assertFalse("free, paid, paid", s.isBlocked("spiegel.de"))
+        repeat(3) { s.record("www.spiegel.de", ReadOutcome.PAYWALL, article = "https://www.spiegel.de/wirtschaft/b-$it") }
+        s.record("www.spiegel.de", ReadOutcome.OK, article = "https://www.spiegel.de/wirtschaft/c")
+        repeat(2) { s.record("www.spiegel.de", ReadOutcome.PAYWALL, article = "https://www.spiegel.de/kultur/d-$it") }
+        assertFalse("paid and free articles mixed: a readable newsroom", s.isBlocked("spiegel.de"))
+
+        // A hard paywall: six paid articles, no free one.
+        repeat(ReadabilityStore.PAYWALL_MIN - 1) { s.record("hard-paper.example", ReadOutcome.PAYWALL, article = "https://hard-paper.example/p$it") }
+        assertFalse(s.isBlocked("hard-paper.example"))
+        s.record("hard-paper.example", ReadOutcome.PAYWALL, article = "https://hard-paper.example/last")
+        assertTrue(s.isBlocked("hard-paper.example"))
+        assertEquals(ReadOutcome.PAYWALL, s.blockReason("hard-paper.example"))
+        // Its block is shorter than a consent wall's: the site gets another chance after a week.
+        clock += ReadabilityStore.PAYWALL_LEARNED_FOR.plus(Duration.ofHours(1)).toMillis()
+        s.record("unrelated.org", ReadOutcome.OK)
+        assertFalse(s.isBlocked("hard-paper.example"))
+        // Its next paid article blocks it again, a free one clears it.
+        s.record("hard-paper.example", ReadOutcome.PAYWALL, article = "https://hard-paper.example/p6")
+        assertTrue(s.isBlocked("hard-paper.example"))
+        s.record("hard-paper.example", ReadOutcome.OK, article = "https://hard-paper.example/free")
+        assertFalse(s.isBlocked("hard-paper.example"))
+    }
+
+    @Test
+    fun `the same article counts once, also after a restart`() = runBlocking {
+        val s = store()
+        repeat(3) { s.record("www.example-paper.com", ReadOutcome.CONSENT, article = "https://www.example-paper.com/a#top") }
+        s.record("example-paper.com", ReadOutcome.CONSENT, article = "https://example-paper.com/a")
+        assertEquals(1, s.statsFor("example-paper.com")?.failed)
+        assertFalse(s.isBlocked("example-paper.com"))
+        val again = store()
+        again.record("example-paper.com", ReadOutcome.CONSENT, article = "https://www.example-paper.com/a")
+        assertEquals(1, again.statsFor("example-paper.com")?.failed)
+        // Another article, or the same one read fine after all, counts.
+        again.record("example-paper.com", ReadOutcome.OK, article = "https://www.example-paper.com/a")
+        again.record("example-paper.com", ReadOutcome.CONSENT, article = "https://www.example-paper.com/b")
+        assertEquals(2, again.statsFor("example-paper.com")?.failed)
+        assertEquals(1, again.statsFor("example-paper.com")?.ok)
+        assertEquals("example-paper.com/a?x=1", ReadabilityStore.articleKey("https://WWW.Example-Paper.com/a/?x=1#frag"))
     }
 
     @Test

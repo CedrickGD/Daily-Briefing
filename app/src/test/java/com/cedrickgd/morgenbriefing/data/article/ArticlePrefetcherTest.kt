@@ -10,6 +10,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -59,7 +60,10 @@ class ArticlePrefetcherTest {
     }
 
     private fun TestScope.prefetcher(source: FakeSource, unmetered: Boolean = true, maxQueued: Int = 40) =
-        ArticlePrefetcher(source, NetworkMeter { unmetered }, scope = this.backgroundScope, maxQueued = maxQueued)
+        prefetcher(source, NetworkMeter { unmetered }, maxQueued)
+
+    private fun TestScope.prefetcher(source: FakeSource, network: NetworkMeter, maxQueued: Int = 40) =
+        ArticlePrefetcher(source, network, scope = this.backgroundScope, maxQueued = maxQueued, clock = { testScheduler.currentTime })
 
     @Test
     fun `at most two load at a time, every item once, statuses and pictures are published`() = runTest(StandardTestDispatcher()) {
@@ -115,23 +119,89 @@ class ArticlePrefetcherTest {
     }
 
     @Test
-    fun `failures map to statuses, failed items are tried again later`() = runTest(StandardTestDispatcher()) {
+    fun `failures map to statuses, network failures are tried again after a growing pause`() = runTest(StandardTestDispatcher()) {
         val source = FakeSource()
         source.failures["id1"] = ReadOutcome.PAYWALL
         source.failures["id2"] = ReadOutcome.BLOCKED
         source.failures["id3"] = ReadOutcome.NETWORK
         listOf("id1", "id2", "id3").forEach(source::release)
         val p = prefetcher(source)
-        p.prefetch(listOf(item(1), item(2), item(3)), PrefetchMode.ALWAYS)
+        val items = listOf(item(1), item(2), item(3))
+        p.prefetch(items, PrefetchMode.ALWAYS)
         runCurrent()
         assertEquals(ArticleStatus.PAYWALL, p.statusOf("id1"))
         assertEquals(ArticleStatus.BLOCKED, p.statusOf("id2"))
         assertEquals(ArticleStatus.FAILED, p.statusOf("id3"))
-        source.failures.remove("id3")
-        p.prefetch(listOf(item(1), item(2), item(3)), PrefetchMode.ALWAYS)
+        // Scrolling on right away: nothing is loaded again.
+        p.prefetch(items, PrefetchMode.ALWAYS)
+        runCurrent()
+        assertEquals(listOf("id1", "id2", "id3"), source.loads)
+        // After the first pause the network failure is tried again – and fails again: the next pause is twice as long.
+        advanceTimeBy(ArticlePrefetcher.RETRY_AFTER_MS)
+        p.prefetch(items, PrefetchMode.ALWAYS)
         runCurrent()
         assertEquals(listOf("id1", "id2", "id3", "id3"), source.loads)
+        advanceTimeBy(ArticlePrefetcher.RETRY_AFTER_MS)
+        p.prefetch(items, PrefetchMode.ALWAYS)
+        runCurrent()
+        assertEquals(4, source.loads.size)
+        advanceTimeBy(ArticlePrefetcher.RETRY_AFTER_MS)
+        source.failures.remove("id3")
+        p.prefetch(items, PrefetchMode.ALWAYS)
+        runCurrent()
+        assertEquals(listOf("id1", "id2", "id3", "id3", "id3"), source.loads)
         assertEquals(ArticleStatus.READABLE, p.statusOf("id3"))
+    }
+
+    @Test
+    fun `a page without an article is not loaded again this session`() = runTest(StandardTestDispatcher()) {
+        val source = FakeSource()
+        source.failures["id1"] = ReadOutcome.NOT_ARTICLE
+        source.release("id1")
+        val p = prefetcher(source)
+        repeat(4) {
+            p.prefetch(listOf(item(1)), PrefetchMode.ALWAYS)
+            runCurrent()
+            advanceTimeBy(ArticlePrefetcher.RETRY_MAX_MS)
+        }
+        assertEquals(listOf("id1"), source.loads)
+        assertEquals(ArticleStatus.FAILED, p.statusOf("id1"))
+        // The reader found nothing either: no prefetch of it afterwards.
+        p.report(item(2), ArticleException(ReadOutcome.NOT_ARTICLE))
+        p.prefetch(listOf(item(2)), PrefetchMode.ALWAYS)
+        runCurrent()
+        assertEquals(listOf("id1"), source.loads)
+    }
+
+    @Test
+    fun `wifi-only loads that waited are skipped when the phone left the wifi meanwhile`() = runTest(StandardTestDispatcher()) {
+        val source = FakeSource()
+        var unmetered = true
+        val p = prefetcher(source, NetworkMeter { unmetered })
+        p.prefetch((1..4).map(::item), PrefetchMode.WIFI_ONLY)
+        runCurrent()
+        assertEquals(listOf("id1", "id2"), source.loads)
+        unmetered = false
+        (1..4).forEach { source.release("id$it") }
+        runCurrent()
+        assertEquals("id3 and id4 waited and would now go over mobile data", listOf("id1", "id2"), source.loads)
+        assertEquals(ArticleStatus.UNKNOWN, p.statusOf("id3"))
+    }
+
+    @Test
+    fun `a newer window goes first, waiting loads of cards that scrolled away are dropped`() = runTest(StandardTestDispatcher()) {
+        val source = FakeSource()
+        val p = prefetcher(source)
+        p.prefetch((1..6).map(::item), PrefetchMode.ALWAYS)
+        runCurrent()
+        assertEquals(listOf("id1", "id2"), source.loads)
+        // The user flung on: cards 7 and 8 are on screen now, 3..6 never started.
+        p.prefetch(listOf(item(7), item(8)), PrefetchMode.ALWAYS)
+        (1..8).forEach { source.release("id$it") }
+        runCurrent()
+        assertEquals(listOf("id1", "id2", "id7", "id8"), source.loads)
+        assertEquals(ArticleStatus.READABLE, p.statusOf("id1"))
+        assertEquals(ArticleStatus.UNKNOWN, p.statusOf("id4"))
     }
 
     @Test

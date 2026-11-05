@@ -111,19 +111,38 @@ object ArticleExtractor {
 
     /**
      * True when [content] is a consent page, not the article: some newsrooms (golem.de) serve
-     * "Cookies zustimmen" to every client without their consent cookie. Short, and about cookies.
+     * "Cookies zustimmen" to every client without their consent cookie. Short, the dialog's
+     * phrases in it, and nothing but the dialog: (nearly) every block is about cookies, tracking
+     * or the ad-free subscription. A short news item about pay-or-consent models quotes
+     * "Pur-Abo" or "Alle Cookies akzeptieren" too, but its other paragraphs tell the story.
      */
     fun looksLikeConsentWall(content: ArticleContent): Boolean {
-        if (content.wordCount > WALL_MAX_WORDS) return false
-        val head = content.text.take(2500)
-        return CONSENT_WALL.containsMatchIn(head)
+        val words = content.wordCount
+        if (words > WALL_MAX_WORDS) return false
+        val phrases = CONSENT_WALL.findAll(content.text.take(2500)).map { it.value.lowercase(Locale.ROOT) }.toSet().size
+        val enough = phrases >= 2 || (phrases == 1 && words <= WALL_ONE_PHRASE_WORDS)
+        if (!enough) return false
+        val texts = content.blocks.filter { it.type == ArticleBlock.PARAGRAPH || it.type == ArticleBlock.HEADING || it.type == ArticleBlock.LIST }
+            .map { if (it.type == ArticleBlock.LIST) it.items.joinToString(" ") else it.text }
+            .filter { it.isNotBlank() }
+        if (texts.isEmpty()) return false
+        val aboutConsent = texts.count { CONSENT_TOPIC.containsMatchIn(it) }
+        return aboutConsent >= texts.size * WALL_TOPIC_SHARE
     }
 
     private const val WALL_MAX_WORDS = 450
+    private const val WALL_ONE_PHRASE_WORDS = 80
+    private const val WALL_TOPIC_SHARE = 0.75
     private val CONSENT_WALL = Regex(
         "(?i)(cookies? zustimmen|nutzung aller cookies|zustimmen und weiter|mit werbung und tracking|" +
             "pur-abo|werbefrei lesen|zustimmen oder abo|alle cookies akzeptieren|accept all cookies|" +
             "privacy manager|consent management|einwilligung in die (datenverarbeitung|nutzung))",
+    )
+
+    /** What every block of a consent dialog is about. */
+    private val CONSENT_TOPIC = Regex(
+        "(?i)(cookie|tracking|werbung|werbefrei|einwillig|zustimm|akzeptier|datenschutz|privacy|consent|abo\\b|abonn|" +
+            "anmelden|einstellungen|partner|anbieter|personalis|accept|advertis|subscri|sign in|log in|settings)",
     )
 
     private const val MAX_BLOCKS = 400
@@ -398,8 +417,11 @@ object ArticleExtractor {
             if (text.length < MIN_PARAGRAPH_CHARS) return
             if (text.equals(title, ignoreCase = true)) return
             if (text.length <= SHORT_PARAGRAPH && JUNK.matches(text)) return
-            if (!seenText.add(text)) return
-            out += block(text)
+            val made = block(text)
+            // The same text twice is a scraping artefact (a teaser shown twice) – but a short
+            // paragraph may well repeat ("Nein." as two answers of an interview).
+            if (ArticleCleaner.repeatsCount(made) && !seenText.add(text)) return
+            out += made
         }
     }
 

@@ -97,6 +97,28 @@ class ArticleExtractorTest {
     }
 
     @Test
+    fun `a short news item about pay-or-consent models is an article, not a consent wall`() {
+        val news = "<html><head><meta property=\"og:title\" content=\"Gericht: Pur-Abo ist zulässig\"></head><body><article><h1>Gericht: Pur-Abo ist zulässig</h1>" +
+            "<p>Das Landgericht München hat am Mittwoch die Klage eines Verbraucherverbands gegen ein großes Nachrichtenportal abgewiesen.</p>" +
+            "<p>Leser müssen dort wählen: Sie lesen mit Werbung und Tracking, oder sie schließen ein Pur-Abo für drei Euro im Monat ab.</p>" +
+            "<p>Die Richter sahen darin keine unzulässige Kopplung. Der Verband prüft nun, ob er in Berufung geht.</p>" +
+            "<p>Ähnliche Verfahren laufen derzeit auch in Hamburg und Köln, Urteile werden dort im Frühjahr erwartet.</p></article></body></html>"
+        val content = ArticleExtractor.read(news, "https://www.example-tech.de/news/pur-abo", now)
+        assertEquals(com.cedrickgd.morgenbriefing.data.model.ReadOutcome.OK, content.outcome)
+        assertFalse(ArticleExtractor.looksLikeConsentWall(content.content!!))
+    }
+
+    @Test
+    fun `an interview keeps the same short answer twice, a repeated teaser goes`() {
+        val teaser = "<p>Die Ministerin spricht über die Reform, ihre Kritiker und die nächsten Schritte der Regierung.</p>"
+        val html = "<html><body><article>$teaser${paragraph(1)}<p>Haben Sie mit diesem Widerstand gerechnet?</p><p>Nein.</p>" +
+            "<p>Werden Sie die Reform trotzdem durchsetzen?</p><p>Nein.</p>${paragraph(2)}$teaser</article></body></html>"
+        val texts = ArticleExtractor.extract(html, "https://www.example.org/interview", now)!!.blocks.map { it.text }
+        assertEquals(2, texts.count { it == "Nein." })
+        assertEquals(1, texts.count { it.startsWith("Die Ministerin spricht") })
+    }
+
+    @Test
     fun `http pictures are upgraded and data uris dropped`() {
         val html = "<html><body><article><h1>T</h1>" + paragraph(1) + paragraph(2) + paragraph(3) +
             "<p><img src=\"http://www.example.org/a.jpg\" alt=\"A\"></p>" +

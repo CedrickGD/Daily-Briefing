@@ -29,9 +29,11 @@ interface ReaderStrings {
 
     /**
      * Why the article cannot be shown, in one or two sentences. [site] is the newsroom's name
-     * (may be blank), [httpCode] the server's error status, when it sent one.
+     * (may be blank), [httpCode] the server's error status, when it sent one. [via] is the
+     * aggregator ("Google News") the link goes through when it could not be asked for the
+     * article's address ([ReadOutcome.NETWORK]); [httpCode] is then the aggregator's.
      */
-    fun failureReason(outcome: ReadOutcome?, site: String = "", httpCode: Int? = null): String
+    fun failureReason(outcome: ReadOutcome?, site: String = "", httpCode: Int? = null, via: String? = null): String
 
     /** Short badge for a feed card; empty for [ArticleStatus.UNKNOWN]. */
     fun status(status: ArticleStatus): String
@@ -58,7 +60,7 @@ interface ReaderStrings {
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Nur bei der Redaktion lesbar" else "Artikel gerade nicht da"
 
-        override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?): String {
+        override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?, via: String?): String {
             val who = site.ifBlank { "Die Redaktion" }
             return when (outcome) {
                 ReadOutcome.PAYWALL -> "$who zeigt diesen Artikel nur im Abo. Im Browser kannst du dich anmelden."
@@ -71,6 +73,8 @@ interface ReaderStrings {
                 }
                 ReadOutcome.NETWORK -> when {
                     httpCode == 429 -> "Gerade zu viele Anfragen${code(httpCode)} – versuch es gleich nochmal."
+                    via != null && httpCode != null -> "Der Link führt über $via, und $via antwortet gerade nicht${code(httpCode)} – versuch es gleich nochmal."
+                    via != null -> "Der Link führt über $via, und $via ist gerade nicht erreichbar. Bist du online?"
                     httpCode != null -> "Der Server der Redaktion antwortet gerade nicht${code(httpCode)}."
                     else -> "Die Seite ist gerade nicht erreichbar. Bist du online?"
                 }
@@ -98,7 +102,7 @@ interface ReaderStrings {
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Only readable on the publisher's site" else "Article not available right now"
 
-        override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?): String {
+        override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?, via: String?): String {
             val who = site.ifBlank { "The publisher" }
             return when (outcome) {
                 ReadOutcome.PAYWALL -> "$who keeps this article for subscribers. You can sign in in your browser."
@@ -111,6 +115,8 @@ interface ReaderStrings {
                 }
                 ReadOutcome.NETWORK -> when {
                     httpCode == 429 -> "Too many requests right now${code(httpCode)} – try again in a moment."
+                    via != null && httpCode != null -> "The link goes through $via, and $via isn't responding${code(httpCode)} – try again in a moment."
+                    via != null -> "The link goes through $via, and $via can't be reached right now. Are you online?"
                     httpCode != null -> "The publisher's server isn't responding${code(httpCode)}."
                     else -> "The page can't be reached right now. Are you online?"
                 }
@@ -138,7 +144,7 @@ interface ReaderStrings {
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Lisible uniquement chez l'éditeur" else "Article indisponible pour le moment"
 
-        override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?): String {
+        override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?, via: String?): String {
             val who = site.ifBlank { "La rédaction" }
             return when (outcome) {
                 ReadOutcome.PAYWALL -> "$who réserve cet article à ses abonnés. Vous pouvez vous connecter dans le navigateur."
@@ -151,6 +157,8 @@ interface ReaderStrings {
                 }
                 ReadOutcome.NETWORK -> when {
                     httpCode == 429 -> "Trop de requêtes en ce moment${code(httpCode)} – réessayez dans un instant."
+                    via != null && httpCode != null -> "Le lien passe par $via, et $via ne répond pas${code(httpCode)} – réessayez dans un instant."
+                    via != null -> "Le lien passe par $via, et $via est injoignable pour le moment. Êtes-vous connecté ?"
                     httpCode != null -> "Le serveur de la rédaction ne répond pas${code(httpCode)}."
                     else -> "La page est injoignable pour le moment. Êtes-vous connecté ?"
                 }
@@ -178,7 +186,7 @@ interface ReaderStrings {
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Solo se puede leer en la web del medio" else "Artículo no disponible ahora"
 
-        override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?): String {
+        override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?, via: String?): String {
             val who = site.ifBlank { "El medio" }
             return when (outcome) {
                 ReadOutcome.PAYWALL -> "$who reserva este artículo para suscriptores. Puedes iniciar sesión en el navegador."
@@ -191,6 +199,8 @@ interface ReaderStrings {
                 }
                 ReadOutcome.NETWORK -> when {
                     httpCode == 429 -> "Demasiadas solicitudes ahora mismo${code(httpCode)}; inténtalo de nuevo en un momento."
+                    via != null && httpCode != null -> "El enlace pasa por $via, y $via no responde${code(httpCode)}; inténtalo de nuevo en un momento."
+                    via != null -> "El enlace pasa por $via, y no se puede acceder a $via ahora. ¿Tienes conexión?"
                     httpCode != null -> "El servidor del medio no responde${code(httpCode)}."
                     else -> "No se puede acceder a la página ahora. ¿Tienes conexión?"
                 }
@@ -218,7 +228,7 @@ interface ReaderStrings {
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Leggibile solo sul sito della redazione" else "Articolo non disponibile al momento"
 
-        override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?): String {
+        override fun failureReason(outcome: ReadOutcome?, site: String, httpCode: Int?, via: String?): String {
             val who = site.ifBlank { "La redazione" }
             return when (outcome) {
                 ReadOutcome.PAYWALL -> "$who riserva questo articolo agli abbonati. Puoi accedere dal browser."
@@ -231,6 +241,8 @@ interface ReaderStrings {
                 }
                 ReadOutcome.NETWORK -> when {
                     httpCode == 429 -> "Troppe richieste in questo momento${code(httpCode)}: riprova tra poco."
+                    via != null && httpCode != null -> "Il link passa da $via, e $via non risponde${code(httpCode)}: riprova tra poco."
+                    via != null -> "Il link passa da $via, e $via non è raggiungibile al momento. Sei online?"
                     httpCode != null -> "Il server della redazione non risponde${code(httpCode)}."
                     else -> "La pagina non è raggiungibile al momento. Sei online?"
                 }
