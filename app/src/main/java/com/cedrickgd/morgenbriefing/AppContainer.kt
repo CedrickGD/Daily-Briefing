@@ -7,9 +7,11 @@ import com.cedrickgd.morgenbriefing.data.NewsRepository
 import com.cedrickgd.morgenbriefing.data.SettingsRepository
 import com.cedrickgd.morgenbriefing.data.WeatherRepository
 import com.cedrickgd.morgenbriefing.data.article.ArticleRepository
+import com.cedrickgd.morgenbriefing.data.article.LinkResolver
 import com.cedrickgd.morgenbriefing.data.local.NewsCache
 import com.cedrickgd.morgenbriefing.data.local.WeatherStore
 import com.cedrickgd.morgenbriefing.data.news.RssParser
+import com.cedrickgd.morgenbriefing.data.remote.GoogleNewsDecoder
 import com.cedrickgd.morgenbriefing.data.remote.OpenMeteoClient
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
 import com.cedrickgd.morgenbriefing.location.LocationFinder
@@ -38,7 +40,12 @@ class AppContainer(context: Context) {
     val openMeteo = OpenMeteoClient(http, json)
     val weather = WeatherRepository(openMeteo, weatherStore)
     val rss = RssClient(http, RssParser { Xml.newPullParser() })
-    val news = NewsRepository(rss, newsCache)
+
+    /** Google News links → publisher URLs (for the reader); results cached in `store/google-news-links.json`. */
+    val googleNewsDecoder = GoogleNewsDecoder(http, File(storeDir, "google-news-links.json"), json)
+    val linkResolver: LinkResolver = googleNewsDecoder
+
+    val news = NewsRepository(rss, newsCache, resolvedUrl = googleNewsDecoder::peek, warmUp = googleNewsDecoder::warm)
     val articles = ArticleRepository(http, storeDir, json)
     val location = LocationFinder(app)
 }

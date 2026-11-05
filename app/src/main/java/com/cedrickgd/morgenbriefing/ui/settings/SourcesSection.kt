@@ -112,7 +112,7 @@ internal fun SourcesSection(
                     topic = topic,
                     sources = remember(settings, topic.id) { FeedCatalog.allSourcesFor(topic.id, settings) },
                     disabled = settings.disabledFeeds,
-                    hidden = topic.id in settings.hiddenTopics,
+                    hidden = topic.id !in Topics.followedIds(settings),
                     expanded = topic.id in expanded,
                     onToggleExpanded = { onToggleExpanded(topic.id) },
                     actions = actions,

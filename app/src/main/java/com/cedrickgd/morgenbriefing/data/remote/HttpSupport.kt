@@ -14,7 +14,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /** User-Agent sent with every request (GitHub rejects requests without one). */
-internal const val USER_AGENT = "Morgenbriefing-Android"
+internal const val USER_AGENT = "DailyBriefing-Android"
 
 /** A fully read HTTP response: status code plus the body as text. */
 internal class HttpText(

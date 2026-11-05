@@ -532,7 +532,7 @@ private fun SettingsBlock(
         Block.TOPICS -> TopicGrid(
             topics = remember(settings) { Topics.catalogue(settings) },
             defaultOrder = remember(settings.customTopics) { Topics.DEFAULT_ORDER + settings.customTopics.map { it.id } },
-            hidden = settings.hiddenTopics,
+            hidden = remember(settings) { Topics.hidden(settings) },
             reduceMotion = content.reduceMotion,
             listState = listState,
             listItemKey = Block.TOPICS,
