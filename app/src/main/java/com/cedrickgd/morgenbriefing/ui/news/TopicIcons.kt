@@ -11,6 +11,7 @@ import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.CandlestickChart
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.CurrencyBitcoin
+import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.DownhillSkiing
 import androidx.compose.material.icons.rounded.Eco
@@ -149,6 +150,7 @@ fun TopicIcon.vector(): ImageVector = when (this) {
     TopicIcon.PALETTE -> Icons.Rounded.Palette
     TopicIcon.TRAVEL -> Icons.Rounded.Flight
     TopicIcon.FOOD -> Icons.Rounded.LunchDining
+    TopicIcon.DEVICES -> Icons.Rounded.Devices
 }
 
 /** The pictogram of [topic]: its [TopicIcon], or null for old custom topics that only have an emoji. */

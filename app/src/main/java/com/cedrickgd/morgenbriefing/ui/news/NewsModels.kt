@@ -167,7 +167,7 @@ internal fun buildNewsFeed(
     val sections = prefs.topics.mapIndexed { index, topic ->
         val topicNews = news[topic.id]
         val items = readableItems(
-            topicNews?.items.orEmpty().filter { it.sourceId !in prefs.disabledFeeds },
+            topicNews?.items.orEmpty().filter { it.feedSourceId !in prefs.disabledFeeds },
             hides,
             prefs.readableOnly,
         )

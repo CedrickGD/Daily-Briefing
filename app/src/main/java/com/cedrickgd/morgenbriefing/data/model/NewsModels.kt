@@ -57,6 +57,14 @@ data class FeedSource(
 ) {
     val isCustom: Boolean get() = !builtIn
     val isGoogleNews: Boolean get() = kind == SourceKind.GOOGLE_NEWS
+
+    companion object {
+        /** Id prefix of the feeds the user added ([builtIn] = false). */
+        const val USER_ID_PREFIX = "custom:"
+
+        /** Whether [id] names a feed the user added (built-in ids and `gn:` ids never start so). */
+        fun isUserFeedId(id: String): Boolean = id.startsWith(USER_ID_PREFIX)
+    }
 }
 
 /** One article as a feed delivered it. The full text lives on the publisher's site ([url]). */
@@ -83,6 +91,21 @@ data class NewsItem(
     val aggregator: String? = null,
 ) {
     val key: String get() = id
+
+    /**
+     * The [FeedSource.id] the article belongs to: [sourceId] without [PAGE_SUFFIX], so an article
+     * the endless list paged in (`gn:<topic>@<edition>#page`) counts as its Google News source –
+     * switching that source off hides it too.
+     */
+    val feedSourceId: String get() = sourceId.removeSuffix(PAGE_SUFFIX)
+
+    /** From a feed the user added: shown even when "only readable articles" would hide its site. */
+    val fromUserFeed: Boolean get() = FeedSource.isUserFeedId(sourceId)
+
+    companion object {
+        /** Suffix of the source id of articles the endless list appended (`gn:<topic>@<edition>#page`). */
+        const val PAGE_SUFFIX = "#page"
+    }
 }
 
 @Serializable

@@ -60,20 +60,73 @@ object TopicSources {
     }
 
     /**
-     * The search behind [topicId]'s endless list: the topic's query in its edition (places: the
-     * place's name), or null when the topic cannot page (top stories, own feeds only).
+     * The search behind [topicId]'s endless list: the topic's query in its edition (places:
+     * [placeQuery]), or null when the topic cannot page (top stories, own feeds only, or its
+     * Google News source is switched off – the older pages would be Google News articles).
      */
     fun pagingQuery(topicId: String, settings: AppSettings): PagingQuery? {
         if (topicId == Topics.TOP_ID) return null
         val edition = editionFor(topicId, settings)
+        val sourceId = googleNewsId(topicId, edition)
+        if (sourceId in settings.disabledFeeds) return null
         val query = when {
-            Topics.isLocalId(topicId) -> Topics.placeFor(topicId, settings)?.let { quoted(it.name) }
+            Topics.isLocalId(topicId) -> Topics.placeFor(topicId, settings)?.let { placeQuery(it, edition) }
             Topics.isCustomId(topicId) -> settings.customTopics.firstOrNull { it.id == topicId }?.query?.takeIf { it.isNotBlank() }
-            topicId == Topics.REGION_ID -> settings.home.name.takeIf { it.isNotBlank() }?.let(::quoted)
+            topicId == Topics.REGION_ID -> settings.home.takeIf { it.name.isNotBlank() }?.let { placeQuery(it, edition) }
             else -> Taxonomy.byId(topicId)?.queryFor(edition)
         } ?: return null
-        return PagingQuery(query, edition, googleNewsId(topicId, edition))
+        return PagingQuery(query, edition, sourceId)
     }
+
+    /**
+     * The search words for [place]'s older news in [edition]: the quoted name plus, where the
+     * first page disambiguates by state too ([geoName]), the quoted state – a bare
+     * `"Washington"` pages into Washington State, `"Washington" "District of Columbia"` stays in
+     * D.C. (checked 05.11.2026). The state costs some hits (Leipzig: 64 → 18 per three days), but
+     * an endless list of another town's news is worse than a slower one of the right town.
+     *
+     * Place labels come from the German place search, so the state is German: German editions
+     * take it as it is, English ones through [ENGLISH_STATES] ("Kalifornien" finds 2 stories of
+     * Los Angeles in three days, "California" 100). Other languages, and countries whose first
+     * level is too coarse for news to name it ([STATE_COUNTRIES]: "England", "Munster"), get the
+     * name alone.
+     */
+    internal fun placeQuery(place: Place, edition: NewsEdition): String {
+        val name = quoted(place.name)
+        val state = stateOf(place)
+            ?.takeIf { place.countryCode.uppercase() in STATE_COUNTRIES }
+            ?.let { stateIn(it, edition.language) }
+            ?: return name
+        return "$name ${quoted(state)}"
+    }
+
+    private fun stateIn(germanState: String, language: String): String? = when (language) {
+        "de" -> germanState
+        "en" -> germanState.removePrefix("Bundesstaat ").let { ENGLISH_STATES[it] ?: it }
+        else -> null
+    }
+
+    /** Countries whose news name the state with the town ("Austin, Texas", "Halle (Saale), Sachsen-Anhalt"). */
+    private val STATE_COUNTRIES = setOf("US", "CA", "AU", "IN", "DE", "AT", "CH")
+
+    /** The German state names of the place search that English differs from (seen 05.11.2026). */
+    private val ENGLISH_STATES = mapOf(
+        "Kalifornien" to "California",
+        "Pennsylvanien" to "Pennsylvania",
+        "Britisch-Kolumbien" to "British Columbia",
+        "Neuschottland" to "Nova Scotia",
+        "Neubraunschweig" to "New Brunswick",
+        "Neufundland" to "Newfoundland",
+        "Neufundland und Labrador" to "Newfoundland and Labrador",
+        "Prinz-Edward-Insel" to "Prince Edward Island",
+        "Nordwest-Territorien" to "Northwest Territories",
+        "Neusüdwales" to "New South Wales",
+        "Westaustralien" to "Western Australia",
+        "Südaustralien" to "South Australia",
+        "Tasmanien" to "Tasmania",
+        "Nordterritorium" to "Northern Territory",
+        "Westbengalen" to "West Bengal",
+    )
 
     /** The edition a topic reads: a place's own country (else the main edition), otherwise [AppSettings.edition]. */
     fun editionFor(topicId: String, settings: AppSettings): NewsEdition = when {
@@ -149,9 +202,14 @@ object TopicSources {
      */
     internal fun geoName(place: Place): String {
         val name = place.name.trim()
-        val parts = place.region.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        val state = parts.firstOrNull()?.takeIf { parts.size >= 2 && !it.equals(name, ignoreCase = true) }
+        val state = stateOf(place)
         return if (state == null) name else "$name, $state"
+    }
+
+    /** The first part of the region label when it disambiguates [place] (see [geoName]), else null. */
+    private fun stateOf(place: Place): String? {
+        val parts = place.region.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        return parts.firstOrNull()?.takeIf { parts.size >= 2 && !it.equals(place.name.trim(), ignoreCase = true) }
     }
 
     private fun quoted(name: String): String = "\"" + name.trim().replace("\"", "") + "\""

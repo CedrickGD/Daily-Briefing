@@ -134,7 +134,7 @@ internal fun buildDiscoverState(
     fun preview(id: String) = PreviewUi(
         topicId = id,
         items = news[id]?.items.orEmpty().asSequence()
-            .filter { it.sourceId !in settings.disabledFeeds }
+            .filter { it.feedSourceId !in settings.disabledFeeds }
             .take(PREVIEW_SIZE)
             .toList(),
         loading = id in loading,

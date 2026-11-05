@@ -52,6 +52,15 @@ class TaxonomyTest {
     }
 
     @Test
+    fun `a category's icon is its own, not one of its sub-topics'`() {
+        assertEquals(TopicIcon.DEVICES, Taxonomy.byId("ki")?.icon)
+        Taxonomy.CATEGORIES.forEach { category ->
+            val children = Taxonomy.children(category.id).map { it.icon }
+            assertTrue(category.id, category.icon !in children)
+        }
+    }
+
+    @Test
     fun `every topic has a valid icon and a seed`() {
         Taxonomy.ALL.forEach { topic ->
             assertEquals(topic.id, topic.icon, TopicIcon.fromKey(topic.icon.name))

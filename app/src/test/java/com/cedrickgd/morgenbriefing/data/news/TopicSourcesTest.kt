@@ -86,8 +86,25 @@ class TopicSourcesTest {
         assertEquals(GoogleNews.geoUrl("Washington, District of Columbia", NewsEdition.USA), source.url)
         assertEquals("US:en", source.edition)
         assertEquals(NewsEdition.USA, TopicSources.editionFor(id, settings))
-        assertEquals(PagingQuery("\"Washington\"", NewsEdition.USA, "gn:$id@US:en"), TopicSources.pagingQuery(id, settings))
+        // Older pages search the same place as page one, not every Washington.
+        assertEquals(PagingQuery("\"Washington\" \"District of Columbia\"", NewsEdition.USA, "gn:$id@US:en"), TopicSources.pagingQuery(id, settings))
         assertTrue(TopicSources.resolve("local:gibts-nicht", settings).isEmpty())
+    }
+
+    @Test
+    fun `older pages of a place name its state in the edition's language`() {
+        val la = Place("Los Angeles", 34.05, -118.24, "Kalifornien, Vereinigte Staaten", "US")
+        assertEquals("\"Los Angeles\" \"California\"", TopicSources.placeQuery(la, NewsEdition.USA))
+        val mumbai = Place("Mumbai", 19.07, 72.88, "Bundesstaat Maharashtra, Indien", "IN")
+        assertEquals("\"Mumbai\" \"Maharashtra\"", TopicSources.placeQuery(mumbai, NewsEdition("IN", "en")))
+        val halle = Place("Halle (Saale)", 51.48, 11.97, "Sachsen-Anhalt, Deutschland", "DE")
+        assertEquals("\"Halle (Saale)\" \"Sachsen-Anhalt\"", TopicSources.placeQuery(halle, NewsEdition.GERMANY))
+        // The region of a city state is the city; Britain's "England" and other languages' states narrow nothing.
+        assertEquals("\"Wien\"", TopicSources.placeQuery(Place("Wien", 48.2, 16.37, "Wien, Österreich", "AT"), NewsEdition("AT", "de")))
+        assertEquals("\"Manchester\"", TopicSources.placeQuery(Place("Manchester", 53.48, -2.24, "England, Vereinigtes Königreich", "GB"), NewsEdition("GB", "en")))
+        assertEquals("\"Barcelona\"", TopicSources.placeQuery(Place("Barcelona", 41.39, 2.17, "Katalonien, Spanien", "ES"), NewsEdition("ES", "es")))
+        // The region topic pages the home place the same way.
+        assertEquals("\"Austin\" \"Texas\"", TopicSources.pagingQuery(Topics.REGION_ID, usa)?.query)
     }
 
     @Test
@@ -116,6 +133,9 @@ class TopicSourcesTest {
         assertTrue(paging.query.startsWith("DAX OR"))
         assertEquals("gn:wirtschaft/boerse@DE:de", paging.sourceId)
         assertEquals("\"Berlin\"", TopicSources.pagingQuery(Topics.REGION_ID, germany)?.query)
+        // With its Google News source off a topic has nothing to page with.
+        assertNull(TopicSources.pagingQuery("wirtschaft/boerse", off))
+        assertNull(TopicSources.pagingQuery(Topics.REGION_ID, germany.copy(disabledFeeds = setOf("gn:region@DE:de"))))
     }
 
     @Test

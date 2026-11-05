@@ -48,6 +48,7 @@ internal fun publisherHost(item: NewsItem): String =
 
 /** True when [hides] says the reader cannot show [item]. */
 internal fun isHidden(item: NewsItem, hides: ReadabilityHides): Boolean {
+    if (item.fromUserFeed) return false // the user chose that site
     if (item.id in hides.itemIds) return true
     val host = publisherHost(item)
     return host.isNotEmpty() && hides.domains.isNotEmpty() && KnownWalls.matches(host, hides.domains)

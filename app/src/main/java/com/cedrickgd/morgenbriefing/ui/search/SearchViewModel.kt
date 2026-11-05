@@ -100,7 +100,7 @@ internal fun buildSearchUi(
         results = results,
         articles = articles,
         recent = settings.recentSearches,
-        trending = top?.items.orEmpty().asSequence().filter { it.sourceId !in settings.disabledFeeds }.take(TRENDING_SIZE).toList(),
+        trending = top?.items.orEmpty().asSequence().filter { it.feedSourceId !in settings.disabledFeeds }.take(TRENDING_SIZE).toList(),
         trendingLoading = topLoading,
         followedTopicId = followedTopic,
         showImages = settings.showImages,
@@ -182,8 +182,8 @@ class SearchViewModel(
         }
         viewModelScope.launch {
             attempt { container.news.warm() }
-            if (container.news.isStale(Topics.TOP_ID, TRENDING_MAX_AGE)) {
-                val settings = currentSettings() ?: return@launch
+            val settings = currentSettings() ?: return@launch
+            if (container.news.isStale(Topics.TOP_ID, TRENDING_MAX_AGE, settings)) {
                 attempt { container.news.refresh(listOf(Topics.TOP_ID), settings) }
             }
         }

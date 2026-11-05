@@ -20,6 +20,8 @@ import com.cedrickgd.morgenbriefing.data.remote.FeedException
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
 import com.cedrickgd.morgenbriefing.util.parseInstantOrNull
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -31,6 +33,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.text.Normalizer
 import java.time.Duration
@@ -62,6 +65,10 @@ data class RefreshOutcome(
  * - [search] answers a query from Google News and the cached articles, page by page into the
  *   past; results are not cached.
  *
+ * What the user waits for ([search], [loadMore]) has its own [INTERACTIVE_FETCHES] connections,
+ * so it never queues behind the dozens of feeds a refresh asks for. Merging, sorting and
+ * encoding run on [compute], never on the caller's (main) thread.
+ *
  * @param blockedDomains sites the reader cannot show, most certain first ([KnownWalls] plus
  *   what the phone learned); with [AppSettings.readableOnly] their articles never show.
  * @param resolvedUrl the publisher URL a Google News link resolved to before, if known (no
@@ -75,6 +82,7 @@ class NewsRepository(
     private val blockedDomains: () -> Collection<String> = { KnownWalls.DOMAINS },
     private val resolvedUrl: (String) -> String? = { null },
     private val warmUp: suspend () -> Unit = {},
+    private val compute: CoroutineDispatcher = Dispatchers.Default,
 ) {
     data class State(
         val topics: Map<String, TopicNews> = emptyMap(),
@@ -92,11 +100,17 @@ class NewsRepository(
     val state: StateFlow<State> = _state.asStateFlow()
 
     private val fetchLimit = Semaphore(PARALLEL_FETCHES)
+    private val interactiveLimit = Semaphore(INTERACTIVE_FETCHES)
     private val warmLock = Mutex()
 
     /** Where [loadMore] continues per topic; reset when the topic's query or edition changes. */
     private val cursors = HashMap<String, PageCursor>()
-    private val pageLocks = HashMap<String, Mutex>()
+
+    /**
+     * One per topic: [loadMore] holds it for a whole load, [refresh] while it merges and
+     * publishes, so neither works from articles the other is about to replace.
+     */
+    private val topicLocks = HashMap<String, Mutex>()
 
     /** Loads the cached topics once; later calls are no-ops. */
     suspend fun warm() {
@@ -128,11 +142,15 @@ class NewsRepository(
 
     /**
      * True when [topicId] was never fetched, every source failed the last time (so the next
-     * chance to fetch should be taken), or its last fetch is older than [maxAge].
+     * chance to fetch should be taken), it was fetched from other sources than [settings] give
+     * it now (another edition, a source switched on or off) or its last fetch is older than
+     * [maxAge].
      */
-    fun isStale(topicId: String, maxAge: Duration): Boolean {
+    fun isStale(topicId: String, maxAge: Duration, settings: AppSettings): Boolean {
         val news = _state.value.topics[topicId] ?: return true
         if (news.allFailed) return true
+        val wanted = TopicSources.resolve(topicId, settings, blockedDomains()).mapTo(HashSet()) { it.id }
+        if (news.sources.mapTo(HashSet()) { it.sourceId } != wanted) return true
         val at = parseInstantOrNull(news.fetchedAt) ?: return true
         return Duration.between(at, clock().toInstant()) > maxAge
     }
@@ -178,8 +196,7 @@ class NewsRepository(
     suspend fun loadMore(topicId: String, settings: AppSettings): Boolean {
         warm()
         val paging = TopicSources.pagingQuery(topicId, settings) ?: return false
-        val lock = synchronized(pageLocks) { pageLocks.getOrPut(topicId) { Mutex() } }
-        return lock.withLock {
+        return topicLock(topicId).withLock {
             _state.update { it.copy(loadingMore = it.loadingMore + topicId) }
             try {
                 loadMoreLocked(topicId, settings, paging)
@@ -216,7 +233,7 @@ class NewsRepository(
                 edition = paging.edition.key,
             )
             val fetched = try {
-                fetchLimit.withPermit { client.fetch(source) }
+                interactiveLimit.withPermit { client.fetch(source) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
@@ -224,9 +241,12 @@ class NewsRepository(
                 remember(topicId, cursor)
                 return false
             }
-            val page = if (settings.readableOnly) readable(fetched, blocked) else fetched
+            // Refreshes wait for this lock before they publish, so the topic is still as read here.
             val current = _state.value.topics[topicId] ?: previous
-            val (merged, added) = appendPage(topicId, current, page, clock().toInstant(), resolvedUrl)
+            val (merged, added) = withContext(compute) {
+                val page = if (settings.readableOnly) readable(fetched, blocked) else fetched
+                appendPage(topicId, current, page, clock().toInstant(), resolvedUrl)
+            }
             // A thin window widens the next window; a full one keeps it.
             val next = PageCursor(paging, before = window.after, days = if (added < THIN_PAGE) (cursor.days * 2).coerceAtMost(MAX_WINDOW_DAYS) else cursor.days)
             if (added > 0) {
@@ -245,10 +265,14 @@ class NewsRepository(
      * One page of results for [query]: page 0 is Google News' best current matches plus the
      * cached articles of every topic that contain all of the query's words; page n ≥ 1 is the
      * n-th week back. Newest first, the same story once. Nothing is cached.
+     *
+     * A week without results does not end the search ([SearchPage.hasMore] stays true up to
+     * [MAX_SEARCH_PAGES]): a story of a small town can be quiet for weeks; the caller decides how
+     * many quiet weeks in a row it skips. Only an empty page 0 (no window: nothing at all) ends it.
      */
     suspend fun search(query: String, settings: AppSettings, page: Int = 0): SearchPage {
         warm()
-        val text = query.trim().replace(Regex("\\s+"), " ")
+        val text = query.trim().replace(WHITESPACE, " ")
         if (text.isEmpty()) return SearchPage(text, page, emptyList(), hasMore = false)
         val edition = settings.edition
         val today = clock().toLocalDate()
@@ -264,7 +288,7 @@ class NewsRepository(
         )
         var failed = false
         val found = try {
-            fetchLimit.withPermit { client.fetch(source) }
+            interactiveLimit.withPermit { client.fetch(source) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
@@ -272,16 +296,13 @@ class NewsRepository(
             failed = true
             emptyList()
         }
-        val local = if (page <= 0) cachedMatches(text) else emptyList()
-        val all = local + if (settings.readableOnly) readable(found, blocked) else found
-        val items = dedupe(all, resolvedUrl).sortedWith(NEWEST_FIRST)
-        return SearchPage(
-            query = text,
-            page = page,
-            items = items,
-            hasMore = !failed && found.isNotEmpty() && page + 1 < MAX_SEARCH_PAGES,
-            failed = failed,
-        )
+        val items = withContext(compute) {
+            val local = if (page <= 0) cachedMatches(text) else emptyList()
+            val all = local + if (settings.readableOnly) readable(found, blocked) else found
+            newestFirst(dedupe(all, resolvedUrl))
+        }
+        val more = page + 1 < MAX_SEARCH_PAGES && !failed && (page > 0 || found.isNotEmpty())
+        return SearchPage(query = text, page = page, items = items, hasMore = more, failed = failed)
     }
 
     /** Forgets a topic (a custom topic was deleted, a place unfollowed). */
@@ -301,7 +322,6 @@ class NewsRepository(
     private suspend fun refreshTopic(topicId: String, settings: AppSettings): Boolean = coroutineScope {
         val blocked = blockedDomains()
         val sources = TopicSources.resolve(topicId, settings, blocked)
-        val previous = _state.value.topics[topicId]
         val results = sources.map { source ->
             async {
                 fetchLimit.withPermit {
@@ -322,29 +342,46 @@ class NewsRepository(
                 }
             }
         }.awaitAll()
-        val merged = merge(
-            topicId, previous, results, now = clock().toInstant(),
-            blocked = if (settings.readableOnly) blocked.toSet() else null,
-            resolved = resolvedUrl,
-        )
-        publish(merged)
-        // A new query or edition (settings changed) starts the endless list afresh.
-        val paging = TopicSources.pagingQuery(topicId, settings)
-        val stale = synchronized(cursors) { cursors[topicId]?.takeIf { it.paging != paging }?.also { cursors.remove(topicId) } }
-        if (stale != null) markEnd(topicId, false)
+        // Merged with the topic as it is now, not as it was before the fetches: a [loadMore]
+        // that finished meanwhile appended articles that must stay.
+        topicLock(topicId).withLock {
+            val current = _state.value.topics[topicId]
+            val merged = withContext(compute) {
+                merge(
+                    topicId, current, results, now = clock().toInstant(),
+                    blocked = if (settings.readableOnly) blocked.toSet() else null,
+                    resolved = resolvedUrl,
+                )
+            }
+            publish(merged)
+            // The endless list starts afresh for a new query or edition (settings changed), and
+            // when the fresh first page left no paged articles to continue from (they no longer
+            // joined it, see [merge]): the old cursor would skip the days in between.
+            val paging = TopicSources.pagingQuery(topicId, settings)
+            val answered = paging != null && results.any { it.source.id == paging.sourceId && it.error == null }
+            val pageId = paging?.let { it.sourceId + PAGE_SUFFIX }
+            val restart = answered && merged.items.none { it.sourceId == pageId }
+            val stale = synchronized(cursors) {
+                val cursor = cursors[topicId]
+                (cursor != null && (cursor.paging != paging || restart)).also { if (it) cursors.remove(topicId) }
+            }
+            if (stale || restart) markEnd(topicId, false)
+        }
         results.any { it.error == null } || sources.isEmpty()
     }
 
     private suspend fun publish(news: TopicNews) {
         _state.update { it.copy(topics = it.topics + (news.topicId to news)) }
         try {
-            cache.save(news)
+            withContext(compute) { cache.save(news) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Could not cache news of ${news.topicId}", e)
         }
     }
+
+    private fun topicLock(topicId: String): Mutex = synchronized(topicLocks) { topicLocks.getOrPut(topicId) { Mutex() } }
 
     private fun remember(topicId: String, cursor: PageCursor) {
         synchronized(cursors) { cursors[topicId] = cursor }
@@ -354,16 +391,7 @@ class NewsRepository(
         _state.update { it.copy(endReached = if (end) it.endReached + topicId else it.endReached - topicId) }
     }
 
-    /** Cached articles of every topic that contain all words of [query] (headline or teaser). */
-    private fun cachedMatches(query: String): List<NewsItem> {
-        val words = searchWords(query)
-        if (words.isEmpty()) return emptyList()
-        return _state.value.topics.values.asSequence()
-            .flatMap { it.items.asSequence() }
-            .filter { item -> normalizeText(item.headline + " " + item.summary).let { text -> words.all { it in text } } }
-            .take(MAX_CACHED_MATCHES)
-            .toList()
-    }
+    private fun cachedMatches(query: String): List<NewsItem> = matching(_state.value.topics.values, query)
 
     internal class FetchResult(val source: FeedSource, val items: List<NewsItem>, val error: String?)
 
@@ -374,11 +402,14 @@ class NewsRepository(
         private const val TAG = "NewsRepository"
         private const val PARALLEL_FETCHES = 6
 
+        /** Connections of their own for [search] and [loadMore], which the user waits for. */
+        private const val INTERACTIVE_FETCHES = 2
+
         /** Articles kept per topic (the newest); paging stops here. */
         const val MAX_PER_TOPIC = 1000
 
         /** Suffix of the source id of articles [loadMore] appended (`gn:<topic>@<edition>#page`). */
-        const val PAGE_SUFFIX = "#page"
+        const val PAGE_SUFFIX = NewsItem.PAGE_SUFFIX
 
         /** Search pages reach this many weeks back. */
         const val MAX_SEARCH_PAGES = 26
@@ -388,7 +419,7 @@ class NewsRepository(
         private const val MAX_EMPTY_WINDOWS = 4
         private const val MAX_HISTORY_DAYS = 365L
         private const val THIN_PAGE = 10
-        private const val MAX_CACHED_MATCHES = 200
+        internal const val MAX_CACHED_MATCHES = 200
 
         /** Headlines shorter than this are too generic to merge stories by ("Liveblog"). */
         private const val MIN_HEADLINE_KEY = 16
@@ -396,12 +427,26 @@ class NewsRepository(
         /** Articles of a failed source are kept from the last fetch for this long. */
         private val KEEP_FAILED_FOR: Duration = Duration.ofDays(3)
 
+        /** A first-page article at least this much before the next newer one can be a stray old hit ([bulkOldest]). */
+        private val MIN_STRAY_GAP: Duration = Duration.ofDays(2)
+
+        /** How many usual gaps between two first-page articles a stray old hit is away ([bulkOldest]). */
+        private const val STRAY_FACTOR = 8L
+
+        /** Paged articles still join a fresh first page when they end at most this long before it. */
+        private val JOIN_SLACK: Duration = Duration.ofDays(1)
+
+        private val WHITESPACE = Regex("\\s+")
+        private val MARKS = Regex("\\p{M}+")
+        private val NON_WORD = Regex("[^\\p{L}\\p{N}]+")
+
         /**
          * Merges fetch results into the topic's articles: failed sources keep what they delivered
          * before ([previous], up to [KEEP_FAILED_FOR]), articles [loadMore] appended stay while
-         * their Google News source is still part of the topic, articles of [blocked] sites go,
-         * the same story shows once ([dedupe]), the newest article comes first and undated ones
-         * follow the dated ones. Pure.
+         * they still join the topic's Google News first page ([pagedToKeep]), articles of
+         * [blocked] sites go (except from feeds the user added: the user chose them), the same
+         * story shows once ([dedupe]), the newest article comes first and undated ones follow the
+         * dated ones. A source's status counts the articles of it that can show. Pure.
          */
         internal fun merge(
             topicId: String,
@@ -411,32 +456,59 @@ class NewsRepository(
             blocked: Set<String>? = null,
             resolved: (String) -> String? = { null },
         ): TopicNews {
-            val items = ArrayList<NewsItem>()
-            val statuses = ArrayList<SourceStatus>()
-            results.forEach { result ->
-                if (result.error == null) {
-                    items += result.items
-                    statuses += SourceStatus(result.source.id, result.source.name, ok = true, count = result.items.size)
+            val before = previous?.items.orEmpty()
+            val perSource = results.map { result ->
+                val delivered = if (result.error == null) {
+                    result.items
                 } else {
-                    val kept = previous?.items.orEmpty().filter { item ->
-                        item.sourceId == result.source.id && !isOlderThan(item.publishedAt, now, KEEP_FAILED_FOR)
-                    }
-                    items += kept
-                    statuses += SourceStatus(result.source.id, result.source.name, ok = false, count = kept.size, error = result.error)
+                    before.filter { item -> item.sourceId == result.source.id && !isOlderThan(item.publishedAt, now, KEEP_FAILED_FOR) }
                 }
+                result to if (blocked == null) delivered else readable(delivered, blocked)
             }
-            val sourceIds = results.map { it.source.id }.toSet()
-            items += previous?.items.orEmpty().filter { it.sourceId.endsWith(PAGE_SUFFIX) && it.sourceId.removeSuffix(PAGE_SUFFIX) in sourceIds }
-            val shown = if (blocked == null) items else readable(items, blocked)
+            val statuses = perSource.map { (result, shown) ->
+                SourceStatus(result.source.id, result.source.name, ok = result.error == null, count = shown.size, error = result.error.orEmpty())
+            }
+            val items = perSource.flatMap { it.second }.toMutableList()
+            results.filter { it.source.isGoogleNews }.forEach { result ->
+                val paged = pagedToKeep(result, before)
+                items += if (blocked == null) paged else readable(paged, blocked)
+            }
             // A round in which no source answered is not a fetch: the topic stays as old as it was,
             // so the next refresh does not skip it as "fresh".
             val reached = results.isEmpty() || results.any { it.error == null }
             return TopicNews(
                 topicId = topicId,
                 fetchedAt = if (reached || previous == null) RssDates.format(now) else previous.fetchedAt,
-                items = dedupe(shown, resolved).sortedWith(NEWEST_FIRST).take(MAX_PER_TOPIC),
+                items = newestFirst(dedupe(items, resolved)).take(MAX_PER_TOPIC),
                 sources = statuses,
             )
+        }
+
+        /**
+         * The paged articles of the Google News source of [result] that stay. When the source
+         * failed, or its fresh first page has no dates to compare, they all stay.
+         *
+         * Otherwise they stay only while the articles held so far still reach the fresh first
+         * page (their newest at most [JOIN_SLACK] before its bulk, [bulkOldest]): after a week
+         * away the fresh page starts days after the old one ended, and a list that jumped over
+         * those days could never fill them, since paging only goes further back – then nothing
+         * stays and paging starts again from the fresh page. When they do reach it, the previous
+         * first page's articles older than the fresh one (its bulk, not its stray old hits) stay
+         * as paged articles: they are the days between the fresh page and the paged ones.
+         */
+        private fun pagedToKeep(result: FetchResult, before: List<NewsItem>): List<NewsItem> {
+            val pageId = result.source.id + PAGE_SUFFIX
+            val paged = before.filter { it.sourceId == pageId }
+            if (paged.isEmpty() || result.error != null) return paged
+            val freshStart = bulkOldest(result.items) ?: return paged
+            val firstPage = before.filter { it.sourceId == result.source.id }
+            val newestHeld = (firstPage + paged).mapNotNull { parseInstantOrNull(it.publishedAt) }.maxOrNull() ?: return paged
+            if (newestHeld < freshStart - JOIN_SLACK) return emptyList()
+            val oldStart = bulkOldest(firstPage)
+            val bridge = firstPage
+                .filter { item -> parseInstantOrNull(item.publishedAt)?.let { it < freshStart && (oldStart == null || it >= oldStart) } == true }
+                .map { it.copy(sourceId = pageId) }
+            return bridge + paged
         }
 
         /**
@@ -451,7 +523,7 @@ class NewsRepository(
             resolved: (String) -> String? = { null },
         ): Pair<TopicNews, Int> {
             val before = previous?.items.orEmpty()
-            val merged = dedupe(before + page, resolved).sortedWith(NEWEST_FIRST).take(MAX_PER_TOPIC)
+            val merged = newestFirst(dedupe(before + page, resolved)).take(MAX_PER_TOPIC)
             val known = before.mapTo(HashSet()) { it.id }
             val added = merged.count { it.id !in known }
             val news = previous?.copy(items = merged) ?: TopicNews(topicId, RssDates.format(now), merged)
@@ -497,15 +569,29 @@ class NewsRepository(
         /** Lower case, accents and punctuation removed, single spaces: "„Börse: DAX-Rekord!“" → "borse dax rekord". */
         internal fun normalizeText(text: String): String =
             Normalizer.normalize(text, Normalizer.Form.NFD)
-                .replace(Regex("\\p{M}+"), "")
+                .replace(MARKS, "")
                 .lowercase(Locale.ROOT)
                 .replace("ß", "ss")
-                .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+                .replace(NON_WORD, " ")
                 .trim()
+
+        /**
+         * The articles of [topics] that contain all words of [query] (headline or teaser): the
+         * newest [MAX_CACHED_MATCHES] over all topics, newest first. Pure.
+         */
+        internal fun matching(topics: Collection<TopicNews>, query: String): List<NewsItem> {
+            val words = searchWords(query)
+            if (words.isEmpty()) return emptyList()
+            val matches = topics.asSequence()
+                .flatMap { it.items.asSequence() }
+                .filter { item -> normalizeText(item.headline + " " + item.summary).let { text -> words.all { it in text } } }
+                .toList()
+            return newestFirst(matches).take(MAX_CACHED_MATCHES)
+        }
 
         /** The words a cached article must contain: operators and `OR` are left out. */
         internal fun searchWords(query: String): List<String> =
-            query.split(Regex("\\s+"))
+            query.split(WHITESPACE)
                 .filterNot { it.equals("OR", ignoreCase = false) || it.startsWith("-") || it.contains(':') }
                 .map { normalizeText(it) }
                 .flatMap { it.split(' ') }
@@ -515,23 +601,52 @@ class NewsRepository(
         /**
          * Without the articles the reader cannot show: those of [blocked] sites (by publisher
          * domain, else the link's host) and those whose headline marks them as subscriber-only
-         * ("(S+) …", see [GoogleNews.isPaywallHeadline]). Pure.
+         * ("(S+) …", see [GoogleNews.isPaywallHeadline]). Articles of feeds the user added stay:
+         * the user chose that site. Pure.
          */
         internal fun readable(items: List<NewsItem>, blocked: Set<String>): List<NewsItem> =
             items.filterNot { item ->
+                if (item.fromUserFeed) return@filterNot false
                 val domain = item.publisherDomain.ifEmpty { GoogleNews.domainOf(item.url) }
                 (domain.isNotEmpty() && KnownWalls.matches(domain, blocked)) || GoogleNews.isPaywallHeadline(item.headline)
             }
 
         /**
-         * Where paging starts: the day after the oldest Google News article of the topic (its
-         * first page covers the newest days), else tomorrow.
+         * The oldest date of the bulk of [items], a first page newest first: Google News' first
+         * page of a search carries stray old hits (a Raumfahrt search: 88 from November, 9 from
+         * April; Börse back to 2017), and paging from those would skip the months in between.
+         * Going back from the newest, an article ends the bulk when it is older than the next newer
+         * one by more than [MIN_STRAY_GAP], the span of the newer ones and [STRAY_FACTOR] times the
+         * usual gap between two articles – so a quiet place whose first page has a story every
+         * week keeps all of it. Ending too early only re-reads known days; too late would skip.
+         * Null without dates. Pure.
+         */
+        internal fun bulkOldest(items: List<NewsItem>): Instant? {
+            val dates = items.mapNotNull { parseInstantOrNull(it.publishedAt) }.sortedDescending()
+            val newest = dates.firstOrNull() ?: return null
+            val gaps = dates.zipWithNext { a, b -> Duration.between(b, a) }.sorted()
+            val usual = gaps.getOrNull((gaps.size - 1) / 2)?.multipliedBy(STRAY_FACTOR) ?: Duration.ZERO
+            var oldest = newest
+            for (next in dates.drop(1)) {
+                val gap = Duration.between(next, oldest)
+                val span = Duration.between(oldest, newest)
+                if (gap > maxOf(MIN_STRAY_GAP, span, usual)) break
+                oldest = next
+            }
+            return oldest
+        }
+
+        /**
+         * Where paging starts: the day after the oldest article paging appended before (its
+         * windows are contiguous), else after the bulk of the topic's Google News first page
+         * ([bulkOldest]: it covers the newest days), else tomorrow.
          */
         private fun initialCursor(previous: TopicNews?, paging: PagingQuery, today: LocalDate): LocalDate {
-            val oldest = previous?.items.orEmpty()
-                .filter { it.sourceId == paging.sourceId || it.sourceId == paging.sourceId + PAGE_SUFFIX }
+            val items = previous?.items.orEmpty()
+            val oldest = items.filter { it.sourceId == paging.sourceId + PAGE_SUFFIX }
                 .mapNotNull { parseInstantOrNull(it.publishedAt) }
                 .minOrNull()
+                ?: bulkOldest(items.filter { it.sourceId == paging.sourceId })
             val tomorrow = today.plusDays(1)
             val start = oldest?.atZone(BERLIN)?.toLocalDate()?.plusDays(1) ?: return tomorrow
             return if (start.isAfter(tomorrow)) tomorrow else start
@@ -542,15 +657,20 @@ class NewsRepository(
             return Duration.between(at, now) > maxAge
         }
 
-        private val NEWEST_FIRST: Comparator<NewsItem> = Comparator { a, b ->
-            val ta = parseInstantOrNull(a.publishedAt)
-            val tb = parseInstantOrNull(b.publishedAt)
-            when {
-                ta == null && tb == null -> 0
-                ta == null -> 1
-                tb == null -> -1
-                else -> tb.compareTo(ta)
-            }
-        }
+        /**
+         * Newest first, undated articles after the dated ones, otherwise in the given order. Each
+         * date is parsed once (not twice per comparison). Pure.
+         */
+        internal fun newestFirst(items: List<NewsItem>): List<NewsItem> =
+            items.map { it to parseInstantOrNull(it.publishedAt) }
+                .sortedWith { (_, ta), (_, tb) ->
+                    when {
+                        ta == null && tb == null -> 0
+                        ta == null -> 1
+                        tb == null -> -1
+                        else -> tb.compareTo(ta)
+                    }
+                }
+                .map { it.first }
     }
 }

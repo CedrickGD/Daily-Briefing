@@ -78,6 +78,15 @@ class FeedCatalogTest {
     }
 
     @Test
+    fun `general news desks are top stories, not a section`() {
+        val byId = FeedCatalog.entries.associateBy { it.source.id }
+        listOf("dlf-nachrichten", "zdfheute", "dw").forEach { assertEquals(it, "top", byId.getValue(it).source.topicId) }
+        // A business section reads business desks, not the publisher's front page.
+        val business = FeedCatalog.forEdition(NewsEdition.GERMANY).filter { it.source.topicId == "wirtschaft" }
+        assertTrue(business.none { "schlagzeilen" in it.source.url })
+    }
+
+    @Test
     fun `every region has at least one feed`() {
         // 16 Bundesländer, Berlin and Brandenburg share one preset.
         assertEquals(15, Regions.ALL.size)

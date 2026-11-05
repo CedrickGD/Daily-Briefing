@@ -56,6 +56,11 @@ object FeedCatalog {
         de("tagesschau-top", "tagesschau", "top", "https://www.tagesschau.de/index~rss2.xml", DE),
         de("spiegel-top", "SPIEGEL", "top", "https://www.spiegel.de/schlagzeilen/index.rss", DE),
         de("ntv-top", "n-tv", "top", "https://www.n-tv.de/rss", DE),
+        // General news desks: home and world stories mixed (Aiwanger's death, the DFB squad;
+        // 05.11.2026), so they are top stories, not world news.
+        de("dlf-nachrichten", "Deutschlandfunk", "top", "https://www.deutschlandfunk.de/nachrichten-100.rss", DE),
+        de("zdfheute", "ZDFheute", "top", "https://www.zdf.de/rss/zdf/nachrichten", DE),
+        de("dw", "Deutsche Welle", "top", "https://rss.dw.com/rdf/rss-de-all"),
 
         // Tech & KI
         de("heise-top", "heise online", "ki", "https://www.heise.de/rss/heise-top-atom.xml"),
@@ -76,12 +81,14 @@ object FeedCatalog {
 
         // Wirtschaft & Finanzen
         de("tagesschau-wirtschaft", "tagesschau", "wirtschaft", "https://www.tagesschau.de/wirtschaft/index~rss2.xml"),
-        de("handelsblatt", "Handelsblatt", "wirtschaft", "https://www.handelsblatt.com/contentexport/feed/schlagzeilen"),
+        // Handelsblatt's and WirtschaftsWoche's "Schlagzeilen" are general news (Aiwanger's death,
+        // bomb threats, GTA 6; 05.11.2026); their finance and companies desks are business only.
+        de("handelsblatt", "Handelsblatt", "wirtschaft", "https://feeds.cms.handelsblatt.com/finanzen"),
         de("spiegel-wirtschaft", "SPIEGEL Wirtschaft", "wirtschaft", "https://www.spiegel.de/wirtschaft/index.rss"),
         de("zeit-wirtschaft", "ZEIT Wirtschaft", "wirtschaft", "https://newsfeed.zeit.de/wirtschaft/index"),
         de("faz-wirtschaft", "FAZ Wirtschaft", "wirtschaft", "https://www.faz.net/rss/aktuell/wirtschaft/"),
         de("sz-wirtschaft", "SZ Wirtschaft", "wirtschaft", "https://rss.sueddeutsche.de/rss/Wirtschaft"),
-        de("wiwo", "WirtschaftsWoche", "wirtschaft", "https://www.wiwo.de/contentexport/feed/rss/schlagzeilen"),
+        de("wiwo", "WirtschaftsWoche", "wirtschaft", "https://feeds.cms.wiwo.de/rss/unternehmen"),
         de("ntv-wirtschaft", "n-tv Wirtschaft", "wirtschaft", "https://www.n-tv.de/wirtschaft/rss"),
         de("tagesschau-finanzen", "tagesschau Finanzen", "wirtschaft/boerse", "https://www.tagesschau.de/wirtschaft/finanzen/index~rss2.xml"),
         de("ntv-boerse", "n-tv Börse", "wirtschaft/boerse", "https://www.n-tv.de/wirtschaft/boerse/rss"),
@@ -105,9 +112,6 @@ object FeedCatalog {
         // Welt
         de("tagesschau-ausland", "tagesschau", "welt", "https://www.tagesschau.de/ausland/index~rss2.xml"),
         de("spiegel-ausland", "SPIEGEL Ausland", "welt", "https://www.spiegel.de/ausland/index.rss"),
-        de("dw", "Deutsche Welle", "welt", "https://rss.dw.com/rdf/rss-de-all"),
-        de("dlf-nachrichten", "Deutschlandfunk", "welt", "https://www.deutschlandfunk.de/nachrichten-100.rss"),
-        de("zdfheute", "ZDFheute", "welt", "https://www.zdf.de/rss/zdf/nachrichten"),
         de("tagesschau-europa", "tagesschau Europa", "welt/europa", "https://www.tagesschau.de/ausland/europa/index~rss2.xml"),
         de("tagesschau-amerika", "tagesschau Amerika", "welt/amerika", "https://www.tagesschau.de/ausland/amerika/index~rss2.xml"),
         de("tagesschau-asien", "tagesschau Asien", "welt/asien", "https://www.tagesschau.de/ausland/asien/index~rss2.xml"),
@@ -346,7 +350,7 @@ object FeedCatalog {
         builtInById[id] ?: Regions.byKey(settings.region).feeds.firstOrNull { it.id == id } ?: settings.customFeeds.firstOrNull { it.id == id }
 
     /** The id of a new custom feed. */
-    fun newCustomId(): String = "custom:" + java.util.UUID.randomUUID().toString().take(8)
+    fun newCustomId(): String = FeedSource.USER_ID_PREFIX + java.util.UUID.randomUUID().toString().take(8)
 }
 
 /** A regional preset behind the "Region" topic: one or two public newsrooms of a Bundesland. */
