@@ -24,6 +24,7 @@ import com.cedrickgd.morgenbriefing.ui.nav.ArticleHandoff
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleRoute
 import com.cedrickgd.morgenbriefing.ui.news.hostOf
 import com.cedrickgd.morgenbriefing.util.attempt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -137,17 +139,21 @@ class ArticleViewModel(
             ensureActive()
             result.fold(
                 onSuccess = { content ->
-                    container.prefetcher.report(item, content)
+                    val current = _state.value.item
+                    val shown = if (current.headline.isBlank()) current.copy(headline = content.title) else current
+                    // Cleaning up the blocks and judging completeness walk the whole text: off the main thread.
+                    val (arranged, partial) = withContext(Dispatchers.Default) {
+                        container.prefetcher.report(item, content)
+                        arrange(content, shown) to !ArticleCompleteness.isComplete(content, item)
+                    }
+                    ensureActive()
                     _state.update { s ->
-                        val shown = if (s.item.headline.isBlank()) s.item.copy(headline = content.title) else s.item
-                        val arranged = arrange(content, shown)
-                        val partial = !ArticleCompleteness.isComplete(content, item)
                         s.copy(item = shown, content = arranged.content, teaser = arranged.teaser, loading = false, failure = null, now = clock(), partial = partial)
                     }
                 },
                 onFailure = { e ->
                     Log.i(TAG, "Article unavailable: ${e.message}")
-                    container.prefetcher.report(item, e)
+                    withContext(Dispatchers.Default) { container.prefetcher.report(item, e) }
                     _state.update { it.copy(loading = false, failure = ArticleFailure.of(e, it.item.source)) }
                 },
             )

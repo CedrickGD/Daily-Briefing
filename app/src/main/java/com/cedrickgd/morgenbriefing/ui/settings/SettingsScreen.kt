@@ -34,11 +34,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cedrickgd.morgenbriefing.data.model.AccentId
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
+import com.cedrickgd.morgenbriefing.data.model.EffectsMode
 import com.cedrickgd.morgenbriefing.data.model.SourceStatus
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
+import com.cedrickgd.morgenbriefing.perf.TierAssessment
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.SettingsStrings
@@ -126,6 +128,7 @@ fun SettingsScreen(
     val weatherLoading by viewModel.weatherLoading.collectAsStateWithLifecycle()
     val sourceStatus by viewModel.sourceStatus.collectAsStateWithLifecycle()
     val blocked by viewModel.blockedDomains.collectAsStateWithLifecycle()
+    val deviceTier by viewModel.deviceTier.collectAsStateWithLifecycle()
     val update by updateViewModel.state.collectAsStateWithLifecycle()
 
     val strings = settingsStrings()
@@ -350,6 +353,7 @@ fun SettingsScreen(
                         expandedSources = expandedSources,
                         sourceStatus = sourceStatus,
                         blocked = blocked,
+                        deviceTier = deviceTier,
                     ),
                     callbacks = BlockCallbacks(
                         onPill = onPill,
@@ -367,6 +371,7 @@ fun SettingsScreen(
                         onTestNotification = onTestNotification,
                         onThemeMode = viewModel::setThemeMode,
                         onAccent = viewModel::setAccent,
+                        onEffects = viewModel::setEffects,
                         topics = topicsActions,
                         sources = sourcesActions,
                         onToggleSourcesExpanded = { id -> expandedSources = if (id in expandedSources) expandedSources - id else expandedSources + id },
@@ -525,6 +530,7 @@ private class BlockContent(
     val expandedSources: Set<String>,
     val sourceStatus: Map<String, SourceStatus>,
     val blocked: Set<String>,
+    val deviceTier: TierAssessment?,
 )
 
 /** Callbacks of the blocks. */
@@ -541,6 +547,7 @@ private class BlockCallbacks(
     val onTestNotification: () -> Unit,
     val onThemeMode: (ThemeMode) -> Unit,
     val onAccent: (AccentId) -> Unit,
+    val onEffects: (EffectsMode) -> Unit,
     val topics: TopicsActions,
     val sources: SourcesActions,
     val onToggleSourcesExpanded: (String) -> Unit,
@@ -638,8 +645,11 @@ private fun SettingsBlock(
         Block.LOOK -> AppearanceCard(
             themeMode = settings.themeMode,
             accent = settings.accent,
+            effects = settings.effects,
+            deviceTier = content.deviceTier,
             onThemeMode = callbacks.onThemeMode,
             onAccent = callbacks.onAccent,
+            onEffects = callbacks.onEffects,
             modifier = modifier,
         )
         Block.H_PLACES -> Heading(strings, key, modifier)

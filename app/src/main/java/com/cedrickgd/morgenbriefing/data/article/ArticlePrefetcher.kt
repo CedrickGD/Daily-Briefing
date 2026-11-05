@@ -40,7 +40,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  *   [PrefetchMode.OFF] never loads, [PrefetchMode.WIFI_ONLY] only on an unmetered connection
  *   ([NetworkMeter], checked again right before each load: the phone may have left the Wi-Fi
  *   while the load waited), [PrefetchMode.ALWAYS] always. Known articles are answered at once,
- *   the rest is queued – at most [parallel] loads at a time, every item once (de-duplicated).
+ *   the rest is queued – at most [parallel] loads at a time ([lightParallel] while [light] says
+ *   so: a budget phone or the battery saver), every item once (de-duplicated).
  *   Waiting loads of items no longer asked for are dropped, so the newest request comes first;
  *   more than [maxQueued] waiting are cut to the newest. A page without an article is not loaded
  *   again, a network failure only after a pause that doubles each time ([RETRY_AFTER_MS] up to
@@ -64,6 +65,10 @@ class ArticlePrefetcher(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Verdicts kept across app starts; null = only for this process (tests). */
     private val verdicts: VerdictStore? = null,
+    /** Loads at a time while [light] is true (light effects: budget phone, battery saver). */
+    private val lightParallel: Int = PARALLEL_LIGHT,
+    /** Asked before every load: true keeps to [lightParallel]. */
+    private val light: () -> Boolean = { false },
 ) {
     /** Where the prefetcher gets articles from (the [ArticleRepository]; a fake in tests). */
     interface Source {
@@ -77,8 +82,8 @@ class ArticlePrefetcher(
         fun blockReason(item: NewsItem): ReadOutcome?
     }
 
-    constructor(repository: ArticleRepository, network: NetworkMeter, verdicts: VerdictStore? = null) :
-        this(RepositorySource(repository), network, verdicts = verdicts)
+    constructor(repository: ArticleRepository, network: NetworkMeter, verdicts: VerdictStore? = null, light: () -> Boolean = { false }) :
+        this(RepositorySource(repository), network, verdicts = verdicts, light = light)
 
     /** How a request may load: [mode] for plain prefetching; [verify] loads on any connection. */
     private data class Policy(val mode: PrefetchMode, val verify: Boolean)
@@ -88,6 +93,13 @@ class ArticlePrefetcher(
 
     private val lock = Any()
     private val gate = Semaphore(parallel)
+
+    /**
+     * Taken before [gate] by loads that start while [light] is true: at most [lightParallel] of
+     * them run, and never more than [parallel] loads in all. Loads that started before the
+     * switch finish as they are.
+     */
+    private val lightGate = Semaphore(lightParallel.coerceIn(1, parallel))
 
     /** Queued and running loads, oldest first. Guarded by [lock]. */
     private val jobs = LinkedHashMap<String, Job>()
@@ -247,21 +259,29 @@ class ArticlePrefetcher(
             return
         }
         if (!mayLoad(policy, followLatest)) return
-        gate.withPermit {
+        withLoadSlot {
             // The wait may have been long: still allowed (still online / on Wi-Fi, setting unchanged)?
-            if (!mayLoad(policy, followLatest)) return
-            synchronized(lock) { running += item.id }
-            setStatus(item.id, ArticleStatus.LOADING)
-            try {
-                settle(item, source.load(item, language))
-            } catch (e: CancellationException) {
-                _status.update { if (it[item.id] == ArticleStatus.LOADING) it - item.id else it }
-                throw e
-            } catch (e: ArticleException) {
-                fail(item.id, e.outcome)
-            } catch (e: Exception) {
-                fail(item.id, null)
-            }
+            if (mayLoad(policy, followLatest)) load(item, language)
+        }
+    }
+
+    /** Runs [block] in one of the [parallel] load slots – one of the [lightParallel] ones while [light]. */
+    private suspend inline fun withLoadSlot(crossinline block: suspend () -> Unit) {
+        if (light()) lightGate.withPermit { gate.withPermit { block() } } else gate.withPermit { block() }
+    }
+
+    private suspend fun load(item: NewsItem, language: String?) {
+        synchronized(lock) { running += item.id }
+        setStatus(item.id, ArticleStatus.LOADING)
+        try {
+            settle(item, source.load(item, language))
+        } catch (e: CancellationException) {
+            _status.update { if (it[item.id] == ArticleStatus.LOADING) it - item.id else it }
+            throw e
+        } catch (e: ArticleException) {
+            fail(item.id, e.outcome)
+        } catch (e: Exception) {
+            fail(item.id, null)
         }
     }
 
@@ -345,7 +365,8 @@ class ArticlePrefetcher(
     private fun trimQueue() {
         val dropped = synchronized(lock) {
             // The first waiting ones take the free slots next (the gate is fair): they stay.
-            val free = (parallel - running.size).coerceAtLeast(0)
+            val slots = if (light()) lightParallel.coerceIn(1, parallel) else parallel
+            val free = (slots - running.size).coerceAtLeast(0)
             val waiting = jobs.entries.filter { it.key !in running && it.value.isActive }.drop(free)
             val excess = waiting.size - maxQueued
             if (excess <= 0) emptyList() else waiting.take(excess).map { (id, job) -> jobs.remove(id); job }
@@ -356,7 +377,9 @@ class ArticlePrefetcher(
     private class RepositorySource(private val repository: ArticleRepository) : Source {
         override suspend fun cached(item: NewsItem): ArticleContent? = repository.cachedOrNull(item)
 
-        override suspend fun load(item: NewsItem, language: String?): ArticleContent = repository.load(item, language = language)
+        // Nobody waits for these: parsed on the background dispatcher (bounded on budget phones).
+        override suspend fun load(item: NewsItem, language: String?): ArticleContent =
+            repository.load(item, language = language, background = true)
 
         override fun blockReason(item: NewsItem): ReadOutcome? {
             val store = repository.readability ?: return null
@@ -375,6 +398,9 @@ class ArticlePrefetcher(
 
         /** Loads at a time. */
         const val PARALLEL = 3
+
+        /** Loads at a time with light effects: page parsing is heavy on budget phones' cores. */
+        const val PARALLEL_LIGHT = 2
 
         /** The first pause before an item that failed for network reasons is loaded again. */
         const val RETRY_AFTER_MS = 60_000L

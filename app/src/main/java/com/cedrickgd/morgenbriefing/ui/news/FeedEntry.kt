@@ -3,14 +3,8 @@ package com.cedrickgd.morgenbriefing.ui.news
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -95,6 +89,7 @@ import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
 import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.ui.components.motionDisabled
+import com.cedrickgd.morgenbriefing.ui.components.rememberLoopPhase
 import com.cedrickgd.morgenbriefing.ui.components.pressScale
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
@@ -474,20 +469,14 @@ private fun ListenButton(listening: Boolean, paused: Boolean, headline: String, 
     }
 }
 
-/** Three bars bouncing gently while an article is read aloud (static with reduced motion). */
+/**
+ * Three bars bouncing gently while an article is read aloud (static with reduced motion; at
+ * 10 fps with light effects).
+ */
 @Composable
 private fun Equalizer(color: Color, modifier: Modifier = Modifier) {
     val still = motionDisabled()
-    val phase = if (still) {
-        null
-    } else {
-        rememberInfiniteTransition(label = "equalizer").animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
-            label = "equalizerPhase",
-        )
-    }
+    val phase = if (still) null else rememberLoopPhase(periodMillis = 900, label = "equalizerPhase")
     Canvas(modifier) {
         val bar = size.width / 5f
         val t = phase?.value ?: 0.3f

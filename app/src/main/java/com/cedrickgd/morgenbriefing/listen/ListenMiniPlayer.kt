@@ -2,13 +2,8 @@ package com.cedrickgd.morgenbriefing.listen
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -90,6 +85,7 @@ import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.i18n.ListenStrings
 import com.cedrickgd.morgenbriefing.i18n.listenStrings
 import com.cedrickgd.morgenbriefing.listen
+import com.cedrickgd.morgenbriefing.ui.components.rememberLoopPhase
 import com.cedrickgd.morgenbriefing.ui.glass.GlassLevel
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
 import com.cedrickgd.morgenbriefing.ui.glass.blockTouchesBehind
@@ -389,20 +385,11 @@ private enum class BadgeMode { PREPARING, SPEAKING, IDLE }
 
 /**
  * Three bars that rise and fall like a voice ("reading now"); drawn in the draw phase only.
- * Static when [animate] is false (system "remove animations").
+ * Static when [animate] is false (system "remove animations"); at 10 fps with light effects.
  */
 @Composable
 internal fun ListenBars(color: Color, animate: Boolean, modifier: Modifier = Modifier.size(20.dp)) {
-    val phase: State<Float>? = if (animate) {
-        rememberInfiniteTransition(label = "equalizer").animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(1_400, easing = LinearEasing), RepeatMode.Restart),
-            label = "equalizerPhase",
-        )
-    } else {
-        null
-    }
+    val phase: State<Float>? = if (animate) rememberLoopPhase(periodMillis = 1_400, label = "equalizerPhase") else null
     Canvas(modifier) {
         val t = phase?.value ?: 0.25f
         val barWidth = size.width / 5f

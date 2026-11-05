@@ -339,10 +339,16 @@ class TodayViewModel(
             // repository skips topics that are mid-fetch, and that fetch still uses the old settings.
             running?.join()
             val settings = attempt { container.settings.current() }.getOrNull() ?: return@launch
+            // The cached topics (and the sites the reader cannot show) come from disk once: wait
+            // for them instead of judging staleness on empty state – and never read them here on
+            // the main thread. Resolving every topic's sources is CPU work: off the main thread too.
+            attempt { container.news.warm() }.onFailure { Log.w(TAG, "News cache unavailable", it) }
             val visible = Topics.visible(settings).map { it.id }
             // isStale also counts a topic read from other sources (a new edition, a moved region) as stale.
-            val wanted = (topicIds?.filter { it in visible } ?: visible)
-                .filter { force || container.news.isStale(it, NEWS_MAX_AGE, settings) }
+            val wanted = withContext(Dispatchers.Default) {
+                (topicIds?.filter { it in visible } ?: visible)
+                    .filter { force || container.news.isStale(it, NEWS_MAX_AGE, settings) }
+            }
             if (wanted.isEmpty()) return@launch
             val outcome = attempt { container.news.refresh(wanted, settings) }
                 .onFailure { Log.w(TAG, "News refresh failed", it) }

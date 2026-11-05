@@ -78,6 +78,13 @@ enum class WeatherCard {
 /** When the reader may load articles ahead of time (so they open instantly and offline). */
 enum class PrefetchMode { OFF, WIFI_ONLY, ALWAYS }
 
+/**
+ * "Effekte" (Einstellungen → Darstellung): [AUTO] lets the phone's tier decide
+ * (`perf/DeviceTier.kt`), [FULL] always draws every effect, [LIGHT] always the light set.
+ * Stored by enum name, never rename one. Labels: `i18n/SettingsStrings`.
+ */
+enum class EffectsMode { AUTO, FULL, LIGHT }
+
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val accent: AccentId = AccentId.DYNAMIC,
@@ -132,6 +139,8 @@ data class AppSettings(
     val prefetch: PrefetchMode = PrefetchMode.WIFI_ONLY,
     /** Recent search queries, newest first (at most a handful). */
     val recentSearches: List<String> = emptyList(),
+    /** Visual effects: automatic (by the phone), full or light. */
+    val effects: EffectsMode = EffectsMode.AUTO,
 ) {
     /** The interface language to use now. */
     val language: AppLanguage get() = AppLanguage.resolve(uiLanguage)

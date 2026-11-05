@@ -103,6 +103,7 @@ import androidx.core.view.WindowCompat
 import com.cedrickgd.morgenbriefing.ui.glass.GlassLevel
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
 import com.cedrickgd.morgenbriefing.ui.glass.LocalGlassState
+import com.cedrickgd.morgenbriefing.ui.glass.glassBlurEnabled
 import com.cedrickgd.morgenbriefing.ui.glass.glass
 import com.cedrickgd.morgenbriefing.ui.glass.glassEdgeBrush
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
@@ -563,14 +564,18 @@ internal fun Modifier.keepInViewWhileTyping(vararg keys: Any?): Modifier = compo
     bringIntoViewRequester(requester).onFocusChanged { focused = it.hasFocus }
 }
 
-/** Enables the system blur behind the current dialog window (API 31+, if the device allows). */
+/**
+ * Enables the system blur behind the current dialog window (API 31+, if the device allows, and
+ * only with full effects: the compositor's blur is costly on budget GPUs).
+ */
 @Composable
 private fun rememberWindowBlurBehind(): Boolean {
     val window = (LocalView.current.parent as? DialogWindowProvider)?.window
     val context = LocalContext.current
     val density = LocalDensity.current
-    val enabled = remember(window, context) {
-        window != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+    val blur = glassBlurEnabled()
+    val enabled = remember(window, context, blur) {
+        blur && window != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             context.getSystemService(WindowManager::class.java)?.isCrossWindowBlurEnabled == true
     }
     DisposableEffect(window, enabled) {

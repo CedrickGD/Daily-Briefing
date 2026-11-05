@@ -1,9 +1,5 @@
 package com.cedrickgd.morgenbriefing.ui.glass
 
-import android.app.ActivityManager
-import android.content.Context
-import android.os.Build
-import android.os.PowerManager
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -33,7 +29,6 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.domain.Condition
 import com.cedrickgd.morgenbriefing.ui.components.SkyKind
@@ -61,8 +56,10 @@ import kotlin.math.sin
  * A change of weather, time of day or light/dark cross-fades to the new sky; with the system
  * "remove animations" setting everything is static. While [paused] returns true (the shell
  * passes "a list is scrolling") the aurora holds still; while [covered] (an opaque screen such
- * as the reader lies over all of it) nothing moves at all. On Android 7, low-RAM devices and in
- * battery saver the aurora drifts at 10 fps and the particles stand still.
+ * as the reader lies over all of it) nothing moves at all. With light effects ([LocalEffects]:
+ * budget phones, low-RAM devices, battery saver, or chosen in the settings) and on Android 7 the
+ * aurora drifts at 10 fps and the particles stand still; without real blur ([glassBlurEnabled])
+ * the sky is no blur source.
  */
 @Composable
 fun AmbientSky(
@@ -75,10 +72,10 @@ fun AmbientSky(
     covered: Boolean = false,
 ) {
     val reduceMotion = rememberReduceMotion()
-    val context = LocalContext.current
-    // Old or low-memory devices (or battery saver): the sky drifts at 10 fps and the weather
-    // particles stand still – it still looks alive, but costs a fraction of the work.
-    val gentle = remember(context) { prefersGentleSky(context) }
+    // Light effects (budget phones, battery saver) or Android 7: the sky drifts at 10 fps and the
+    // weather particles stand still – it still looks alive, but costs a fraction of the work.
+    val gentle = gentleSky()
+    val blur = glassBlurEnabled()
     val look = SkyLook(SkyKind.of(condition), condition, isDay, isGlassDark())
 
     // One clock for every sky, so the aurora keeps drifting through a cross-fade.
@@ -91,7 +88,7 @@ fun AmbientSky(
     Box(
         modifier
             .fillMaxSize()
-            .then(if (GlassBlurSupported) Modifier.hazeSource(state = hazeState, zIndex = 0f) else Modifier),
+            .then(if (blur) Modifier.hazeSource(state = hazeState, zIndex = 0f) else Modifier),
     ) {
         Crossfade(
             targetState = look,
@@ -127,14 +124,6 @@ private fun rememberAuroraClock(paused: () -> Boolean, frameIntervalMs: Long): S
         }
     }
     return time
-}
-
-/** Android 7, a low-RAM device or battery saver: keep the sky gentle on the battery. */
-private fun prefersGentleSky(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
-    val activity = context.getSystemService(ActivityManager::class.java)
-    val power = context.getSystemService(PowerManager::class.java)
-    return activity?.isLowRamDevice == true || power?.isPowerSaveMode == true
 }
 
 /** Everything that changes the sky's colors or particles. */

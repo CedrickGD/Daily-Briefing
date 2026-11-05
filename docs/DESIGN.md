@@ -21,6 +21,7 @@ für Android.
   4. Wetterpartikel (Nebelbänder, Regen, Schnee, Sterne, Sonnenschimmer) in der oberen Hälfte.
 * Dunkelmodus: tiefes Nachtblau/Indigo, Aurora gedämpft, Sterne. Hellmodus: luftig, pastellig.
 * „Animationen entfernen“ → alles statisch.
+* Sparsame Effekte (§9) → die Aurora driftet mit 10 fps, die Partikel stehen.
 
 ## 2. Glas
 
@@ -28,7 +29,8 @@ für Android.
   scrollende Inhalt jeder Seite ebenfalls (`glassContent()`, zIndex 1). Glas **im** Inhalt (Karten,
   Chips) zeigt nur den unscharfen Himmel; **schwebendes** Glas darüber (Kopfleiste, Indikator,
   Mini-Player, Leser-Steuerung) zeigt Himmel **und** Inhalt – Bilder gleiten farbig verschwommen
-  darunter durch. Ab Android 12 echte Unschärfe; darunter kein Haze, sondern ein milchiger Tint:
+  darunter durch. Ab Android 12 mit vollen Effekten echte Unschärfe; darunter oder mit
+  sparsamen Effekten (§9) kein Haze, sondern ein milchiger Tint:
   im Inhalt dichter (Tint + 30 %), schwebend praktisch deckend (97 %), damit kein Text durchscheint.
 * Tint: hell = `surface`; dunkel = ein **gehobener Nachtton** (`surfaceContainerHighest` + Hauch
   `primaryContainer`, etwas Weiß) – dunkles Glas ist heller als der Himmel dahinter, nie ein Loch.
@@ -153,7 +155,10 @@ dieselben Feed-Einträge, endlos; „Diesem Thema folgen“ als gefüllte Pill.
 6. **Feed & Lesen**: Meldungen pro Thema als große Zahl mit ruhigem Slider, Zeitraum als
    Auswahl-Pills, „Bilder anzeigen“; „In der App lesen“, „Nur lesbare Artikel“, „Vorladen“.
 7. **Darstellung**: drei Vorschau-Kacheln (Mini-Handy mit Himmel + Glaskarte) für
-   System/Hell/Dunkel; Akzentfarben als große Farbperlen mit gleitendem Auswahlring + Name.
+   System/Hell/Dunkel; Akzentfarben als große Farbperlen mit gleitendem Auswahlring + Name;
+   **Effekte** als drei Pills mit Symbol (Automatisch · Volle Effekte · Sparsam) und darunter
+   eine Zeile, was „Automatisch“ für dieses Handy wählt und warum („Für dieses Handy: sparsam –
+   flüssiger auf einfacher Hardware“).
 8. **Orte & Zeitfenster**: zwei Ortskarten mit Live-Mini-Wetter; Zeitfenster-Slider mit
    Sonnensymbolen. Der Ort-Picker ist ein Glas-Sheet: Suchfeld mit Live-Ergebnissen (Flagge, Name,
    Region), „Mein Standort“ als Akzent-Pill, Schnellauswahl großer Städte, der aktuelle Ort als
@@ -162,7 +167,25 @@ dieselben Feed-Einträge, endlos; „Diesem Thema folgen“ als gefüllte Pill.
 
 ## 8. Qualitätsregeln
 
-* Getestet auf 1440×3120 (S26 Ultra) und Android 7; hell/dunkel; Gesten- und 3-Tasten-Navigation.
+* Getestet auf 1440×3120 (S26 Ultra), einem Budget-Handy wie dem Galaxy A13 (1080×2408, sparsame
+  Effekte) und Android 7; hell/dunkel; Gesten- und 3-Tasten-Navigation.
 * Nichts liegt unter Statusleiste oder Gestenbalken, außer bewusst (Himmel).
 * Touch-Ziele ≥ 48 dp, alles mit Content-Description, Kontrast geprüft.
 * 60 fps beim Scrollen: Hintergründe zeichnen nur im Draw-Pass, keine Recomposition pro Frame.
+
+## 9. Effekte: voll oder sparsam
+
+Der Look ist auf jedem Handy derselbe – Himmel, Glas, Serifen, Farben. Was ein Budget-Handy
+(Galaxy A13: 8 × Cortex-A55, Mali-G52 MP1) nicht flüssig schafft, lässt „Sparsam“ weg:
+
+| | Volle Effekte | Sparsam |
+|---|---|---|
+| Glas | echte Unschärfe (Haze, ab Android 12) | milchiger Tint wie vor Android 12, keine Blur-Quelle |
+| Dialoge | System-Unschärfe hinter dem Fenster | deckende Fläche |
+| Himmel | Aurora mit 60 fps, Partikel bewegt | Aurora mit 10 fps, Partikel stehen |
+| Schleifen | Siegel-Puls, wippendes Wetter-Emoji | still; Equalizer beim Zuhören mit 10 fps |
+| Pager | Nachbarseiten verkleinert und in den Himmel getönt | nur verkleinert |
+
+Beim Scrollen hält die Aurora in beiden Stufen still; „Animationen entfernen“ macht in beiden
+alles statisch. **Automatisch** (Standard) wählt nach Geräteklasse (Architektur:
+Plattform-Regeln) und Energiesparmodus; Volle Effekte und Sparsam gelten unabhängig davon.

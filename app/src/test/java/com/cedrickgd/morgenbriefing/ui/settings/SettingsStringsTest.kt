@@ -1,6 +1,7 @@
 package com.cedrickgd.morgenbriefing.ui.settings
 
 import com.cedrickgd.morgenbriefing.data.model.AccentId
+import com.cedrickgd.morgenbriefing.data.model.EffectsMode
 import com.cedrickgd.morgenbriefing.data.model.NewsAge
 import com.cedrickgd.morgenbriefing.data.model.PrefetchMode
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
@@ -10,6 +11,8 @@ import com.cedrickgd.morgenbriefing.i18n.OnboardingStrings
 import com.cedrickgd.morgenbriefing.i18n.RegionStrings
 import com.cedrickgd.morgenbriefing.i18n.SettingsStrings
 import com.cedrickgd.morgenbriefing.i18n.SourcesStrings
+import com.cedrickgd.morgenbriefing.perf.DeviceTier
+import com.cedrickgd.morgenbriefing.perf.TierReason
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,8 +59,10 @@ class SettingsStringsTest {
             val s = SettingsStrings.of(lang)
             val labels = AccentId.entries.map(s::accentName) + NewsAge.entries.map(s::newsAge) +
                 WeatherCard.entries.flatMap { listOf(s.weatherCardTitle(it), s.weatherCardText(it)) } +
-                ThemeMode.entries.map(s::themeMode) + PrefetchMode.entries.flatMap { listOf(s.prefetchMode(it), s.prefetchHint(it)) }
+                ThemeMode.entries.map(s::themeMode) + PrefetchMode.entries.flatMap { listOf(s.prefetchMode(it), s.prefetchHint(it)) } +
+                EffectsMode.entries.map(s::effectsMode)
             labels.forEach { assertTrue("$lang: \"$it\"", it.isNotBlank()) }
+            assertEquals("$lang effects modes are distinct", EffectsMode.entries.size, EffectsMode.entries.map(s::effectsMode).distinct().size)
             assertEquals("$lang accent names are distinct", AccentId.entries.size, AccentId.entries.map(s::accentName).distinct().size)
         }
     }
@@ -90,6 +95,30 @@ class SettingsStringsTest {
         assertTrue(de.readableOnlyOn.contains("Anriss"))
         assertTrue(SettingsStrings.of(AppLanguage.EN).readableOnlyOn.contains("mobile data"))
         assertTrue(SettingsStrings.of(AppLanguage.FR).readableOnlyOn.contains("tu ne vois"))
+    }
+
+    @Test
+    fun `the effects hint says what automatic picks and why, in every language`() {
+        for (lang in AppLanguage.entries) {
+            val s = SettingsStrings.of(lang)
+            val hints = TierReason.entries.flatMap { reason ->
+                val tier = if (reason == TierReason.CAPABLE) DeviceTier.FULL else DeviceTier.LOW
+                listOf(s.effectsHint(tier, reason, chosen = true), s.effectsHint(tier, reason, chosen = false))
+            }
+            hints.forEach { hint ->
+                assertTrue("$lang: \"$hint\"", hint.isNotBlank())
+                assertEquals("$lang: \"$hint\" has stray spaces", hint.trim(), hint)
+            }
+            // Chosen or not, the line reads differently; full and light read differently.
+            assertTrue(lang.name, s.effectsHint(DeviceTier.LOW, TierReason.SLOW_CPU, true) != s.effectsHint(DeviceTier.LOW, TierReason.SLOW_CPU, false))
+            assertTrue(lang.name, s.effectsHint(DeviceTier.LOW, TierReason.SLOW_CPU, true) != s.effectsHint(DeviceTier.FULL, TierReason.CAPABLE, true))
+        }
+        val de = SettingsStrings.of(AppLanguage.DE)
+        assertEquals("Effekte", de.effectsOverline)
+        assertEquals(listOf("Automatisch", "Volle Effekte", "Sparsam"), EffectsMode.entries.map(de::effectsMode))
+        assertEquals("Für dieses Handy: sparsam – flüssiger auf einfacher Hardware", de.effectsHint(DeviceTier.LOW, TierReason.LITTLE_MEMORY, chosen = true))
+        assertEquals("Gerade: sparsam – der Energiesparmodus ist an", de.effectsHint(DeviceTier.LOW, TierReason.POWER_SAVER, chosen = true))
+        assertTrue(de.effectsHint(DeviceTier.FULL, TierReason.CAPABLE, chosen = false).startsWith("Automatisch wäre hier: volle Effekte"))
     }
 
     @Test

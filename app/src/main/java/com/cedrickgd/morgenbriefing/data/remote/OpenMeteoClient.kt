@@ -9,9 +9,12 @@ import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -34,13 +37,15 @@ import kotlin.math.roundToInt
 /**
  * Open-Meteo (no API key, CC BY 4.0). One forecast call per place with
  * `timezone=Europe/Berlin&forecast_days=2`, plus the geocoding API for the place picker (in the
- * interface language).
+ * interface language). Answers are decoded and turned into a snapshot on [compute], never on
+ * the caller's (main) thread.
  */
 class OpenMeteoClient(
     private val http: OkHttpClient,
     private val json: Json,
     private val baseUrl: String = "https://api.open-meteo.com",
     private val geocodingUrl: String = "https://geocoding-api.open-meteo.com",
+    private val compute: CoroutineDispatcher = Dispatchers.Default,
 ) {
     /** Open-Meteo adds metadata (units, elevation …) we do not model, so unknown keys are fine. */
     private val parser = Json(from = json) { ignoreUnknownKeys = true }
@@ -66,11 +71,13 @@ class OpenMeteoClient(
         }
         val start = minOf(dayStart, dayEnd).coerceIn(0, 23)
         val end = maxOf(dayStart, dayEnd).coerceIn(0, 23)
-        return WeatherSnapshot(
-            fetchedAt = local.truncatedTo(ChronoUnit.SECONDS).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-            home = buildHome(home, forHome, local.toLocalDateTime()),
-            day = buildDay(day, forDay, start, end, local.toLocalDateTime()),
-        )
+        return withContext(compute) {
+            WeatherSnapshot(
+                fetchedAt = local.truncatedTo(ChronoUnit.SECONDS).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                home = buildHome(home, forHome, local.toLocalDateTime()),
+                day = buildDay(day, forDay, start, end, local.toLocalDateTime()),
+            )
+        }
     }
 
     /**
@@ -157,7 +164,8 @@ class OpenMeteoClient(
             .addQueryParameter("forecast_days", "2")
             .addQueryParameter("wind_speed_unit", "kmh")
             .build()
-        return Forecast.from(get(url, ForecastDto.serializer(), what = "Wetter für ${place.name}"))
+        val dto = get(url, ForecastDto.serializer(), what = "Wetter für ${place.name}")
+        return withContext(compute) { Forecast.from(dto) }
     }
 
     private suspend fun <T> get(url: HttpUrl, serializer: KSerializer<T>, what: String): T {
@@ -171,7 +179,8 @@ class OpenMeteoClient(
             throw IOException("Open-Meteo ($what): HTTP ${response.code}")
         }
         return try {
-            parser.decodeFromString(serializer, response.body)
+            // A forecast is tens of kilobytes of JSON: decoded off the caller's thread.
+            withContext(compute) { parser.decodeFromString(serializer, response.body) }
         } catch (e: SerializationException) {
             throw IOException("Open-Meteo ($what): Antwort nicht lesbar", e)
         } catch (e: IllegalArgumentException) {

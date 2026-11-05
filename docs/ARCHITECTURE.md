@@ -43,7 +43,8 @@ Artikel öffnen / vorladen
   Listen (Für dich, Neueste, Themen, Entdecken) zeigen nur READABLE-Meldungen (VerifiedLists):
   geprüfte hinten angehängt, erste ungeprüfte hält die Liste an, Gezeigtes bleibt bis zum
   nächsten Aufbau; die nächsten ~20 Kandidaten (Für dich: was die Abschnitte füllt) prüft der
-  ArticlePrefetcher vorab – 3 parallel, auch mobil, offline nichts (Hinweis, später weiter).
+  ArticlePrefetcher vorab – 3 parallel (mit sparsamen Effekten 2, geparst auf zwei Threads
+  niedriger Priorität), auch mobil, offline nichts (Hinweis, später weiter).
   Die Morgen-Benachrichtigung prüft je Thema die neuesten Kandidaten (höchstens 20 s).
 ```
 
@@ -93,6 +94,7 @@ Artikel öffnen / vorladen
 | `location` | `LocationFinder` („Mein Standort“) |
 | `notify` | `AlarmScheduler`, `MorningAlarmReceiver`, `SystemEventsReceiver`, `MorningWorker`, `Notifications` |
 | `update` | In-App-Updater: `UpdateChecker`, `ApkDownloader`, `ApkVerifier`, `ApkInstaller`, `UpdateWorker` |
+| `perf` | Geräteklasse und Effekte: `DeviceTiers` (LOW/FULL, rein, getestet), `DeviceProbe` (Speicher, Low-RAM, schnellster Kern aus sysfs, Energiesparmodus), `Effects` (FULL/LIGHT aus Einstellung × Klasse), `Performance` (prozessweit im `AppContainer`), `BackgroundWork` (2 Parse-Threads niedriger Priorität) |
 | `listen` | „Zuhören“: Text-to-Speech (Stimme in der Sprache der Nachrichten), Mini-Player, Audio-Fokus |
 | `ui/shell` | Wischbarer Pager Heute → Einstellungen, Glas-Seitenindikator, Chrome-Steuerung, `ShellNavigator` |
 | `ui/glass` | Morgenglas: `Modifier.glass`, `GlassCard`, durchgehender Himmel (`AmbientSky`), Seitentitel/-leiste |
@@ -112,8 +114,29 @@ erreicht, Vorlesen über `context.listen`. ViewModels über `viewModelFactory { 
 
 * **minSdk 24 (Android 7.0)**, target/compile 36. `java.time` via Core-Library-Desugaring.
   Alles, was neuer ist, mit `Build.VERSION.SDK_INT`-Checks (Dynamic Color 31+, echte
-  Glas-Unschärfe 31+ sonst getönte Fläche, POST_NOTIFICATIONS 33+, exakte Alarme 31+,
-  `getCurrentLocation` 30+).
+  Glas-Unschärfe 31+ und nur mit vollen Effekten, sonst getönte Fläche, POST_NOTIFICATIONS 33+,
+  exakte Alarme 31+, `getCurrentLocation` 30+).
+* **Budget-Handys** (z. B. Galaxy A13: Exynos 850, 8 × Cortex-A55 @ 2,0 GHz, Mali-G52 MP1, 4 GB)
+  laufen flüssig, ein Flaggschiff behält den vollen Look. `DeviceTiers` (`perf/DeviceTier.kt`)
+  stuft ein Handy als **LOW** ein bei: Androids Low-RAM-Flag, API < 26, weniger als **5 GiB**
+  gemeldetem Speicher (`totalMem`; ein „4 GB“-Handy meldet ≈ 3,6–3,8 GiB, ein „6 GB“-Handy
+  ≈ 5,3–5,7 GiB), schnellstem Kern unter **2,2 GHz** (`cpuinfo_max_freq`, nur wenn lesbar;
+  Emulatoren melden meist nichts – dann zählt der Speicher) oder Energiesparmodus (live über
+  `ACTION_POWER_SAVE_MODE_CHANGED`). A13 → LOW, 6 GB / 2,4 GHz → FULL, S26 Ultra → FULL.
+  Die Einstellung **Effekte** (`EffectsMode`: Automatisch · Volle Effekte · Sparsam, Standard
+  Automatisch) ergibt mit der Klasse `Effects` FULL oder LIGHT; `AppRoot` stellt es als
+  `LocalEffects` bereit, der Hintergrund fragt `Performance.light`. **LIGHT**: kein Haze (keine
+  Blur-Quelle, keine Aufnahme-Layer, getöntes Glas wie vor Android 12, keine Fenster-Unschärfe
+  hinter Dialogen), Himmel mit 10 fps und stehenden Partikeln (beim Scrollen still wie immer),
+  keine dekorativen Schleifen (Siegel-Puls, wippendes Emoji; Equalizer mit 10 fps), Nachbarseiten
+  im Pager ohne Offscreen-Tönung, Artikelprüfung 2 statt 3 parallel auf `BackgroundWork.parsing`,
+  Bild-Speichercache 15 statt 20 %. **FULL**: alles wie bisher. „Animationen entfernen“ gilt in
+  beiden.
+* **Nichts Schweres auf dem Main-Thread**: Feed-Aufbau, Wetter-JSON, Artikel-Parsing, das
+  Einstellungs-Mapping (`flowOn(Default)`), JSON-Caches (`NewsCache`, `VerdictStore`,
+  `ReadabilityStore`, `GoogleNewsDecoder` – beim `warm()` auf IO geladen) und das Bild-Dekodieren
+  (Coil, in Anzeigegröße) laufen im Hintergrund. Debug-Builds schalten StrictMode ein
+  (Disk, Netzwerk, `noteSlowCall` → Log), Release-Builds nicht.
 * Android 7 kennt die Let's-Encrypt-Wurzel nicht: `network_security_config.xml` bündelt
   ISRG Root X1/X2 zusätzlich zu den System-Zertifikaten. Klartext-`http://` ist aus; Feeds und
   Bilder gehen nur über https.

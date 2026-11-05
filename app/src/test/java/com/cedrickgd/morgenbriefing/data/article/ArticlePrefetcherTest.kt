@@ -127,6 +127,33 @@ class ArticlePrefetcherTest {
     }
 
     @Test
+    fun `with light effects at most two load at a time, full effects go back to three`() = runTest(StandardTestDispatcher()) {
+        val source = FakeSource()
+        var light = true
+        val p = ArticlePrefetcher(
+            source, NetworkMeter { true }, scope = this.backgroundScope, clock = { testScheduler.currentTime }, light = { light },
+        )
+        val items = (1..8).map(::item)
+        p.prefetch(items.take(5), PrefetchMode.ALWAYS)
+        runCurrent()
+        assertEquals(2, source.running.get())
+        assertEquals(listOf("id1", "id2"), source.loads)
+        source.release("id1")
+        runCurrent()
+        assertEquals(2, source.running.get())
+        assertEquals(listOf("id1", "id2", "id3"), source.loads)
+        // Full effects again (battery saver off): new loads may take the third slot.
+        light = false
+        p.prefetch(items, PrefetchMode.ALWAYS)
+        runCurrent()
+        assertEquals(3, source.running.get())
+        items.forEach { source.release(it.id) }
+        runCurrent()
+        assertEquals(3, source.maxRunning)
+        assertTrue(items.all { p.statusOf(it.id) == ArticleStatus.READABLE })
+    }
+
+    @Test
     fun `only a complete article is verified, a teaser counts as paid`() = runTest(StandardTestDispatcher()) {
         val source = FakeSource()
         source.teasers += "id2"

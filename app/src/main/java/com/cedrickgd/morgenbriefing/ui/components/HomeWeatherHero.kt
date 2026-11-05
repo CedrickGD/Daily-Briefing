@@ -49,6 +49,7 @@ import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.ComponentStrings
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.WeatherStrings
+import com.cedrickgd.morgenbriefing.ui.glass.decorativeMotion
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
 import java.time.LocalDateTime
@@ -172,10 +173,10 @@ private fun CountUpTemperature(target: Double, style: TextStyle, modifier: Modif
     )
 }
 
-/** The big condition emoji, bobbing gently (static with reduced motion). */
+/** The big condition emoji, bobbing gently (static with reduced motion and with light effects). */
 @Composable
 private fun FloatingEmoji(emoji: String) {
-    val skip = motionDisabled()
+    val skip = motionDisabled() || !decorativeMotion()
     val bob = if (skip) {
         null
     } else {

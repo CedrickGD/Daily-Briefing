@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.navigation.NavBackStackEntry
+import com.cedrickgd.morgenbriefing.ui.glass.decorativeMotion
 import com.cedrickgd.morgenbriefing.ui.settings.SettingsScreen
 import com.cedrickgd.morgenbriefing.ui.today.TodayScreen
 import com.cedrickgd.morgenbriefing.ui.today.TodayViewModel
@@ -75,6 +76,8 @@ internal fun MainPager(
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     val dim = MaterialTheme.colorScheme.background
+    // With light effects the neighbour pages only shrink: no offscreen layers while swiping.
+    val sinkIntoSky = decorativeMotion()
 
     LaunchedEffect(pagerState, view) {
         snapshotFlow { pagerState.settledPage }
@@ -109,7 +112,7 @@ internal fun MainPager(
         Box(
             Modifier
                 .fillMaxSize()
-                .pageDepth(pagerState, page, dim)
+                .pageDepth(pagerState, page, dim, tint = sinkIntoSky)
                 .chromeScrollSource(chrome),
         ) {
             ChromeScrollReported {
@@ -138,21 +141,28 @@ internal fun MainPager(
  * Depth while swiping: pages away from the centre shrink and sink into the sky — their drawn
  * content is tinted towards the sky's base color ([dim]) on an offscreen layer (only while the
  * page is off centre), so nothing behind shines through the text. Reads the pager offset in
- * the draw phase only, so swiping never recomposes the pages.
+ * the draw phase only, so swiping never recomposes the pages. Without [tint] (light effects)
+ * the pages only shrink: two full-screen offscreen layers per frame are too much for a budget GPU.
  */
-private fun Modifier.pageDepth(state: PagerState, page: Int, dim: Color): Modifier = this
+private fun Modifier.pageDepth(state: PagerState, page: Int, dim: Color, tint: Boolean): Modifier = this
     .graphicsLayer {
         val distance = abs(state.getOffsetDistanceInPages(page)).coerceIn(0f, 1f)
         val scale = 1f - (1f - NEIGHBOR_SCALE) * distance
         scaleX = scale
         scaleY = scale
-        compositingStrategy = if (distance > 0.001f) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+        compositingStrategy = if (tint && distance > 0.001f) CompositingStrategy.Offscreen else CompositingStrategy.Auto
     }
-    .drawWithContent {
-        drawContent()
-        val distance = abs(state.getOffsetDistanceInPages(page)).coerceIn(0f, 1f)
-        if (distance > 0.001f) drawRect(dim.copy(alpha = NEIGHBOR_DIM * distance), blendMode = BlendMode.SrcAtop)
-    }
+    .then(
+        if (tint) {
+            Modifier.drawWithContent {
+                drawContent()
+                val distance = abs(state.getOffsetDistanceInPages(page)).coerceIn(0f, 1f)
+                if (distance > 0.001f) drawRect(dim.copy(alpha = NEIGHBOR_DIM * distance), blendMode = BlendMode.SrcAtop)
+            }
+        } else {
+            Modifier
+        },
+    )
 
 /**
  * Back on Einstellungen returns to "Heute". With predictive back the page leans towards "Heute"

@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,7 +34,10 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.AutoMode
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.EnergySavingsLeaf
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +60,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
@@ -68,8 +74,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.data.model.AccentId
+import com.cedrickgd.morgenbriefing.data.model.EffectsMode
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.i18n.settingsStrings
+import com.cedrickgd.morgenbriefing.perf.TierAssessment
 import com.cedrickgd.morgenbriefing.ui.components.SkyKind
 import com.cedrickgd.morgenbriefing.ui.components.skyPalette
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
@@ -78,13 +86,19 @@ import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import com.cedrickgd.morgenbriefing.ui.theme.AccentScheme
 import com.cedrickgd.morgenbriefing.ui.theme.WarmNeutrals
 
-/** Settings section 3 "Darstellung": theme previews and the accent pearls. */
+/**
+ * Settings section 3 "Darstellung": theme previews, the accent pearls and the effects
+ * (automatic by the phone, full, light) with a line saying what automatic picks here and why.
+ */
 @Composable
 internal fun AppearanceCard(
     themeMode: ThemeMode,
     accent: AccentId,
+    effects: EffectsMode,
+    deviceTier: TierAssessment?,
     onThemeMode: (ThemeMode) -> Unit,
     onAccent: (AccentId) -> Unit,
+    onEffects: (EffectsMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val strings = settingsStrings()
@@ -96,6 +110,42 @@ internal fun AppearanceCard(
         Overline(strings.accentOverline)
         Spacer(Modifier.height(8.dp))
         AccentOrbs(selected = accent, onSelect = onAccent)
+        Spacer(Modifier.height(24.dp))
+        Overline(strings.effectsOverline)
+        Spacer(Modifier.height(8.dp))
+        EffectsChoice(selected = effects, deviceTier = deviceTier, onSelect = onEffects)
+    }
+}
+
+/** The effects modes in display order, each with its icon. */
+private val EffectsOptions: List<Pair<EffectsMode, ImageVector>> = listOf(
+    EffectsMode.AUTO to Icons.Rounded.AutoMode,
+    EffectsMode.FULL to Icons.Rounded.AutoAwesome,
+    EffectsMode.LIGHT to Icons.Rounded.EnergySavingsLeaf,
+)
+
+/** Automatisch · Volle Effekte · Sparsam as pills, and what automatic picks for this phone. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EffectsChoice(selected: EffectsMode, deviceTier: TierAssessment?, onSelect: (EffectsMode) -> Unit) {
+    val strings = settingsStrings()
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.selectableGroup(),
+    ) {
+        EffectsOptions.forEach { (mode, icon) ->
+            ChoicePill(label = strings.effectsMode(mode), selected = mode == selected, onClick = { onSelect(mode) }, icon = icon)
+        }
+    }
+    val hint = deviceTier?.let { strings.effectsHint(it.tier, it.reason, chosen = selected == EffectsMode.AUTO) }
+    if (hint != null) {
+        Text(
+            text = hint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
 

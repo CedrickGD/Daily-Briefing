@@ -1,6 +1,5 @@
 package com.cedrickgd.morgenbriefing.ui.glass
 
-import android.os.Build
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -50,14 +49,13 @@ import dev.chrisbanes.haze.hazeSource
  * content (cards, chips) blurs only the sky beneath it; floating glass above the content (top
  * bars, the page indicator, the mini player) blurs sky **and** content, so pictures glide softly
  * blurred beneath it. Null (previews, tests) → glass falls back to a frosted fill.
+ *
+ * Whether Haze is used at all is decided at runtime by [glassBlurEnabled]: real blur needs
+ * RenderEffect (Android 12+) and full effects ([LocalEffects]). Otherwise the app skips Haze
+ * entirely (no recording, no extra layers) and paints a frosted tint – the same path Android
+ * 7–11 always took.
  */
 val LocalGlassState = staticCompositionLocalOf<HazeState?> { null }
-
-/**
- * Real blur needs RenderEffect (Android 12+). Below that Haze could only paint a scrim, so the
- * app skips Haze there entirely (no recording, no extra layers) and paints a frosted tint.
- */
-val GlassBlurSupported: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 /**
  * Glass thickness levels from docs/DESIGN.md §2. Tints are alphas of [glassTint]: in light mode
@@ -163,14 +161,15 @@ private val GlassInputScale: HazeInputScale = HazeInputScale.Fixed(0.5f)
  */
 fun Modifier.glassContent(zIndex: Float = 1f): Modifier = composed {
     val state = LocalGlassState.current
-    if (state != null && GlassBlurSupported) hazeSource(state, zIndex = zIndex) else Modifier
+    if (state != null && glassBlurEnabled()) hazeSource(state, zIndex = zIndex) else Modifier
 }
 
 /**
  * Turns any element into frosted glass: the blurred sky (and, for glass floating above a page,
  * the blurred content) behind, tint, grain, a soft inner sheen at the top and a light-catching
  * 1 dp edge. Set [floating] for glass that hovers over scrolling content: without real blur
- * (Android < 12) it then turns practically opaque instead of letting text ghost through.
+ * (Android < 12, light effects) it then turns practically opaque instead of letting text ghost
+ * through.
  */
 fun Modifier.glass(
     shape: Shape = GlassShapes.card,
@@ -185,7 +184,7 @@ fun Modifier.glass(
     val edgeBrush = glassEdgeBrush()
 
     val surface = clip(shape).then(
-        if (state != null && GlassBlurSupported) {
+        if (state != null && glassBlurEnabled()) {
             val style = glassStyle(level, tint, floating)
             Modifier.hazeEffect(state = state, style = style) { inputScale = GlassInputScale }
         } else {

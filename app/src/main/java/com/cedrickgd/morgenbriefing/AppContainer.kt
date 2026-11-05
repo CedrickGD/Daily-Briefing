@@ -19,9 +19,13 @@ import com.cedrickgd.morgenbriefing.data.remote.GoogleNewsDecoder
 import com.cedrickgd.morgenbriefing.data.remote.OpenMeteoClient
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
 import com.cedrickgd.morgenbriefing.location.LocationFinder
+import com.cedrickgd.morgenbriefing.perf.BackgroundWork
+import com.cedrickgd.morgenbriefing.perf.Performance
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -42,6 +46,9 @@ class AppContainer(context: Context) {
     private val storeDir = File(app.filesDir, "store")
 
     val settings = SettingsRepository(app)
+
+    /** Device tier (probed off the main thread, battery saver watched) and the effects in use. */
+    val performance = Performance(app, settings.settings.map { it.effects }, CoroutineScope(SupervisorJob() + Dispatchers.Default))
     val weatherStore = WeatherStore(storeDir, json)
     val newsCache = NewsCache(storeDir, json)
     val openMeteo = OpenMeteoClient(http, json)
@@ -60,14 +67,25 @@ class AppContainer(context: Context) {
         newsCache,
         blockedDomains = readability::blockedDomains,
         resolvedUrl = googleNewsDecoder::peek,
-        warmUp = googleNewsDecoder::warm,
+        // Both caches are read from disk once, here, off the main thread: everything after the
+        // warm-up (staleness checks, paging) finds them in memory.
+        warmUp = {
+            googleNewsDecoder.warm()
+            withContext(Dispatchers.IO) { readability.blockedDomains() }
+        },
     )
-    val articles = ArticleRepository(http, storeDir, json, linkResolver = linkResolver, readability = readability)
+
+    /** Pages read for checks and preloading are parsed on two low-priority threads with light effects. */
+    val articles = ArticleRepository(
+        http, storeDir, json, linkResolver = linkResolver, readability = readability,
+        backgroundCpu = { if (performance.light) BackgroundWork.parsing else Dispatchers.Default },
+    )
 
     /** Per article: verified complete, teaser, wall or no article – kept across starts (`store/verdicts.json`). */
     val verdicts = VerdictStore(File(storeDir, "verdicts.json"), json, CoroutineScope(SupervisorJob() + Dispatchers.IO))
     val network = AndroidNetworkMeter(app)
-    val prefetcher = ArticlePrefetcher(articles, network, verdicts)
+    /** Checks 3 articles at a time, 2 with light effects. */
+    val prefetcher = ArticlePrefetcher(articles, network, verdicts, light = performance::light)
     val location = LocationFinder(app)
 }
 

@@ -3,10 +3,13 @@ package com.cedrickgd.morgenbriefing.i18n
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import com.cedrickgd.morgenbriefing.data.model.AccentId
+import com.cedrickgd.morgenbriefing.data.model.EffectsMode
 import com.cedrickgd.morgenbriefing.data.model.NewsAge
 import com.cedrickgd.morgenbriefing.data.model.PrefetchMode
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.data.model.WeatherCard
+import com.cedrickgd.morgenbriefing.perf.DeviceTier
+import com.cedrickgd.morgenbriefing.perf.TierReason
 
 /**
  * The settings page itself: page and section titles, the status hero, the morning briefing,
@@ -136,6 +139,17 @@ interface SettingsStrings {
     fun themeMode(mode: ThemeMode): String
     val accentOverline: String
     fun accentName(accent: AccentId): String
+
+    // Effects (glass blur, the living sky): automatic by the phone, full or light
+    val effectsOverline: String
+    fun effectsMode(mode: EffectsMode): String
+
+    /**
+     * What "Automatisch" picks for this phone ([tier]) and why ([reason]), in plain words.
+     * [chosen]: automatic is the selected mode ("Für dieses Handy: …"); otherwise the line says
+     * what automatic would do.
+     */
+    fun effectsHint(tier: DeviceTier, reason: TierReason, chosen: Boolean): String
 
     // App card, links, footer
     fun version(version: String): String
@@ -340,6 +354,28 @@ interface SettingsStrings {
             AccentId.GRAPHIT -> "Graphit"
         }
 
+        override val effectsOverline = "Effekte"
+        override fun effectsMode(mode: EffectsMode) = when (mode) {
+            EffectsMode.AUTO -> "Automatisch"
+            EffectsMode.FULL -> "Volle Effekte"
+            EffectsMode.LIGHT -> "Sparsam"
+        }
+        override fun effectsHint(tier: DeviceTier, reason: TierReason, chosen: Boolean): String {
+            val verdict = if (tier == DeviceTier.FULL) "volle Effekte" else "sparsam"
+            val why = when (reason) {
+                TierReason.LOW_RAM_DEVICE, TierReason.LITTLE_MEMORY, TierReason.SLOW_CPU -> "flüssiger auf einfacher Hardware"
+                TierReason.OLD_ANDROID -> "flüssiger auf älterem Android"
+                TierReason.POWER_SAVER -> "der Energiesparmodus ist an"
+                TierReason.CAPABLE -> "genug Leistung für Glas und lebendigen Himmel"
+            }
+            val lead = when {
+                !chosen -> "Automatisch wäre hier"
+                reason == TierReason.POWER_SAVER -> "Gerade"
+                else -> "Für dieses Handy"
+            }
+            return "$lead: $verdict – $why"
+        }
+
         override fun version(version: String) = "Version $version"
         override val testBuild = "Testversion"
         override val aboutApp = "Läuft komplett auf deinem Handy: Wetter von Open-Meteo, Nachrichten direkt aus den Feeds der Redaktionen und aus Google News. Kein Konto, keine Cloud, keine Werbung."
@@ -529,6 +565,28 @@ interface SettingsStrings {
             AccentId.LAVENDEL -> "Lavender"
             AccentId.BEERE -> "Berry"
             AccentId.GRAPHIT -> "Graphite"
+        }
+
+        override val effectsOverline = "Effects"
+        override fun effectsMode(mode: EffectsMode) = when (mode) {
+            EffectsMode.AUTO -> "Automatic"
+            EffectsMode.FULL -> "Full effects"
+            EffectsMode.LIGHT -> "Light"
+        }
+        override fun effectsHint(tier: DeviceTier, reason: TierReason, chosen: Boolean): String {
+            val verdict = if (tier == DeviceTier.FULL) "full effects" else "light"
+            val why = when (reason) {
+                TierReason.LOW_RAM_DEVICE, TierReason.LITTLE_MEMORY, TierReason.SLOW_CPU -> "smoother on simple hardware"
+                TierReason.OLD_ANDROID -> "smoother on older Android"
+                TierReason.POWER_SAVER -> "battery saver is on"
+                TierReason.CAPABLE -> "enough power for glass and a lively sky"
+            }
+            val lead = when {
+                !chosen -> "Automatic would pick"
+                reason == TierReason.POWER_SAVER -> "Right now"
+                else -> "For this phone"
+            }
+            return "$lead: $verdict – $why"
         }
 
         override fun version(version: String) = "Version $version"
@@ -722,6 +780,28 @@ interface SettingsStrings {
             AccentId.GRAPHIT -> "Graphite"
         }
 
+        override val effectsOverline = "Effets"
+        override fun effectsMode(mode: EffectsMode) = when (mode) {
+            EffectsMode.AUTO -> "Automatique"
+            EffectsMode.FULL -> "Effets complets"
+            EffectsMode.LIGHT -> "Économe"
+        }
+        override fun effectsHint(tier: DeviceTier, reason: TierReason, chosen: Boolean): String {
+            val verdict = if (tier == DeviceTier.FULL) "effets complets" else "économe"
+            val why = when (reason) {
+                TierReason.LOW_RAM_DEVICE, TierReason.LITTLE_MEMORY, TierReason.SLOW_CPU -> "plus fluide sur un matériel simple"
+                TierReason.OLD_ANDROID -> "plus fluide sur un Android ancien"
+                TierReason.POWER_SAVER -> "l'économiseur de batterie est activé"
+                TierReason.CAPABLE -> "assez de puissance pour le verre et un ciel vivant"
+            }
+            val lead = when {
+                !chosen -> "En automatique, ce serait"
+                reason == TierReason.POWER_SAVER -> "Pour l'instant"
+                else -> "Pour ce téléphone"
+            }
+            return "$lead : $verdict – $why"
+        }
+
         override fun version(version: String) = "Version $version"
         override val testBuild = "Version de test"
         override val aboutApp = "Fonctionne entièrement sur ton téléphone : météo d'Open-Meteo, infos directement des flux des rédactions et de Google News. Pas de compte, pas de cloud, pas de pub."
@@ -913,6 +993,28 @@ interface SettingsStrings {
             AccentId.GRAPHIT -> "Grafito"
         }
 
+        override val effectsOverline = "Efectos"
+        override fun effectsMode(mode: EffectsMode) = when (mode) {
+            EffectsMode.AUTO -> "Automático"
+            EffectsMode.FULL -> "Efectos completos"
+            EffectsMode.LIGHT -> "Ligero"
+        }
+        override fun effectsHint(tier: DeviceTier, reason: TierReason, chosen: Boolean): String {
+            val verdict = if (tier == DeviceTier.FULL) "efectos completos" else "ligero"
+            val why = when (reason) {
+                TierReason.LOW_RAM_DEVICE, TierReason.LITTLE_MEMORY, TierReason.SLOW_CPU -> "más fluido en hardware sencillo"
+                TierReason.OLD_ANDROID -> "más fluido en un Android antiguo"
+                TierReason.POWER_SAVER -> "el ahorro de batería está activado"
+                TierReason.CAPABLE -> "potencia de sobra para el cristal y un cielo vivo"
+            }
+            val lead = when {
+                !chosen -> "En automático sería"
+                reason == TierReason.POWER_SAVER -> "Ahora mismo"
+                else -> "Para este móvil"
+            }
+            return "$lead: $verdict – $why"
+        }
+
         override fun version(version: String) = "Versión $version"
         override val testBuild = "Versión de prueba"
         override val aboutApp = "Funciona por completo en tu móvil: el tiempo de Open-Meteo, las noticias directamente de los feeds de las redacciones y de Google News. Sin cuenta, sin nube, sin anuncios."
@@ -1102,6 +1204,28 @@ interface SettingsStrings {
             AccentId.LAVENDEL -> "Lavanda"
             AccentId.BEERE -> "Frutti di bosco"
             AccentId.GRAPHIT -> "Grafite"
+        }
+
+        override val effectsOverline = "Effetti"
+        override fun effectsMode(mode: EffectsMode) = when (mode) {
+            EffectsMode.AUTO -> "Automatico"
+            EffectsMode.FULL -> "Effetti completi"
+            EffectsMode.LIGHT -> "Leggero"
+        }
+        override fun effectsHint(tier: DeviceTier, reason: TierReason, chosen: Boolean): String {
+            val verdict = if (tier == DeviceTier.FULL) "effetti completi" else "leggero"
+            val why = when (reason) {
+                TierReason.LOW_RAM_DEVICE, TierReason.LITTLE_MEMORY, TierReason.SLOW_CPU -> "più fluido su hardware semplice"
+                TierReason.OLD_ANDROID -> "più fluido su un Android datato"
+                TierReason.POWER_SAVER -> "il risparmio energetico è attivo"
+                TierReason.CAPABLE -> "potenza sufficiente per il vetro e un cielo vivace"
+            }
+            val lead = when {
+                !chosen -> "In automatico sarebbe"
+                reason == TierReason.POWER_SAVER -> "Al momento"
+                else -> "Per questo telefono"
+            }
+            return "$lead: $verdict – $why"
         }
 
         override fun version(version: String) = "Versione $version"

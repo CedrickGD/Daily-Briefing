@@ -62,6 +62,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.i18n.settingsStrings
+import com.cedrickgd.morgenbriefing.ui.glass.decorativeMotion
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 
@@ -174,7 +175,8 @@ private fun StatusSeal(seal: Seal, reduceMotion: Boolean) {
     LaunchedEffect(seal) {
         if (seal == Seal.READY && draw.value < 1f) draw.animateTo(1f, tween(620, delayMillis = 180, easing = FastOutSlowInEasing))
     }
-    val pulse = if (reduceMotion || seal == Seal.OFF) {
+    // A decorative loop: still with light effects (the seal itself stays).
+    val pulse = if (reduceMotion || seal == Seal.OFF || !decorativeMotion()) {
         null
     } else {
         rememberInfiniteTransition(label = "sealPulse").animateFloat(

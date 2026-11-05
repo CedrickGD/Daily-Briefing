@@ -7,6 +7,7 @@ import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.ReadOutcome
 import com.cedrickgd.morgenbriefing.data.remote.await
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -60,6 +61,11 @@ class ArticleException(
  *
  * Publishers are respected: no paywall, consent or bot-check is worked around. The only second
  * try is the AMP version a page links to itself, when the page gave no readable text.
+ *
+ * Nothing of a load runs on the caller's thread: parsing, extraction, the completeness check
+ * and JSON run on `Dispatchers.Default` – for [load]s with `background` (checks and preloading)
+ * on [backgroundCpu], which a budget phone bounds to two low-priority threads – blocking reads
+ * and writes on `Dispatchers.IO`.
  */
 class ArticleRepository(
     http: OkHttpClient,
@@ -71,6 +77,8 @@ class ArticleRepository(
     private val clock: () -> ZonedDateTime = { ZonedDateTime.now() },
     /** Only https pages (the app never loads cleartext); false only for tests against a local mock server. */
     private val requireHttps: Boolean = true,
+    /** Where background loads ([load] with `background`) parse and extract; asked at every load. */
+    private val backgroundCpu: () -> CoroutineDispatcher = { Dispatchers.Default },
 ) {
     private val client: OkHttpClient = http.newBuilder()
         .callTimeout(25, TimeUnit.SECONDS)
@@ -91,9 +99,15 @@ class ArticleRepository(
      *
      * @param language ISO 639-1 language of the item's edition, for `Accept-Language` when the
      *   site's domain does not tell (a `.com`); null = guess from the domain, else English.
+     * @param background a check or preload nobody waits for: parsed on [backgroundCpu]. The
+     *   reader's own load (false) always gets `Dispatchers.Default`.
      * @throws ArticleException when the page is unreachable or holds no readable article.
      */
-    suspend fun load(item: NewsItem, refresh: Boolean = false, language: String? = null): ArticleContent {
+    suspend fun load(item: NewsItem, refresh: Boolean = false, language: String? = null, background: Boolean = false): ArticleContent =
+        withContext(if (background) backgroundCpu() else Dispatchers.Default) { loadHere(item, refresh, language) }
+
+    /** [load] on the current (CPU) dispatcher. */
+    private suspend fun loadHere(item: NewsItem, refresh: Boolean, language: String?): ArticleContent {
         val id = item.id
         if (!refresh) cachedOrNull(item)?.let { return it }
         val content = try {
@@ -190,10 +204,10 @@ class ArticleRepository(
         return url.toString()
     }
 
-    /** Fetches and extracts [url]; the AMP version as a second try when the page gave no text. */
+    /** Fetches and extracts [url] (on the CPU dispatcher [load] runs on); the AMP version as a second try when the page gave no text. */
     private suspend fun read(url: String, site: String, language: String?): ArticleContent {
         val page = fetch(url, site, language)
-        val first = withContext(Dispatchers.Default) { ArticleExtractor.read(page.html, page.url, clock()) }
+        val first = ArticleExtractor.read(page.html, page.url, clock())
         val siteName = site.ifBlank { first.content?.site.orEmpty() }
         val content = first.content
         val weak = first.outcome == ReadOutcome.NOT_ARTICLE || (first.outcome == ReadOutcome.OK && content != null && content.looksTruncated)
@@ -201,7 +215,7 @@ class ArticleRepository(
         if (weak && amp != null && amp != page.url && sameSite(amp, page.url)) {
             val second = try {
                 val ampPage = fetch(amp, siteName, language)
-                withContext(Dispatchers.Default) { ArticleExtractor.read(ampPage.html, ampPage.url, clock()) }
+                ArticleExtractor.read(ampPage.html, ampPage.url, clock())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ArticleException) {
@@ -272,15 +286,20 @@ class ArticleRepository(
         if (type != null && type.type != "text" && type.subtype != "xhtml+xml" && type.subtype != "html") {
             throw ArticleException(ReadOutcome.NOT_ARTICLE, site)
         }
-        val html = withContext(Dispatchers.IO) {
+        val bytes = withContext(Dispatchers.IO) {
             try {
-                val bytes = r.body.byteStream().use { it.readCapped(MAX_HTML_BYTES) }
-                // jsoup sniffs the charset (BOM, meta) when none is given; the header wins when it is.
-                val charset = type?.charset()?.name()
-                Jsoup.parse(ByteArrayInputStream(bytes), charset, landed).outerHtml()
+                r.body.byteStream().use { it.readCapped(MAX_HTML_BYTES) }
             } catch (e: IOException) {
                 throw ArticleException(ReadOutcome.NETWORK, site, cause = e)
             }
+        }
+        // Parsing is CPU work: it stays on the dispatcher the load runs on, not on the IO pool.
+        // jsoup sniffs the charset (BOM, meta) when none is given; the header wins when it is.
+        val charset = type?.charset()?.name()
+        val html = try {
+            Jsoup.parse(ByteArrayInputStream(bytes), charset, landed).outerHtml()
+        } catch (e: IOException) {
+            throw ArticleException(ReadOutcome.NETWORK, site, cause = e)
         }
         Fetched(html, landed)
     }

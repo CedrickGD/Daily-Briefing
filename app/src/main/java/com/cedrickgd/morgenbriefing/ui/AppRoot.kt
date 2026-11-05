@@ -42,8 +42,11 @@ import com.cedrickgd.morgenbriefing.container
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.domain.Condition
+import com.cedrickgd.morgenbriefing.perf.DeviceTier
+import com.cedrickgd.morgenbriefing.perf.Effects
 import com.cedrickgd.morgenbriefing.ui.components.ProvideAppLanguage
 import com.cedrickgd.morgenbriefing.ui.glass.AmbientSky
+import com.cedrickgd.morgenbriefing.ui.glass.LocalEffects
 import com.cedrickgd.morgenbriefing.ui.glass.LocalGlassState
 import com.cedrickgd.morgenbriefing.ui.nav.AppNavHost
 import com.cedrickgd.morgenbriefing.ui.nav.coversSky
@@ -77,15 +80,16 @@ private val LightNavScrim = Color.argb(0xCC, 0xFC, 0xFC, 0xFB)
 private val DarkNavScrim = Color.argb(0xB3, 0x15, 0x14, 0x12)
 
 /**
- * Root of the UI (docs/DESIGN.md §1–§3): theme from the stored settings → one blur source →
- * the [AmbientSky] behind everything → the navigation graph (page pager) → the floating glass
- * chrome.
+ * Root of the UI (docs/DESIGN.md §1–§3): theme from the stored settings → the effects for this
+ * phone ([LocalEffects]: the "Effekte" setting resolved against the device tier) → one blur
+ * source → the [AmbientSky] behind everything → the navigation graph (page pager) → the
+ * floating glass chrome.
  *
  * @param initialPage the page the pager opens on in a fresh activity (notification links).
  * @param pageRequest a page to show now (notification tap while the app is open); reported
  *   back through [onPageRequestHandled] once it has been acted on.
- * @param onReady called once the stored settings are known, so the splash screen can hide
- *   without flashing the wrong theme.
+ * @param onReady called once the stored settings and the device tier are known, so the splash
+ *   screen can hide without flashing the wrong theme or the wrong glass.
  */
 @Composable
 fun AppRoot(
@@ -95,9 +99,13 @@ fun AppRoot(
     onReady: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    // Article pictures: one loader for the whole app, sharing the app's OkHttp client.
+    val performance = remember(context) { context.container.performance }
+    // Article pictures: one loader for the whole app, sharing the app's OkHttp client; a budget
+    // phone keeps fewer decoded pictures in memory. Built on the first picture, after the probe.
     val http = remember(context) { context.container.http }
-    setSingletonImageLoaderFactory { platformContext -> newsImageLoader(platformContext, http) }
+    setSingletonImageLoaderFactory { platformContext ->
+        newsImageLoader(platformContext, http, performance.hardwareTier ?: DeviceTier.LOW)
+    }
 
     val settingsFlow = remember(context) {
         context.container.settings.settings
@@ -109,9 +117,13 @@ fun AppRoot(
     }
     val loaded by settingsFlow.collectAsStateWithLifecycle(initialValue = null)
     val settings = loaded ?: AppSettings()
+    // Known a few milliseconds after the start (hardware probe off the main thread).
+    val assessment by performance.assessment.collectAsStateWithLifecycle()
+    // Unknown tier: light until the probe answered (the splash usually covers that moment).
+    val effects = Effects.resolve(settings.effects, assessment?.tier ?: DeviceTier.LOW)
 
     val latestOnReady by rememberUpdatedState(onReady)
-    val ready = loaded != null
+    val ready = loaded != null && assessment != null
     LaunchedEffect(ready) { if (ready) latestOnReady() }
 
     val darkTheme = when (settings.themeMode) {
@@ -125,12 +137,14 @@ fun AppRoot(
     ProvideAppLanguage(settings.language) {
         MorgenbriefingTheme(themeMode = settings.themeMode, accent = settings.accent) {
             SystemBarsEffect(darkTheme = darkTheme)
-            AppShell(
-                initialPage = initialPage,
-                pageRequest = pageRequest,
-                onPageRequestHandled = onPageRequestHandled,
-                readInApp = settings.readInApp,
-            )
+            CompositionLocalProvider(LocalEffects provides effects) {
+                AppShell(
+                    initialPage = initialPage,
+                    pageRequest = pageRequest,
+                    onPageRequestHandled = onPageRequestHandled,
+                    readInApp = settings.readInApp,
+                )
+            }
         }
     }
 }

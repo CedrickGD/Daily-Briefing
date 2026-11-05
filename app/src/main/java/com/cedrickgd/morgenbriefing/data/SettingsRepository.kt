@@ -22,10 +22,12 @@ import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.news.Regions
 import com.cedrickgd.morgenbriefing.data.news.Taxonomy
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
@@ -45,14 +47,21 @@ private val Context.settingsStore: DataStore<Preferences> by preferencesDataStor
  * Settings of older versions are migrated on read ([SettingsMigration]): the old topic order
  * and hidden topics become [AppSettings.followed], installs without a news edition read the
  * German news they always had. The next write stores the migrated values.
+ *
+ * The internal constructor takes any preferences store (tests use one in a temporary file).
  */
-class SettingsRepository(context: Context) {
-    private val store: DataStore<Preferences> = context.applicationContext.settingsStore
+class SettingsRepository internal constructor(private val store: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.applicationContext.settingsStore)
 
-    /** Always emits; unreadable storage falls back to the defaults instead of crashing. */
+    /**
+     * Always emits; unreadable storage falls back to the defaults instead of crashing. The
+     * stored JSON (places, topics, feeds) is decoded off the main thread, whichever thread
+     * collects – the screens collect on the main thread.
+     */
     val settings: Flow<AppSettings> = store.data
         .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
         .map { it.toSettings() }
+        .flowOn(Dispatchers.Default)
         .distinctUntilChanged()
 
     suspend fun current(): AppSettings = settings.first()
@@ -162,6 +171,7 @@ class SettingsRepository(context: Context) {
                 .filter { it.isNotEmpty() }
                 .distinctBy { it.lowercase(Locale.ROOT) }
                 .take(SettingsOps.MAX_RECENT_SEARCHES),
+            effects = enumOrDefault(this[Keys.EFFECTS], defaults.effects),
         )
     }
 
@@ -207,6 +217,7 @@ class SettingsRepository(context: Context) {
         this[Keys.READABLE_ONLY] = s.readableOnly
         this[Keys.PREFETCH] = s.prefetch.name
         this[Keys.RECENT_SEARCHES] = AppJson.encodeToString(ListSerializer(String.serializer()), s.recentSearches.take(SettingsOps.MAX_RECENT_SEARCHES))
+        this[Keys.EFFECTS] = s.effects.name
     }
 
     private inline fun <reified E : Enum<E>> enumOrDefault(name: String?, default: E): E =
@@ -271,5 +282,8 @@ class SettingsRepository(context: Context) {
         val READABLE_ONLY = booleanPreferencesKey("readable_only")
         val PREFETCH = stringPreferencesKey("prefetch")
         val RECENT_SEARCHES = stringPreferencesKey("recent_searches")
+
+        /** [com.cedrickgd.morgenbriefing.data.model.EffectsMode] by name; missing (installs up to 3.1) = automatic. */
+        val EFFECTS = stringPreferencesKey("effects")
     }
 }

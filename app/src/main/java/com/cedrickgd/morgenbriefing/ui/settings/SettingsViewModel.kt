@@ -15,6 +15,7 @@ import com.cedrickgd.morgenbriefing.data.SettingsOps
 import com.cedrickgd.morgenbriefing.data.article.KnownWalls
 import com.cedrickgd.morgenbriefing.data.model.AccentId
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
+import com.cedrickgd.morgenbriefing.data.model.EffectsMode
 import com.cedrickgd.morgenbriefing.data.model.FeedSource
 import com.cedrickgd.morgenbriefing.data.model.NewsAge
 import com.cedrickgd.morgenbriefing.data.model.NewsEdition
@@ -25,6 +26,7 @@ import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
+import com.cedrickgd.morgenbriefing.perf.TierAssessment
 import com.cedrickgd.morgenbriefing.data.news.FeedCatalog
 import com.cedrickgd.morgenbriefing.data.news.Regions
 import com.cedrickgd.morgenbriefing.data.news.TopicSources
@@ -139,6 +141,9 @@ class SettingsViewModel(
         .catch { e -> Log.w(TAG, "Readability unavailable", e) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), KnownWalls.DOMAINS)
 
+    /** What the phone is (tier and why), for the "Effekte" hint; null for the first milliseconds. */
+    val deviceTier: StateFlow<TierAssessment?> get() = container.performance.assessment
+
     private val _placeSearch = MutableStateFlow(PlaceSearchState())
     val placeSearch: StateFlow<PlaceSearchState> = _placeSearch.asStateFlow()
 
@@ -197,6 +202,8 @@ class SettingsViewModel(
     fun setThemeMode(mode: ThemeMode) = edit { it.copy(themeMode = mode) }
 
     fun setAccent(accent: AccentId) = edit { it.copy(accent = accent) }
+
+    fun setEffects(mode: EffectsMode) = edit { it.copy(effects = mode) }
 
     /** The interface language; null follows the phone. Applies at once (AppRoot provides it). */
     fun setUiLanguage(language: AppLanguage?) = edit { it.copy(uiLanguage = language) }

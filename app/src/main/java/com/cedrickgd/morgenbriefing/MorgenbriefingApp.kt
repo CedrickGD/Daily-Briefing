@@ -1,6 +1,7 @@
 package com.cedrickgd.morgenbriefing
 
 import android.app.Application
+import android.os.StrictMode
 import android.util.Log
 import com.cedrickgd.morgenbriefing.listen.ListenController
 import com.cedrickgd.morgenbriefing.notify.AlarmScheduler
@@ -29,6 +30,7 @@ class MorgenbriefingApp : Application() {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
+        if (BuildConfig.DEBUG) enableStrictMode()
         super.onCreate()
         container = AppContainer(this)
         Notifications.createChannels(this)
@@ -55,6 +57,23 @@ class MorgenbriefingApp : Application() {
             // WorkManager not initialised (should not happen with the default initializer).
             Log.w(TAG, "Could not schedule the update check", e)
         }
+    }
+
+    /**
+     * Debug builds only: every disk read or write, network call or marked slow call on the main
+     * thread is logged (tag `StrictMode`), so main-thread I/O shows up while developing – it is
+     * what makes budget phones stutter. Release builds never enable it.
+     */
+    private fun enableStrictMode() {
+        StrictMode.setThreadPolicy(
+            StrictMode.ThreadPolicy.Builder()
+                .detectDiskReads()
+                .detectDiskWrites()
+                .detectNetwork()
+                .detectCustomSlowCalls()
+                .penaltyLog()
+                .build(),
+        )
     }
 
     private companion object {
