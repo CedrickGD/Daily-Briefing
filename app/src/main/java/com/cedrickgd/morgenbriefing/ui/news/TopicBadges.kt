@@ -45,8 +45,8 @@ fun TopicChip(topic: Topic, modifier: Modifier = Modifier, compact: Boolean = fa
             ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (topic.emoji.isNotBlank()) {
-                Emoji(topic.emoji, size = if (compact) 12.sp else 14.sp)
+            if (topic.icon != null || topic.emoji.isNotBlank()) {
+                TopicGlyph(topic, tint = colors.onContainer, size = if (compact) 14.dp else 16.dp)
                 Spacer(Modifier.width(6.dp))
             }
             Text(
@@ -59,7 +59,7 @@ fun TopicChip(topic: Topic, modifier: Modifier = Modifier, compact: Boolean = fa
     }
 }
 
-/** The topic emoji in a circle tinted with the topic color (section headers, sheets). */
+/** The topic's icon (or, for old custom topics, emoji) in a circle tinted with the topic color. */
 @Composable
 internal fun TopicBadge(
     topic: Topic,
@@ -74,6 +74,6 @@ internal fun TopicBadge(
             .background(colors.container, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Emoji(topic.emoji.ifBlank { "📰" }, size = size)
+        TopicGlyph(topic, tint = colors.onContainer, size = (size.value * 1.1f).dp)
     }
 }
