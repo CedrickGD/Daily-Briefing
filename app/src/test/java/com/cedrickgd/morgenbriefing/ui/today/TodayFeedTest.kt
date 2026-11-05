@@ -1,10 +1,15 @@
 package com.cedrickgd.morgenbriefing.ui.today
 
+import com.cedrickgd.morgenbriefing.data.SettingsOps
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
+import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.Topic
+import com.cedrickgd.morgenbriefing.data.model.Topics
+import com.cedrickgd.morgenbriefing.domain.WeatherFixtures
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
+import com.cedrickgd.morgenbriefing.ui.brief.toWeatherUi
 import com.cedrickgd.morgenbriefing.ui.news.FeedArticle
 import com.cedrickgd.morgenbriefing.ui.news.FeedFilter
 import com.cedrickgd.morgenbriefing.ui.news.FeedPrefs
@@ -13,6 +18,7 @@ import com.cedrickgd.morgenbriefing.ui.news.SectionUi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.ZonedDateTime
@@ -63,5 +69,34 @@ class TodayFeedTest {
         assertNotEquals(signature, TodayViewModel.sourceSignatures(base.copy(edition = us)))
         assertNotEquals(signature, TodayViewModel.sourceSignatures(base.copy(readableOnly = false)))
         assertTrue("politik" in TodayViewModel.sourceSignatures(base.copy(followed = listOf("politik/wahlen", "politik"))))
+    }
+
+    @Test
+    fun `switching readable only off fetches top stories, sections and places again`() {
+        // Their addresses take no exclusions, yet the repository drops walled sites while fetching.
+        val zurich = Place("Zürich", 47.37, 8.54, "Zürich, Schweiz", "CH")
+        val (withPlace, placeId) = SettingsOps.addLocalPlace(
+            AppSettings(edition = NewsEdition.GERMANY, followed = listOf(Topics.TOP_ID, "welt", "region")),
+            zurich,
+        )
+        val on = TodayViewModel.sourceSignatures(withPlace)
+        val off = TodayViewModel.sourceSignatures(withPlace.copy(readableOnly = false))
+        listOf(Topics.TOP_ID, "welt", "region", placeId).forEach { id ->
+            assertNotEquals(id, on.getValue(id), off.getValue(id))
+        }
+        // The setting itself is the only difference: no other source moved.
+        assertEquals(on.getValue(Topics.TOP_ID).dropLast(1), off.getValue(Topics.TOP_ID).dropLast(1))
+    }
+
+    @Test
+    fun `the weather texts follow a new interface language without a new fetch`() {
+        val german = WeatherFixtures.foggyAutumn.toWeatherUi(AppLanguage.DE)
+        val english = german.inLanguage(AppLanguage.EN)
+        assertEquals(AppLanguage.EN, english.language)
+        assertSame(german.snapshot, english.snapshot)
+        assertEquals(WeatherFixtures.foggyAutumn.toWeatherUi(AppLanguage.EN), english)
+        assertNotEquals(german.warnings.map { it.title }, english.warnings.map { it.title })
+        // Already in that language: the same object, nothing derived again.
+        assertSame(german, german.inLanguage(AppLanguage.DE))
     }
 }

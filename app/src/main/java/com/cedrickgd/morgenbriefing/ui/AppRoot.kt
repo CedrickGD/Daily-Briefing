@@ -153,11 +153,19 @@ private fun AppShell(
     val pagerState = rememberPagerState(initialPage = initialPage.index) { MainPage.entries.size }
     var openTodaySignal by rememberSaveable { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
+    val links = rememberLinkActions()
+    // The navigator outlives recompositions; it reads the newest setting and link actions.
+    val readsInApp by rememberUpdatedState(readInApp)
+    val currentLinks by rememberUpdatedState(links)
     val navigator = remember(navController, pagerState, chrome, scope) {
-        ShellNavigator(navController, pagerState, chrome, scope, onTodayRequested = { openTodaySignal++ })
+        ShellNavigator(
+            navController, pagerState, chrome, scope,
+            onTodayRequested = { openTodaySignal++ },
+            readInApp = { readsInApp },
+            openInBrowser = { url -> currentLinks.open(url) },
+        )
     }
     val insets = rememberShellInsets()
-    val links = rememberLinkActions()
 
     val topEntry by navController.currentBackStackEntryAsState()
     val mainOnTop = topEntry?.isMain() ?: true
@@ -212,7 +220,7 @@ private fun AppShell(
                 indicatorVisible = mainOnTop && chrome.indicatorVisible && !keyboardOpen,
                 playerAllowed = true,
                 navScrim = !skyCovered,
-                onOpenArticle = { url -> if (readInApp) navigator.openArticle(url) else links.open(url) },
+                onOpenArticle = { url -> navigator.openArticle(url) },
                 onSelectPage = { index ->
                     val page = MainPage.ofIndex(index)
                     // Tapping the sun while already on "Heute" scrolls it back to the top.

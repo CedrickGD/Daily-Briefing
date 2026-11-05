@@ -9,6 +9,7 @@ import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.data.model.TopicNews
 import com.cedrickgd.morgenbriefing.data.model.Topics
+import com.cedrickgd.morgenbriefing.data.news.TopicSources
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import java.util.Locale
 
@@ -171,7 +172,8 @@ internal fun buildDiscoverState(
     val uiLocale = lang.locale
     val places = settings.localPlaces.map { place ->
         val id = Topics.localId(place)
-        val edition = placeEdition(place, settings)
+        // Exactly the edition the engine reads the place in (Zurich in a Swiss French edition: French).
+        val edition = TopicSources.editionFor(id, settings)
         PlaceUi(
             topicId = id,
             place = place,
@@ -201,10 +203,6 @@ internal fun buildDiscoverState(
 internal fun previewTarget(selection: DiscoverSelection): String? =
     selection.expandedPlaceId?.takeIf { selection.categoryId == null }
         ?: selection.categoryId?.let { selection.previewId ?: it }
-
-/** The edition a place's news come from: its country's own, else the main edition (as the engine resolves it). */
-internal fun placeEdition(place: Place, settings: AppSettings): NewsEdition =
-    NewsEdition.forCountry(place.countryCode) ?: settings.edition
 
 /** "Englisch" for an English edition in a German interface. */
 internal fun displayLanguage(edition: NewsEdition, uiLocale: Locale): String =

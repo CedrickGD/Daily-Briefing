@@ -21,6 +21,7 @@ import com.cedrickgd.morgenbriefing.data.model.TopicNews
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.ui.news.FeedArticle
+import com.cedrickgd.morgenbriefing.ui.news.readsCurrentSources
 import com.cedrickgd.morgenbriefing.util.attempt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -182,8 +183,10 @@ class SearchViewModel(
         }
         viewModelScope.launch {
             attempt { container.news.warm() }
-            if (container.news.isStale(Topics.TOP_ID, TRENDING_MAX_AGE)) {
-                val settings = currentSettings() ?: return@launch
+            val settings = currentSettings() ?: return@launch
+            // "Gerade wichtig" are the edition's top stories: a cache of another edition is outdated too.
+            val top = container.news.state.value.topics[Topics.TOP_ID]
+            if (container.news.isStale(Topics.TOP_ID, TRENDING_MAX_AGE) || !readsCurrentSources(Topics.TOP_ID, top, settings)) {
                 attempt { container.news.refresh(listOf(Topics.TOP_ID), settings) }
             }
         }

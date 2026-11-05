@@ -16,6 +16,7 @@ import com.cedrickgd.morgenbriefing.data.SettingsOps
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.news.Taxonomy
+import com.cedrickgd.morgenbriefing.ui.news.readsCurrentSources
 import com.cedrickgd.morgenbriefing.util.attempt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -69,6 +70,8 @@ sealed interface DiscoverEvent {
  * it up from there.
  *
  * The selection is kept in [SavedStateHandle], so the open category survives process death.
+ * A preview is also fetched again when its cache was read from other sources than the settings
+ * name now (a new edition), however fresh it is.
  */
 class DiscoverViewModel(
     private val container: AppContainer,
@@ -78,7 +81,7 @@ class DiscoverViewModel(
 
     private val selection = MutableStateFlow(
         DiscoverSelection(
-            categoryId = saved.get<String>(KEY_CATEGORY) ?: initialCategory?.takeIf { Taxonomy.byId(it)?.isCategory == true },
+            categoryId = restoredCategory(saved, initialCategory),
             previewId = saved.get<String>(KEY_PREVIEW),
             expandedPlaceId = saved.get<String>(KEY_PLACE),
         ),
@@ -208,26 +211,43 @@ class DiscoverViewModel(
 
     private suspend fun refreshIfStale(topicId: String) {
         attempt { container.news.warm() }
-        if (container.news.isStale(topicId, PREVIEW_MAX_AGE)) refresh(topicId)
+        val settings = currentSettings() ?: return
+        val cached = container.news.state.value.topics[topicId]
+        if (container.news.isStale(topicId, PREVIEW_MAX_AGE) || !readsCurrentSources(topicId, cached, settings)) refresh(topicId)
     }
 
     private suspend fun refresh(topicId: String) {
-        val settings = settingsFlow.value ?: attempt { container.settings.current() }.getOrNull() ?: return
+        val settings = currentSettings() ?: return
         val outcome = attempt { container.news.refresh(listOf(topicId), settings) }.getOrNull()
         val ok = outcome != null && topicId !in outcome.failed
         failed.update { if (ok) it - topicId else it + topicId }
     }
 
+    private suspend fun currentSettings(): AppSettings? =
+        settingsFlow.value ?: attempt { container.settings.current() }.getOrNull()
+
     companion object {
         private const val TAG = "DiscoverViewModel"
         private const val STOP_TIMEOUT_MS = 5_000L
         private const val PLACE_DEBOUNCE_MS = 300L
-        private const val KEY_CATEGORY = "category"
+        internal const val KEY_CATEGORY = "category"
         private const val KEY_PREVIEW = "preview"
         private const val KEY_PLACE = "place"
 
         /** A preview older than this is fetched again when shown. */
         private val PREVIEW_MAX_AGE: Duration = Duration.ofMinutes(20)
+
+        /**
+         * The category to show: the one the user had open (or the grid, stored as null) when the
+         * screen is restored, else the category the route asked for. A stored "grid" must win
+         * over the route – the route still names the category the screen was opened with.
+         */
+        internal fun restoredCategory(saved: SavedStateHandle, routeCategory: String?): String? =
+            if (saved.contains(KEY_CATEGORY)) {
+                saved.get<String>(KEY_CATEGORY)
+            } else {
+                routeCategory?.takeIf { Taxonomy.byId(it)?.isCategory == true }
+            }
 
         fun factory(initialCategory: String?): ViewModelProvider.Factory = viewModelFactory {
             initializer {

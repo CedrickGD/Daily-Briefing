@@ -161,4 +161,38 @@ class FeedLogicTest {
         val custom = Topic("custom:1", "Midterms", "🔎", 0xFF2F6FDE, custom = true, icon = "SEARCH", query = "Midterms")
         assertNull(followSuggestion(FeedArticle(item("5", topic = "custom:1"), custom), listOf("custom:1"), AppLanguage.DE))
     }
+
+    @Test
+    fun `a teaser that only repeats the headline is not shown`() {
+        val headline = "Nach der herben Niederlage der Republikaner bei den Midterms"
+        // tagesschau's feed (seen on the phone): the description is the title again.
+        assertEquals("", cardTeaser(headline, headline))
+        assertEquals("", cardTeaser(headline, "  nach der herben Niederlage der Republikaner bei den Midterms… "))
+        // Cut off, or only the publisher added: still no teaser.
+        assertEquals("", cardTeaser(headline, "Nach der herben Niederlage der"))
+        assertEquals("", cardTeaser(headline, "$headline – tagesschau.de"))
+    }
+
+    @Test
+    fun `a teaser that starts with the headline keeps only what follows`() {
+        val headline = "Midterms: Demokraten holen das Repräsentantenhaus"
+        assertEquals(
+            "Die Partei von Präsident Trump verliert die Mehrheit in der Kammer.",
+            cardTeaser(headline, "Midterms – Demokraten holen das Repräsentantenhaus. Die Partei von Präsident Trump verliert die Mehrheit in der Kammer."),
+        )
+        assertEquals(
+            "„Ein klares Signal“, sagt die Fraktionschefin am Abend in Washington.",
+            cardTeaser(headline, "$headline: „Ein klares Signal“, sagt die Fraktionschefin am Abend in Washington."),
+        )
+    }
+
+    @Test
+    fun `a real teaser stays as it is`() {
+        val teaser = "Die Republikaner verlieren die Mehrheit im Repräsentantenhaus. Was das für Trump bedeutet."
+        assertEquals(teaser, cardTeaser("Midterms: Was die Niederlage für Trump bedeutet", "  $teaser "))
+        assertEquals("", cardTeaser("Headline", "   "))
+        assertEquals("Nur ein Teaser", cardTeaser("", "Nur ein Teaser"))
+        // The headline ends inside a word of the teaser: no clean cut, the teaser stays whole.
+        assertEquals("Midterms-Wahl entschieden: die Demokraten jubeln", cardTeaser("Midterms", "Midterms-Wahl entschieden: die Demokraten jubeln"))
+    }
 }
