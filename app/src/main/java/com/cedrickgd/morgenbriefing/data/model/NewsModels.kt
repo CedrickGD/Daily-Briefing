@@ -23,22 +23,40 @@ data class Topic(
     val query: String? = null,
 )
 
+/** How a [FeedSource] is read. */
+@Serializable
+enum class SourceKind {
+    /** A publisher's own RSS/Atom feed. */
+    RSS,
+
+    /**
+     * A Google News RSS feed (top stories, a section, a place or a search): every item names its
+     * publisher, links point to news.google.com until resolved.
+     */
+    GOOGLE_NEWS,
+}
+
 /**
- * One RSS/Atom feed the app reads. Built-in sources come from
- * [com.cedrickgd.morgenbriefing.data.news.FeedCatalog]; the user can switch every one of them
+ * One feed the app reads. Built-in sources come from
+ * [com.cedrickgd.morgenbriefing.data.news.FeedCatalog]; Google News feeds are made per topic by
+ * [com.cedrickgd.morgenbriefing.data.news.TopicSources]. The user can switch every one of them
  * off and add their own (`custom:` ids) to any topic.
  */
 @Serializable
 data class FeedSource(
-    /** Stable id: `tagesschau-inland` (built-in) or `custom:<uuid>` (added by the user). */
+    /** Stable id: `tagesschau-inland` (built-in), `gn:<topic>@<edition>` (Google News) or `custom:<uuid>` (added by the user). */
     val id: String,
     /** Shown as the source of an article: "tagesschau", "heise online". */
     val name: String,
     val url: String,
     val topicId: String,
     val builtIn: Boolean = true,
+    val kind: SourceKind = SourceKind.RSS,
+    /** [NewsEdition.key] a Google News source reads (`US:en`); null for publisher feeds. */
+    val edition: String? = null,
 ) {
     val isCustom: Boolean get() = !builtIn
+    val isGoogleNews: Boolean get() = kind == SourceKind.GOOGLE_NEWS
 }
 
 /** One article as a feed delivered it. The full text lives on the publisher's site ([url]). */
@@ -83,6 +101,19 @@ data class SourceStatus(
     val count: Int = 0,
     /** Short German reason when [ok] is false. */
     val error: String = "",
+)
+
+/** One page of a search ([com.cedrickgd.morgenbriefing.data.NewsRepository.search]). */
+data class SearchPage(
+    val query: String,
+    /** 0 = the newest results; each further page reaches one week further back. */
+    val page: Int,
+    /** Newest first, duplicates removed. Items found in Google News carry [Topics.SEARCH_ID]. */
+    val items: List<NewsItem>,
+    /** Whether asking for [page] + 1 can bring more. */
+    val hasMore: Boolean,
+    /** Google News could not be reached; [items] then holds only matching cached articles. */
+    val failed: Boolean = false,
 )
 
 /** Everything the app holds for one topic: the merged articles of its sources. */

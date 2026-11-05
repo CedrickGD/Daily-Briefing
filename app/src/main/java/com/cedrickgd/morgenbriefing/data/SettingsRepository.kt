@@ -20,22 +20,31 @@ import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.news.Regions
+import com.cedrickgd.morgenbriefing.data.news.Taxonomy
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import java.io.IOException
+import java.util.Locale
 
 /** The one DataStore instance per process (DataStore forbids two instances on the same file). */
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 /**
  * Preferences DataStore named "settings". Nothing secret lives here any more (no tokens, no
- * API keys), so the store takes part in Android backups. Places, custom topics and custom
- * feeds are stored as JSON strings.
+ * API keys), so the store takes part in Android backups. Places, custom topics, custom feeds,
+ * the followed topics and recent searches are stored as JSON strings.
+ *
+ * Settings of older versions are migrated on read ([SettingsMigration]): the old topic order
+ * and hidden topics become [AppSettings.followed], installs without a news edition read the
+ * German news they always had. The next write stores the migrated values.
  */
 class SettingsRepository(context: Context) {
     private val store: DataStore<Preferences> = context.applicationContext.settingsStore
@@ -57,12 +66,64 @@ class SettingsRepository(context: Context) {
     }
 
     // ---------------------------------------------------------------------------------------
+    // Operations the screens use (pure versions in SettingsOps)
+    // ---------------------------------------------------------------------------------------
+
+    /** Follows a topic (category, sub-topic, place or own topic), at [index] or at the end. */
+    suspend fun follow(topicId: String, index: Int? = null) = update { SettingsOps.follow(it, topicId, index) }
+
+    /** Stops following a topic; the last followed topic stays. */
+    suspend fun unfollow(topicId: String) = update { SettingsOps.unfollow(it, topicId) }
+
+    /** Stores a new order of the followed topics. */
+    suspend fun reorderFollowed(order: List<String>) = update { SettingsOps.reorder(it, order) }
+
+    /** Follows the local news of [place]; returns its topic id (`local:…`). */
+    suspend fun addLocalPlace(place: Place): String {
+        var id = ""
+        update { current -> SettingsOps.addLocalPlace(current, place).also { id = it.second }.first }
+        return id
+    }
+
+    /** Removes a followed place by its topic id (`local:…`). */
+    suspend fun removeLocalPlace(topicId: String) = update { SettingsOps.removeLocalPlace(it, topicId) }
+
+    /** Follows a search as an own topic ("Midterms"); returns its topic id. */
+    suspend fun followSearch(query: String): String {
+        var id = ""
+        update { current -> SettingsOps.followSearch(current, query).also { id = it.second }.first }
+        return id
+    }
+
+    /** Remembers a search at the top of the recent searches. */
+    suspend fun addRecentSearch(query: String) = update { SettingsOps.addRecentSearch(it, query) }
+
+    suspend fun removeRecentSearch(query: String) = update { SettingsOps.removeRecentSearch(it, query) }
+
+    suspend fun clearRecentSearches() = update { SettingsOps.clearRecentSearches(it) }
+
+    // ---------------------------------------------------------------------------------------
     // Mapping
     // ---------------------------------------------------------------------------------------
 
     private fun Preferences.toSettings(): AppSettings {
         val defaults = AppSettings()
         val home = placeOrDefault(this[Keys.HOME_PLACE], defaults.home)
+        val onboardingDone = this[Keys.ONBOARDING_DONE] ?: defaults.onboardingDone
+        val customTopics = decodeList(this[Keys.CUSTOM_TOPICS], Topic.serializer()).filter { it.id.isNotBlank() && it.title.isNotBlank() }
+        val localPlaces = decodeList(this[Keys.LOCAL_PLACES], Place.serializer()).filter { it.name.isNotBlank() }.distinctBy { Topics.localId(it) }
+        val edition = SettingsMigration.edition(this[Keys.NEWS_EDITION], onboardingDone, Locale.getDefault())
+        val customIds = customTopics.map { it.id }
+        val localIds = localPlaces.map { Topics.localId(it) }.toSet()
+        val followed = SettingsMigration.followed(
+            stored = decodeListOrNull(this[Keys.FOLLOWED], String.serializer()),
+            legacyOrder = this[Keys.TOPIC_ORDER]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() },
+            legacyHidden = idSet(this[Keys.HIDDEN_TOPICS]),
+            onboardingDone = onboardingDone,
+            edition = edition,
+            customIds = customIds,
+            known = { id -> Taxonomy.isBuiltIn(id) || id in customIds || id in localIds },
+        )
         return AppSettings(
             themeMode = enumOrDefault(this[Keys.THEME_MODE], defaults.themeMode),
             accent = enumOrDefault(this[Keys.ACCENT], defaults.accent),
@@ -73,11 +134,11 @@ class SettingsRepository(context: Context) {
             day = placeOrDefault(this[Keys.DAY_PLACE], defaults.day),
             dayStartHour = this[Keys.DAY_START_HOUR]?.takeIf { it in 0..23 } ?: defaults.dayStartHour,
             dayEndHour = this[Keys.DAY_END_HOUR]?.takeIf { it in 0..23 } ?: defaults.dayEndHour,
-            onboardingDone = this[Keys.ONBOARDING_DONE] ?: defaults.onboardingDone,
+            onboardingDone = onboardingDone,
             lastNotifiedDate = this[Keys.LAST_NOTIFIED_DATE]?.takeIf { it.isNotBlank() },
             topicOrder = topicOrderOrDefault(this[Keys.TOPIC_ORDER], defaults.topicOrder),
             hiddenTopics = idSet(this[Keys.HIDDEN_TOPICS]),
-            customTopics = decodeList(this[Keys.CUSTOM_TOPICS], Topic.serializer()).filter { it.id.isNotBlank() && it.title.isNotBlank() },
+            customTopics = customTopics,
             customFeeds = decodeList(this[Keys.CUSTOM_FEEDS], FeedSource.serializer()).filter { it.id.isNotBlank() && it.url.isNotBlank() },
             disabledFeeds = idSet(this[Keys.DISABLED_FEEDS]),
             // Installs from before the region preset existed: guess it from the home place.
@@ -90,6 +151,17 @@ class SettingsRepository(context: Context) {
             weatherCards = this[Keys.WEATHER_CARDS]?.let { raw ->
                 idSet(raw).mapNotNull { name -> WeatherCard.entries.firstOrNull { it.name == name } }.toSet()
             } ?: defaults.weatherCards,
+            uiLanguage = AppLanguage.fromCode(this[Keys.UI_LANGUAGE]),
+            edition = edition,
+            followed = followed,
+            localPlaces = localPlaces,
+            readableOnly = this[Keys.READABLE_ONLY] ?: defaults.readableOnly,
+            prefetch = enumOrDefault(this[Keys.PREFETCH], defaults.prefetch),
+            recentSearches = decodeList(this[Keys.RECENT_SEARCHES], String.serializer())
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinctBy { it.lowercase(Locale.ROOT) }
+                .take(SettingsOps.MAX_RECENT_SEARCHES),
         )
     }
 
@@ -113,6 +185,7 @@ class SettingsRepository(context: Context) {
         this[Keys.ONBOARDING_DONE] = s.onboardingDone
         val last = s.lastNotifiedDate
         if (last.isNullOrBlank()) remove(Keys.LAST_NOTIFIED_DATE) else this[Keys.LAST_NOTIFIED_DATE] = last
+        // Only read to migrate version 2 installs; kept in step so a downgrade finds its order.
         this[Keys.TOPIC_ORDER] = s.topicOrder.filter { it.isNotBlank() && ',' !in it }.distinct().joinToString(",")
         this[Keys.HIDDEN_TOPICS] = s.hiddenTopics.filter { it.isNotBlank() && ',' !in it }.sorted().joinToString(",")
         this[Keys.CUSTOM_TOPICS] = AppJson.encodeToString(ListSerializer(Topic.serializer()), s.customTopics)
@@ -125,6 +198,15 @@ class SettingsRepository(context: Context) {
         this[Keys.READ_IN_APP] = s.readInApp
         this[Keys.NEWS_AGE] = s.newsAge.name
         this[Keys.WEATHER_CARDS] = s.weatherCards.map { it.name }.sorted().joinToString(",")
+        val language = s.uiLanguage
+        if (language == null) remove(Keys.UI_LANGUAGE) else this[Keys.UI_LANGUAGE] = language.code
+        this[Keys.NEWS_EDITION] = s.edition.key
+        // Settings built without followed topics mean "as the old order says" (Topics.followedIds).
+        this[Keys.FOLLOWED] = AppJson.encodeToString(ListSerializer(String.serializer()), Topics.followedIds(s).filter { it.isNotBlank() }.distinct())
+        this[Keys.LOCAL_PLACES] = AppJson.encodeToString(ListSerializer(Place.serializer()), s.localPlaces)
+        this[Keys.READABLE_ONLY] = s.readableOnly
+        this[Keys.PREFETCH] = s.prefetch.name
+        this[Keys.RECENT_SEARCHES] = AppJson.encodeToString(ListSerializer(String.serializer()), s.recentSearches.take(SettingsOps.MAX_RECENT_SEARCHES))
     }
 
     private inline fun <reified E : Enum<E>> enumOrDefault(name: String?, default: E): E =
@@ -144,14 +226,17 @@ class SettingsRepository(context: Context) {
         }
     }
 
-    private fun <T> decodeList(raw: String?, serializer: kotlinx.serialization.KSerializer<T>): List<T> {
-        if (raw.isNullOrBlank()) return emptyList()
+    private fun <T> decodeList(raw: String?, serializer: KSerializer<T>): List<T> = decodeListOrNull(raw, serializer).orEmpty()
+
+    /** The decoded list, or null when [raw] is missing or unreadable (then the caller migrates or defaults). */
+    private fun <T> decodeListOrNull(raw: String?, serializer: KSerializer<T>): List<T>? {
+        if (raw.isNullOrBlank()) return null
         return try {
             AppJson.decodeFromString(ListSerializer(serializer), raw)
         } catch (_: SerializationException) {
-            emptyList()
+            null
         } catch (_: IllegalArgumentException) {
-            emptyList()
+            null
         }
     }
 
@@ -179,5 +264,12 @@ class SettingsRepository(context: Context) {
         val READ_IN_APP = booleanPreferencesKey("read_in_app")
         val NEWS_AGE = stringPreferencesKey("news_age")
         val WEATHER_CARDS = stringPreferencesKey("weather_cards")
+        val UI_LANGUAGE = stringPreferencesKey("ui_language")
+        val NEWS_EDITION = stringPreferencesKey("news_edition")
+        val FOLLOWED = stringPreferencesKey("followed_topics")
+        val LOCAL_PLACES = stringPreferencesKey("local_places")
+        val READABLE_ONLY = booleanPreferencesKey("readable_only")
+        val PREFETCH = stringPreferencesKey("prefetch")
+        val RECENT_SEARCHES = stringPreferencesKey("recent_searches")
     }
 }

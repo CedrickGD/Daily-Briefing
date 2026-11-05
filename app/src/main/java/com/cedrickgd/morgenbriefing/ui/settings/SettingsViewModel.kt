@@ -18,6 +18,7 @@ import com.cedrickgd.morgenbriefing.data.model.NewsAge
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.data.model.Topic
+import com.cedrickgd.morgenbriefing.data.SettingsOps
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
@@ -175,24 +176,19 @@ class SettingsViewModel(
         viewModelScope.launch {
             var refused = false
             val saved = persist { current ->
-                val catalogue = Topics.catalogue(current).map { it.id }
-                val order = TopicList.normalize(current.topicOrder, catalogue)
-                val hidden = TopicList.setVisible(order, current.hiddenTopics, id, visible)
-                refused = !visible && id in order && id !in hidden
-                current.copy(hiddenTopics = hidden)
+                refused = !visible && !SettingsOps.canUnfollow(current, id)
+                SettingsOps.setFollowed(current, id, visible)
             }
             if (saved && refused) _messages.send("Mindestens ein Thema bleibt sichtbar.")
         }
     }
 
     /** Stores a new topic order (after a drag or a move action). */
-    fun setTopicOrder(order: List<String>) = edit {
-        it.copy(topicOrder = TopicList.normalize(order, Topics.catalogue(it).map { t -> t.id }))
-    }
+    fun setTopicOrder(order: List<String>) = edit { SettingsOps.reorder(it, order) }
 
     /** "Zurücksetzen" of the topic grid: catalogue order and every topic visible again (own topics stay). */
     fun resetTopics() = edit(successMessage = "Alle Themen sind wieder da – in der ursprünglichen Reihenfolge.") {
-        it.copy(topicOrder = Topics.DEFAULT_ORDER + it.customTopics.map { t -> t.id }, hiddenTopics = emptySet())
+        SettingsOps.followAll(it)
     }
 
     /** Creates an own topic; it appears at the end of the order, visible. */
@@ -201,7 +197,7 @@ class SettingsViewModel(
         if (clean.isEmpty()) return
         val topic = Topic(id = Topics.newCustomId(), title = clean.take(MAX_TITLE), emoji = emoji.trim().take(4), seed = seed, custom = true)
         edit(successMessage = "„${topic.title}“ angelegt – füge jetzt eine Quelle hinzu.") {
-            it.copy(customTopics = it.customTopics + topic, topicOrder = it.topicOrder + topic.id)
+            SettingsOps.addCustomTopic(it, topic)
         }
     }
 
@@ -213,14 +209,7 @@ class SettingsViewModel(
     /** Deletes an own topic with its sources; its cached articles go too. */
     fun deleteCustomTopic(id: String) {
         viewModelScope.launch {
-            val saved = persist {
-                it.copy(
-                    customTopics = it.customTopics.filterNot { t -> t.id == id },
-                    customFeeds = it.customFeeds.filterNot { f -> f.topicId == id },
-                    topicOrder = it.topicOrder - id,
-                    hiddenTopics = it.hiddenTopics - id,
-                )
-            }
+            val saved = persist { SettingsOps.deleteCustomTopic(it, id) }
             if (saved) {
                 attempt { container.news.forget(id) }.onFailure { Log.w(TAG, "Could not forget $id", it) }
                 _messages.send("Thema gelöscht.")

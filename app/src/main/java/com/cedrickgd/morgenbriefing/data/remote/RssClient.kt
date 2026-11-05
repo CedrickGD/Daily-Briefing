@@ -3,7 +3,9 @@ package com.cedrickgd.morgenbriefing.data.remote
 import com.cedrickgd.morgenbriefing.data.model.ArticleImage
 import com.cedrickgd.morgenbriefing.data.model.FeedSource
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
+import com.cedrickgd.morgenbriefing.data.news.GoogleNews
 import com.cedrickgd.morgenbriefing.data.news.HtmlText
+import com.cedrickgd.morgenbriefing.data.news.ParsedEntry
 import com.cedrickgd.morgenbriefing.data.news.ParsedFeed
 import com.cedrickgd.morgenbriefing.data.news.RssParser
 import kotlinx.coroutines.CancellationException
@@ -45,27 +47,14 @@ class RssClient(
         .build()
 
     /**
-     * The articles of [source], in feed order.
-     * @throws FeedException when the feed is unreachable, not a feed, or empty.
+     * The articles of [source], in feed order. Publisher feeds name the feed as the source;
+     * Google News items name their publisher and may legitimately be none (a narrow search).
+     * @throws FeedException when the feed is unreachable, not a feed, or (publisher feeds) empty.
      */
     suspend fun fetch(source: FeedSource): List<NewsItem> {
         val feed = fetchFeed(source.url)
-        val items = feed.entries.mapNotNull { entry ->
-            val link = entry.link.trim()
-            val headline = entry.title.trim()
-            if (headline.isEmpty() || !link.startsWith("http", ignoreCase = true)) return@mapNotNull null
-            NewsItem(
-                id = stableId(link),
-                headline = headline,
-                summary = entry.summary.take(MAX_SUMMARY),
-                url = link,
-                source = source.name,
-                sourceId = source.id,
-                topicId = source.topicId,
-                publishedAt = entry.publishedAt,
-                image = entry.imageUrl?.takeIf { it.startsWith("https://", ignoreCase = true) }?.let { ArticleImage(it, entry.imageAlt) },
-            )
-        }
+        if (source.isGoogleNews) return feed.entries.mapNotNull { googleNewsItem(it, source) }
+        val items = feed.entries.mapNotNull { publisherItem(it, source) }
         if (items.isEmpty()) throw FeedException("Der Feed enthält keine Meldungen")
         return items
     }
@@ -190,8 +179,56 @@ class RssClient(
         private const val ACCEPT = "application/rss+xml, application/atom+xml, application/rdf+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5"
 
         /** Honest, descriptive, with a contact — what newsroom servers expect from a reader. */
-        const val FEED_USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Mobile) Morgenbriefing/2.0 (RSS reader; +https://github.com/CedrickGD/Morgenbriefing)"
-        private const val PAGE_USER_AGENT = "Mozilla/5.0 (Linux; Android 14) Morgenbriefing/2.0"
+        const val FEED_USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Mobile) DailyBriefing/3.0 (RSS reader; +https://github.com/CedrickGD/Daily-Briefing)"
+        private const val PAGE_USER_AGENT = "Mozilla/5.0 (Linux; Android 14) DailyBriefing/3.0"
+
+        /** One item of a publisher's feed, or null when it has no headline or no web link. */
+        internal fun publisherItem(entry: ParsedEntry, source: FeedSource): NewsItem? {
+            val link = entry.link.trim()
+            val headline = entry.title.trim()
+            if (headline.isEmpty() || !link.startsWith("http", ignoreCase = true)) return null
+            // tagesschau lists its broadcast as an item titled just "tagesschau": no article.
+            if (headline.equals(source.name, ignoreCase = true)) return null
+            return NewsItem(
+                id = stableId(link),
+                headline = headline,
+                summary = entry.summary.take(MAX_SUMMARY),
+                url = link,
+                source = source.name,
+                sourceId = source.id,
+                topicId = source.topicId,
+                publishedAt = entry.publishedAt,
+                image = entry.imageUrl?.takeIf { it.startsWith("https://", ignoreCase = true) }?.let { ArticleImage(it, entry.imageAlt) },
+                publisherDomain = GoogleNews.domainOf(link),
+            )
+        }
+
+        /**
+         * One Google News item: the headline without its " - Publisher" suffix, the publisher
+         * from `<source>` as the source name and domain, no teaser (the description only repeats
+         * the headline), no picture; [NewsItem.url] stays the news.google.com link until the
+         * reader resolves it.
+         */
+        internal fun googleNewsItem(entry: ParsedEntry, source: FeedSource): NewsItem? {
+            val link = entry.link.trim()
+            if (!link.startsWith("http", ignoreCase = true)) return null
+            val publisher = entry.sourceName.trim()
+            val headline = GoogleNews.stripPublisher(entry.title, publisher)
+            if (headline.isEmpty() || GoogleNews.isQuotePage(headline)) return null
+            val domain = GoogleNews.domainOf(entry.sourceUrl).ifEmpty { GoogleNews.domainOf(link).takeIf { it != GoogleNews.HOST }.orEmpty() }
+            return NewsItem(
+                id = stableId(link),
+                headline = headline,
+                summary = GoogleNews.teaser(entry.summary, headline, publisher).take(MAX_SUMMARY),
+                url = link,
+                source = publisher.ifEmpty { domain.ifEmpty { source.name } },
+                sourceId = source.id,
+                topicId = source.topicId,
+                publishedAt = entry.publishedAt,
+                publisherDomain = domain,
+                aggregator = GoogleNews.AGGREGATOR,
+            )
+        }
 
         private val FEED_LINK = Regex("(?is)<link\\b[^>]*>")
         private val ATTR = Regex("(?is)\\b([a-z-]+)\\s*=\\s*([\"'])(.*?)\\2")

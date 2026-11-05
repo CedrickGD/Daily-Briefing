@@ -13,6 +13,7 @@ import com.cedrickgd.morgenbriefing.MorgenbriefingApp
 import com.cedrickgd.morgenbriefing.data.BERLIN
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.Place
+import com.cedrickgd.morgenbriefing.data.SettingsOps
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.news.FeedCatalog
@@ -21,7 +22,6 @@ import com.cedrickgd.morgenbriefing.ui.brief.toWeatherUi
 import com.cedrickgd.morgenbriefing.ui.news.FeedPrefs
 import com.cedrickgd.morgenbriefing.ui.news.NewsFeed
 import com.cedrickgd.morgenbriefing.ui.news.buildNewsFeed
-import com.cedrickgd.morgenbriefing.ui.settings.TopicList
 import com.cedrickgd.morgenbriefing.util.attempt
 import com.cedrickgd.morgenbriefing.util.flatten
 import com.cedrickgd.morgenbriefing.util.isOlderThan
@@ -156,11 +156,7 @@ class TodayViewModel(
     fun setTopicVisible(topicId: String, visible: Boolean) {
         viewModelScope.launch {
             attempt {
-                container.settings.update { settings ->
-                    val catalogue = Topics.catalogue(settings).map { it.id }
-                    val order = TopicList.normalize(settings.topicOrder, catalogue)
-                    settings.copy(hiddenTopics = TopicList.setVisible(order, settings.hiddenTopics, topicId, visible))
-                }
+                container.settings.update { settings -> SettingsOps.setFollowed(settings, topicId, visible) }
             }.onFailure { Log.w(TAG, "Could not store topic visibility", it) }
         }
     }
@@ -169,9 +165,7 @@ class TodayViewModel(
     fun setTopicOrder(order: List<String>) {
         viewModelScope.launch {
             attempt {
-                container.settings.update { settings ->
-                    settings.copy(topicOrder = TopicList.normalize(order, Topics.catalogue(settings).map { it.id }))
-                }
+                container.settings.update { settings -> SettingsOps.reorder(settings, order) }
             }.onFailure { Log.w(TAG, "Could not store topic order", it) }
         }
     }

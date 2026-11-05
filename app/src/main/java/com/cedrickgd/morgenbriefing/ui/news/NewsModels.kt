@@ -39,7 +39,7 @@ data class FeedPrefs(
         showImages = settings.showImages,
         readInApp = settings.readInApp,
         catalogue = Topics.catalogue(settings),
-        hidden = settings.hiddenTopics,
+        hidden = Topics.hidden(settings),
         disabledFeeds = settings.disabledFeeds,
     )
 }

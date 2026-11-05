@@ -23,6 +23,10 @@ data class ParsedEntry(
     val imageUrl: String?,
     val imageAlt: String,
     val guid: String,
+    /** RSS `<source url="…">Name</source>`: the publisher an aggregator (Google News) took the item from. */
+    val sourceName: String = "",
+    /** The publisher's site from `<source url>`, e.g. `https://www.bbc.com`. */
+    val sourceUrl: String = "",
 )
 
 /**
@@ -93,6 +97,8 @@ class RssParser(private val newParser: () -> XmlPullParser) {
         var updated: String? = null
         val images = mutableListOf<ImageCandidate>()
         var imageAlt = ""
+        var sourceName = ""
+        var sourceUrl = ""
     }
 
     private data class ImageCandidate(val url: String, val width: Int, val priority: Int)
@@ -150,7 +156,17 @@ class RssParser(private val newParser: () -> XmlPullParser) {
                 }
                 // Otherwise nested <url> is picked up by readNestedField.
             }
-            "author", "creator", "category", "comments", "source" -> skip(parser)
+            "source" -> {
+                // RSS 2.0 `<source url="…">Name</source>`; Atom's `<source>` is a metadata block.
+                val url = parser.getAttributeValue(null, "url")
+                if (url.isNullOrBlank()) {
+                    skip(parser)
+                } else {
+                    b.sourceUrl = url.trim()
+                    b.sourceName = HtmlText.toPlain(readText(parser), dropReadMore = false)
+                }
+            }
+            "author", "creator", "category", "comments" -> skip(parser)
         }
     }
 
@@ -201,6 +217,8 @@ class RssParser(private val newParser: () -> XmlPullParser) {
             imageUrl = image,
             imageAlt = alt,
             guid = guid,
+            sourceName = sourceName.trim(),
+            sourceUrl = sourceUrl,
         )
     }
 
