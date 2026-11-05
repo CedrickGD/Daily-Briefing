@@ -21,7 +21,6 @@ import com.cedrickgd.morgenbriefing.data.model.TopicNews
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.ui.news.FeedArticle
-import com.cedrickgd.morgenbriefing.ui.news.readsCurrentSources
 import com.cedrickgd.morgenbriefing.util.attempt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview

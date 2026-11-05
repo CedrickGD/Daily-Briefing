@@ -427,7 +427,7 @@ fun SettingsScreen(
                 location = location,
                 onQueryChange = viewModel::onPlaceQueryChange,
                 onUseLocation = {
-                    viewModel.useCurrentLocation { place ->
+                    viewModel.useCurrentLocation(needsTown = target == PlaceTarget.LOCAL) { place ->
                         dialog = null
                         viewModel.setPlace(target, place)
                     }

@@ -1,6 +1,7 @@
 package com.cedrickgd.morgenbriefing
 
 import android.content.Intent
+import android.content.res.Resources
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
@@ -11,9 +12,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.cedrickgd.morgenbriefing.ui.AppRoot
+import com.cedrickgd.morgenbriefing.ui.components.AppLocaleHost
+import com.cedrickgd.morgenbriefing.ui.components.withLocale
 import com.cedrickgd.morgenbriefing.ui.shell.AppLinks
 import com.cedrickgd.morgenbriefing.ui.shell.MainPage
 import com.cedrickgd.morgenbriefing.ui.shell.PageRequest
+import java.util.Locale
 
 /**
  * Single activity (launchMode singleTop, notifications add SINGLE_TOP | CLEAR_TOP). A launch
@@ -24,8 +28,12 @@ import com.cedrickgd.morgenbriefing.ui.shell.PageRequest
  *   and the pager glides to the page ("Heute" — the morning notification — also scrolls back
  *   to the top). An intent without the extra (the launcher icon) changes nothing: the user
  *   comes back to exactly where they were, like from Recents.
+ *
+ * Its resources speak the app's interface language ([AppLocaleHost], set by the composition
+ * root): Material's built-in texts in dialogs and sheets – which read the activity's resources –
+ * follow the chosen language, not the phone's.
  */
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), AppLocaleHost {
 
     /** Latest unhandled request from [onNewIntent]; cleared by the shell once acted on. */
     private var pageRequest by mutableStateOf<PageRequest?>(null)
@@ -34,6 +42,34 @@ class MainActivity : ComponentActivity() {
     /** Set once the settings are loaded; read by the splash screen on the UI thread. */
     @Volatile
     private var contentReady = false
+
+    /** The interface language's locale; null until the composition named it. */
+    @Volatile
+    private var appLocale: Locale? = null
+
+    /** [appLocale]'s resources for the current configuration, and what they were made for. */
+    @Volatile
+    private var localized: LocalizedResources? = null
+
+    private class LocalizedResources(val key: Int, val resources: Resources)
+
+    override fun useAppLocale(locale: Locale) {
+        if (appLocale == locale) return
+        appLocale = locale
+        localized = null
+    }
+
+    override fun getResources(): Resources {
+        val base = super.getResources()
+        val locale = appLocale ?: return base
+        val configuration = base.configuration
+        // The phone already speaks the language: keep its resources (and its region).
+        if (configuration.locales[0]?.language == locale.language) return base
+        val key = 31 * configuration.hashCode() + locale.hashCode()
+        localized?.takeIf { it.key == key }?.let { return it.resources }
+        return createConfigurationContext(configuration.withLocale(locale)).resources
+            .also { localized = LocalizedResources(key, it) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()

@@ -395,7 +395,7 @@ class SettingsViewModel(
         searchJob = viewModelScope.launch {
             delay(SEARCH_DEBOUNCE_MS)
             _placeSearch.update { it.copy(loading = true, failed = false) }
-            val result = attempt { container.weather.search(trimmed) }.flatten()
+            val result = attempt { container.weather.search(trimmed, (settings.value ?: container.settings.current()).language) }.flatten()
             ensureActive()
             val places = result.getOrNull()
             if (places == null) Log.w(TAG, "Place search failed", result.exceptionOrNull())
@@ -417,12 +417,15 @@ class SettingsViewModel(
         _location.value = LocationState()
     }
 
-    /** "Mein Standort": asks the system for the place and stores it for [target] through [onFound]. */
-    fun useCurrentLocation(onFound: (Place) -> Unit) {
+    /**
+     * "Mein Standort": asks the system for the place and stores it for [target] through [onFound];
+     * [needsTown] (local news) refuses a spot the geocoder cannot name.
+     */
+    fun useCurrentLocation(needsTown: Boolean, onFound: (Place) -> Unit) {
         if (locationJob?.isActive == true) return
         locationJob = viewModelScope.launch {
             _location.value = LocationState(searching = true)
-            val result = attempt { container.location.currentPlace() }
+            val result = attempt { container.location.currentPlace((settings.value ?: container.settings.current()).language, needsTown) }
             ensureActive()
             result.fold(
                 onSuccess = { place ->

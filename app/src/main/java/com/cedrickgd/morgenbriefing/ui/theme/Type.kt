@@ -11,24 +11,32 @@ import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 
 private val Serif = FontFamily.Serif
 private val Sans = FontFamily.Default
 
-/** The UI is German only, whatever language the device runs in. */
-internal val GermanText = LocaleList("de-DE")
-
 /**
- * Breaks long German compounds ("Kriegsdienstverweigerer") at their syllables with a hyphen,
- * using German patterns, instead of splitting them at any letter on narrow lines or at large
- * font sizes. For running text: the reading styles ([Reading]), the pull quote and the teasers;
- * short UI titles stay unhyphenated.
+ * Breaks long words ("Kriegsdienstverweigerer", "anticonstitutionnellement") at their syllables
+ * with a hyphen, using the patterns of [languageTag] (BCP 47: `de`, `en-US`), instead of
+ * splitting them at any letter on narrow lines or at large font sizes. The tag must be the
+ * language the text is written in – an article's own language ([readingLanguageTag]), never a
+ * fixed one: German patterns break English words at the wrong places. For running text: the
+ * reading styles ([Reading]) and the teasers; short UI titles stay unhyphenated.
  */
-internal fun TextStyle.german(): TextStyle = copy(
+internal fun TextStyle.hyphenated(languageTag: String): TextStyle = copy(
     hyphens = Hyphens.Auto,
     lineBreak = LineBreak.Paragraph,
-    localeList = GermanText,
+    localeList = LocaleList(languageTag),
 )
+
+/**
+ * The language to hyphenate a text with: the article's own language when known (ISO 639-1
+ * from [com.cedrickgd.morgenbriefing.domain.ItemEdition.languageOf]), else the interface
+ * language [ui] (texts of the user's own feeds, UI texts).
+ */
+internal fun readingLanguageTag(textLanguage: String?, ui: AppLanguage): String =
+    textLanguage?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: ui.code
 
 /**
  * Editorial typography: serif SemiBold for display/headlines (the "newspaper" voice of the

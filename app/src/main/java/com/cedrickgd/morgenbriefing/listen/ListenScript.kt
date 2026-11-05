@@ -1,18 +1,20 @@
 package com.cedrickgd.morgenbriefing.listen
 
+import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.news.HtmlText
+import com.cedrickgd.morgenbriefing.domain.ItemEdition
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.ListenStrings
 import java.util.Locale
 
 /**
- * Which languages "Zuhören" speaks. The articles are read in the language of the news edition
- * (that is the language they are written in), so the voice follows the edition, not the
- * interface. The voice's own few words ("Quelle: …") must match the voice: in the interface
- * language when it is the edition's language, else in the edition's language when the app
- * speaks it, else in English.
+ * Which languages "Zuhören" speaks. An article is read in the language of its own edition
+ * ([editionOf]: Washington local news in English, even with a German main edition), so the
+ * voice follows the article, not the interface. The voice's own few words ("Quelle: …") must
+ * match the voice: in the interface language when it is the edition's language, else in the
+ * edition's language when the app speaks it, else in English.
  */
 internal object ListenLanguages {
     /** Language of the script's connecting words for an [edition] read by a user of [ui]. */
@@ -24,6 +26,17 @@ internal object ListenLanguages {
     /** The voice for [edition]: its language in its country ("en-US"), a plain language as fallback. */
     fun voiceLocales(edition: NewsEdition): List<Locale> =
         listOf(edition.locale, Locale.forLanguageTag(edition.language)).distinct()
+
+    /**
+     * The edition [item] is written in ([ItemEdition]); before the settings are loaded only what
+     * the item itself tells, else [main].
+     */
+    fun editionOf(item: NewsItem, settings: AppSettings?, main: NewsEdition): NewsEdition {
+        if (settings != null) return ItemEdition.of(item, settings)
+        val language = ItemEdition.languageOf(item) ?: return main
+        if (language == main.language) return main
+        return ItemEdition.googleNewsEdition(item.sourceId) ?: NewsEdition.ALL.firstOrNull { it.language == language } ?: main
+    }
 }
 
 /**

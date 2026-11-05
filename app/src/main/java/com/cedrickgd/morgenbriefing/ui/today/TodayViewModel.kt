@@ -27,7 +27,6 @@ import com.cedrickgd.morgenbriefing.ui.news.FeedPrefs
 import com.cedrickgd.morgenbriefing.ui.news.NewsFeed
 import com.cedrickgd.morgenbriefing.ui.news.ReadabilityHides
 import com.cedrickgd.morgenbriefing.ui.news.buildNewsFeed
-import com.cedrickgd.morgenbriefing.ui.news.readsCurrentSources
 import com.cedrickgd.morgenbriefing.util.attempt
 import com.cedrickgd.morgenbriefing.util.flatten
 import com.cedrickgd.morgenbriefing.util.isOlderThan

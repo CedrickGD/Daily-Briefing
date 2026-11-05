@@ -197,7 +197,7 @@ interface TopicStrings {
             "welt/asien" to ("Asie" to "Chine, Japon, Inde et Corée"),
             "welt/nahost" to ("Proche-Orient" to "Israël, Iran, Gaza et les pays du Golfe"),
             "welt/afrika" to ("Afrique" to "Politique et société sur le continent"),
-            "wirtschaft" to ("Économie & finances" to "Marchés, entreprises et votre argent"),
+            "wirtschaft" to ("Économie & finances" to "Marchés, entreprises et ton argent"),
             "wirtschaft/boerse" to ("Bourse & marchés" to "CAC 40, Wall Street et les actions du jour"),
             "wirtschaft/trading" to ("Trading & placements" to "ETF, analyses, objectifs de cours et dividendes"),
             "wirtschaft/krypto" to ("Crypto" to "Bitcoin, Ethereum et blockchain"),
@@ -242,13 +242,13 @@ interface TopicStrings {
             "auto" to ("Auto & mobilité" to "Voitures, constructeurs et façons de se déplacer"),
             "auto/elektro" to ("Voitures électriques" to "Véhicules électriques, recharge et batteries"),
             "auto/verkehr" to ("Transports & train" to "Train, transports en commun et aéroports"),
-            "region" to ("Local" to "L'actualité près de chez vous"),
-            "search" to ("Recherche" to "Résultats de votre recherche"),
+            "region" to ("Local" to "L'actualité près de chez toi"),
+            "search" to ("Recherche" to "Résultats de ta recherche"),
         ),
     ) {
         override fun localSubtitle(place: String) = "Actualité locale : $place"
         override fun searchSubtitle(query: String) = "Recherche « $query »"
-        override val customSubtitle = "Votre thème à vous"
+        override val customSubtitle = "Ton thème à toi"
     }
 
     private object Es : Table(

@@ -19,8 +19,10 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.cedrickgd.morgenbriefing.MorgenbriefingApp
+import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
+import com.cedrickgd.morgenbriefing.domain.ItemEdition
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.ListenStrings
 import com.cedrickgd.morgenbriefing.util.findActivity
@@ -44,8 +46,8 @@ enum class ListenIssue {
     NO_ENGINE,
 
     /**
-     * The engine has neither a voice for the news language ([ListenState.voiceLanguage]) nor one
-     * for the device language (voice data missing).
+     * The engine has neither a voice for the article's language ([ListenState.voiceLanguage])
+     * nor one for the device language (voice data missing).
      */
     MISSING_VOICE,
 }
@@ -78,7 +80,10 @@ data class ListenState(
      * voice installed): reading works now, but not offline — the mini player offers to install one.
      */
     val onlineVoiceOnly: Boolean = false,
-    /** ISO 639-1 code of the language the voice reads in (the news edition's language). */
+    /**
+     * ISO 639-1 code of the language the voice reads in: the article's language while one is
+     * loaded or just failed, else the main news edition's.
+     */
     val voiceLanguage: String = NewsEdition.GERMANY.language,
 ) {
     /** Something is loaded: reading, preparing or paused. */
@@ -91,9 +96,10 @@ data class ListenState(
 /**
  * "Zuhören" (Vorlesen): reads headline, lead, body and sources of an article with Android
  * TextToSpeech in chunks below `getMaxSpeechInputLength()`. The voice speaks the language of the
- * news edition from the settings (the articles are written in it; the device language if there
- * is no such voice), see [ListenLanguages]. One instance per process (`context.listen`), safe to
- * call from any thread (everything runs on the main thread).
+ * article's own edition ([ItemEdition] – Washington local news in English while the main
+ * edition is German; the device language if there is no such voice), see [ListenLanguages].
+ * One instance per process (`context.listen`), safe to call from any thread (everything runs on
+ * the main thread).
  *
  * * The engine is created on the first [play] and shut down after a minute without reading.
  * * Audio focus: any loss pauses; a short one (call, navigation prompt) resumes by itself.
@@ -112,19 +118,23 @@ class ListenController(context: Context) {
 
     private enum class Engine { OFF, STARTING, READY }
 
-    /** The news edition (voice language) and interface language, kept in sync with the settings. */
+    /** The settings (null until loaded), the main news edition and the interface language, kept in sync. */
+    private var settings: AppSettings? = null
     private var edition: NewsEdition = NewsEdition.GERMANY
     private var uiLanguage: AppLanguage = AppLanguage.system()
+
+    /** The edition of the article being read (its voice); the main edition while idle. */
+    private var voiceEdition: NewsEdition = NewsEdition.GERMANY
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var tts: TextToSpeech? = null
     private var engine = Engine.OFF
 
-    /** The locale the ready engine was set to; a different edition re-picks the voice. */
+    /** The locale the ready engine was set to; an article in another language re-picks the voice. */
     private var engineLocale: Locale? = null
 
-    /** The ready engine reads German only with a network voice (see [ListenState.onlineVoiceOnly]). */
+    /** The ready engine reads the article's language only with a network voice (see [ListenState.onlineVoiceOnly]). */
     private var voiceOnlineOnly = false
 
     /** Bumped for every engine instance; callbacks of an older one are ignored. */
@@ -192,18 +202,19 @@ class ListenController(context: Context) {
     private var scriptIsFull = false
 
     init {
-        val settings = (app as? MorgenbriefingApp)?.container?.settings?.settings
-        if (settings != null) {
+        val settingsFlow = (app as? MorgenbriefingApp)?.container?.settings?.settings
+        if (settingsFlow != null) {
             scope.launch {
-                settings
-                    .map { it.edition to it.language }
+                settingsFlow
                     .distinctUntilChanged()
                     .catch { Log.w(TAG, "Settings unavailable; reading with the last known languages", it) }
-                    .collect { (newEdition, newLanguage) ->
-                        edition = newEdition
-                        uiLanguage = newLanguage
+                    .collect { newSettings ->
+                        settings = newSettings
+                        edition = newSettings.edition
+                        uiLanguage = newSettings.language
                         // An idle hint names the voice of the current edition.
-                        mutableState.update { if (it.active) it else it.copy(voiceLanguage = newEdition.language) }
+                        if (script == null) voiceEdition = newSettings.edition
+                        mutableState.update { if (it.active || it.issue != null) it else it.copy(voiceLanguage = newSettings.edition.language) }
                     }
             }
         }
@@ -223,8 +234,11 @@ class ListenController(context: Context) {
             return@onMain
         }
         val maxLength = runCatching { TextToSpeech.getMaxSpeechInputLength() }.getOrDefault(ListenScript.DEFAULT_MAX_LENGTH)
-        val next = ListenScript.from(item, ListenLanguages.scriptLanguage(uiLanguage, edition), maxLength, body)
+        val itemEdition = ListenLanguages.editionOf(item, settings, edition)
+        val next = ListenScript.from(item, ListenLanguages.scriptLanguage(uiLanguage, itemEdition), maxLength, body)
         if (next.isEmpty) return@onMain
+
+        voiceEdition = itemEdition
 
         session++
         tts?.stop()
@@ -242,10 +256,10 @@ class ListenController(context: Context) {
             preparing = engine != Engine.READY,
             onlineVoiceOnly = voiceOnlineOnly,
             estimatedSeconds = next.estimatedSeconds,
-            voiceLanguage = edition.language,
+            voiceLanguage = itemEdition.language,
         )
-        // The edition changed since the engine started: switch the voice before reading.
-        if (engine == Engine.READY && engineLocale !in ListenLanguages.voiceLocales(edition)) {
+        // This article is in another language than the engine's voice: switch it before reading.
+        if (engine == Engine.READY && engineLocale !in ListenLanguages.voiceLocales(itemEdition)) {
             val engineTts = tts
             if (engineTts == null || !applyVoice(engineTts)) return@onMain
         }
@@ -270,6 +284,7 @@ class ListenController(context: Context) {
         resumeOnFocusGain = false
         abandonFocus()
         unregisterNoisy()
+        voiceEdition = edition
         mutableState.value = ListenState(available = mutableState.value.available, voiceLanguage = edition.language)
         scheduleRelease()
     }
@@ -296,7 +311,9 @@ class ListenController(context: Context) {
             }
         }
         if (!launched) {
-            Toast.makeText(app, ListenStrings.of(uiLanguage).installVoiceHint(edition.language), Toast.LENGTH_LONG).show()
+            // The language that is missing: the failed article's, read before stop() resets it.
+            val language = mutableState.value.voiceLanguage
+            Toast.makeText(app, ListenStrings.of(uiLanguage).installVoiceHint(language), Toast.LENGTH_LONG).show()
         }
         onMain {
             stop()
@@ -356,6 +373,7 @@ class ListenController(context: Context) {
         resumeOnFocusGain = false
         abandonFocus()
         unregisterNoisy()
+        voiceEdition = edition
         mutableState.value = ListenState(available = true, voiceLanguage = edition.language)
         scheduleRelease()
     }
@@ -469,13 +487,13 @@ class ListenController(context: Context) {
     }
 
     /**
-     * Sets the engine to the voice of the current edition (see [pickLanguage]) and prefers an
+     * Sets the engine to the voice of the article's edition (see [pickLanguage]) and prefers an
      * offline voice. False after failing the engine with [ListenIssue.MISSING_VOICE].
      */
     private fun applyVoice(engineTts: TextToSpeech): Boolean {
         val language = pickLanguage(engineTts)
         if (language == null) {
-            Log.w(TAG, "No voice for ${edition.language} (nor the device language) available")
+            Log.w(TAG, "No voice for ${voiceEdition.language} (nor the device language) available")
             failEngine(ListenIssue.MISSING_VOICE)
             return false
         }
@@ -486,11 +504,11 @@ class ListenController(context: Context) {
     }
 
     /**
-     * The edition's language in its country ("en-US"), else the plain language ("en"), else the
-     * device language; null when none of them has a voice.
+     * The article edition's language in its country ("en-US"), else the plain language ("en"),
+     * else the device language; null when none of them has a voice.
      */
     private fun pickLanguage(engineTts: TextToSpeech): Locale? {
-        val wanted = ListenLanguages.voiceLocales(edition)
+        val wanted = ListenLanguages.voiceLocales(voiceEdition)
         wanted.firstOrNull { setLanguage(engineTts, it) >= TextToSpeech.LANG_AVAILABLE }?.let { return it }
         val fallback = Locale.getDefault()
         if (wanted.none { it.language == fallback.language } && setLanguage(engineTts, fallback) >= TextToSpeech.LANG_AVAILABLE) {
@@ -546,7 +564,8 @@ class ListenController(context: Context) {
         resumeOnFocusGain = false
         abandonFocus()
         unregisterNoisy()
-        mutableState.value = ListenState(available = false, issue = issue, voiceLanguage = edition.language)
+        // The hint names the voice that is missing: the article's language, not the main edition's.
+        mutableState.value = ListenState(available = false, issue = issue, voiceLanguage = voiceEdition.language)
     }
 
     private fun scheduleRelease() {

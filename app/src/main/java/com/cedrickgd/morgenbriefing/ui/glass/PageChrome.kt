@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cedrickgd.morgenbriefing.i18n.componentStrings
 import com.cedrickgd.morgenbriefing.util.statusBarTop
 import kotlin.math.roundToInt
 
@@ -84,7 +85,8 @@ fun PageTitle(
  *
  * It is floating glass: it blurs the content gliding beneath it, takes every touch inside its
  * bounds (nothing below is triggered by accident) and lets the content fade out softly under its
- * lower edge. [onTap] (e.g. "scroll to the top") makes the bar itself tappable.
+ * lower edge. [onTap] (e.g. "scroll to the top") makes the bar itself tappable; [onTapLabel] is
+ * what TalkBack announces for that tap (default: scroll to the top).
  *
  * [bottom] adds a second row inside the same glass surface (the feed's chip row once it
  * sticks): it appears in place at once while the glass grows down behind it with a spring, so
@@ -95,6 +97,7 @@ fun BoxScope.TopGlassBar(
     title: String,
     visible: Boolean,
     onTap: (() -> Unit)? = null,
+    onTapLabel: String = componentStrings().scrollToTop,
     bottom: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
@@ -170,7 +173,7 @@ fun BoxScope.TopGlassBar(
                             Modifier.clickable(
                                 interactionSource = null,
                                 indication = null,
-                                onClickLabel = "Nach oben scrollen",
+                                onClickLabel = onTapLabel,
                                 onClick = onTap,
                             )
                         } else {

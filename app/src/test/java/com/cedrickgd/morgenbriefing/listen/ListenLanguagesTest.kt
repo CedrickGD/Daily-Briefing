@@ -1,7 +1,11 @@
 package com.cedrickgd.morgenbriefing.listen
 
+import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
+import com.cedrickgd.morgenbriefing.data.model.Place
+import com.cedrickgd.morgenbriefing.data.model.Topics
+import com.cedrickgd.morgenbriefing.data.news.TopicSources
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.ListenStrings
 import org.junit.Assert.assertEquals
@@ -33,6 +37,34 @@ class ListenLanguagesTest {
     fun `the voice is the edition's language in its country, then the plain language`() {
         assertEquals(listOf(Locale.forLanguageTag("en-US"), Locale.forLanguageTag("en")), ListenLanguages.voiceLocales(NewsEdition.USA))
         assertEquals(listOf(Locale.forLanguageTag("de-DE"), Locale.forLanguageTag("de")), ListenLanguages.voiceLocales(NewsEdition.GERMANY))
+    }
+
+    @Test
+    fun `each article is read in its own edition's language, not the main edition's`() {
+        val washington = Place("Washington", 38.89511, -77.03637, "District of Columbia, USA", "US")
+        val localId = Topics.localId(washington)
+        val settings = AppSettings(edition = NewsEdition.GERMANY, localPlaces = listOf(washington), followed = listOf(localId))
+        val local = item.copy(sourceId = TopicSources.googleNewsId(localId, NewsEdition.USA), topicId = localId)
+        val edition = ListenLanguages.editionOf(local, settings, NewsEdition.GERMANY)
+        assertEquals(NewsEdition.USA, edition)
+        // German interface, English article: English voice and "Source", not "Quelle".
+        assertEquals(listOf(Locale.forLanguageTag("en-US"), Locale.forLanguageTag("en")), ListenLanguages.voiceLocales(edition))
+        assertEquals(AppLanguage.EN, ListenLanguages.scriptLanguage(AppLanguage.DE, edition))
+        assertEquals("Source: NPR.", ListenScript.from(local, ListenLanguages.scriptLanguage(AppLanguage.DE, edition)).parts.last().text)
+        // A German article of the same feed keeps the German voice.
+        val german = item.copy(sourceId = "tagesschau-top", topicId = "top")
+        assertEquals(NewsEdition.GERMANY, ListenLanguages.editionOf(german, settings, NewsEdition.GERMANY))
+    }
+
+    @Test
+    fun `before the settings are loaded the item alone decides`() {
+        val us = item.copy(sourceId = "gn:politik@US:en")
+        assertEquals(NewsEdition.USA, ListenLanguages.editionOf(us, settings = null, main = NewsEdition.GERMANY))
+        // English publisher feed with a German main edition: an English edition.
+        assertEquals("en", ListenLanguages.editionOf(item.copy(sourceId = "npr-news"), settings = null, main = NewsEdition.GERMANY).language)
+        // A feed the user added: the main edition.
+        val own = item.copy(sourceId = "custom:abcd1234")
+        assertEquals(NewsEdition.GERMANY, ListenLanguages.editionOf(own, settings = null, main = NewsEdition.GERMANY))
     }
 
     @Test

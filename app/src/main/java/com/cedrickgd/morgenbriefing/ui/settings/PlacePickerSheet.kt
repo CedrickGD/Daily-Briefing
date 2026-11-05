@@ -225,6 +225,7 @@ internal fun PlacePickerSheet(
                     text = when (issue) {
                         LocationIssue.NO_PERMISSION -> strings.locationNoPermission
                         LocationIssue.UNAVAILABLE -> strings.locationUnavailable
+                        LocationIssue.NO_TOWN -> strings.locationNoTown
                         null -> ""
                     },
                     style = MaterialTheme.typography.bodySmall,

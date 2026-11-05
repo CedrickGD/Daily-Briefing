@@ -61,8 +61,9 @@ object TopicSources {
 
     /**
      * The search behind [topicId]'s endless list: the topic's query in its edition (places:
-     * [placeQuery]), or null when the topic cannot page (top stories, own feeds only, or its
-     * Google News source is switched off – the older pages would be Google News articles).
+     * [placeQuery] – the place's name in the edition's language, "Milano" not "Mailand"), or null
+     * when the topic cannot page (top stories, own feeds only, or its Google News source is
+     * switched off – the older pages would be Google News articles).
      */
     fun pagingQuery(topicId: String, settings: AppSettings): PagingQuery? {
         if (topicId == Topics.TOP_ID) return null
@@ -92,7 +93,7 @@ object TopicSources {
      * name alone.
      */
     internal fun placeQuery(place: Place, edition: NewsEdition): String {
-        val name = quoted(place.name)
+        val name = quoted(place.newsName(edition.language))
         val state = stateOf(place)
             ?.takeIf { place.countryCode.uppercase() in STATE_COUNTRIES }
             ?.let { stateIn(it, edition.language) }

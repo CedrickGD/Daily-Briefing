@@ -352,7 +352,7 @@ interface FeedStrings {
     }
 
     private object Fr : FeedStrings {
-        override val forYou = "Pour vous"
+        override val forYou = "Pour toi"
         override val latest = "À la une"
         override val filterRow = "Filtrer les actualités"
         override val chooseTopics = "Choisir les thèmes"
@@ -381,14 +381,14 @@ interface FeedStrings {
         override fun listEnd(count: Int) = "C'est tout · ${articleCount(count)}"
         override val noArticlesYet = "Aucun article chargé pour l'instant."
         override fun unreachable(sources: String) = "Injoignable pour le moment : $sources"
-        override val nothingLoadedYet = "Rien de chargé – tirez vers le bas pour actualiser."
+        override val nothingLoadedYet = "Rien de chargé – tire vers le bas pour actualiser."
         override val nothingNewToday = "Rien de neuf aujourd'hui pour l'instant."
-        override val nothingHereRightNow = "Rien ici pour le moment – repassez plus tard."
+        override val nothingHereRightNow = "Rien ici pour le moment – repasse plus tard."
         override val backToTop = "Revenir en haut"
 
-        override val lastTopicStays = "Vous suivez toujours au moins un thème."
-        override fun unfollowed(topic: String) = "Vous ne suivez plus « $topic »"
-        override fun followed(topic: String) = "Vous suivez désormais « $topic »"
+        override val lastTopicStays = "Tu suis toujours au moins un thème."
+        override fun unfollowed(topic: String) = "Tu ne suis plus « $topic »"
+        override fun followed(topic: String) = "Tu suis désormais « $topic »"
         override val undo = "Annuler"
         override fun sourceHidden(source: String) = "« $source » masqué – Réglages → Sources"
         override val listenUnavailable = "La lecture à voix haute n'est pas disponible ici pour le moment."
@@ -419,9 +419,9 @@ interface FeedStrings {
         override val browserOnly = "Navigateur"
         override val browserOnlyDescription = "Ce site ne se lit que dans le navigateur"
 
-        override val sheetOverline = "Votre fil"
-        override val sheetTitle = "Quels thèmes voulez-vous voir ?"
-        override val sheetHint = "Touchez pour afficher ou masquer · faites glisser la poignée pour trier"
+        override val sheetOverline = "Ton fil"
+        override val sheetTitle = "Quels thèmes veux-tu voir ?"
+        override val sheetHint = "Touche pour afficher ou masquer · fais glisser la poignée pour trier"
         override val sourcesAndOwnTopics = "Sources et thèmes perso"
         override val discoverMoreTopics = "Découvrir d'autres thèmes"
         override val oneTopicStays = "Un thème reste toujours actif"
@@ -429,20 +429,20 @@ interface FeedStrings {
         override fun moveUp(topic: String) = "Monter $topic"
         override fun moveDown(topic: String) = "Descendre $topic"
 
-        override val ctaOverline = "Votre fil"
-        override val ctaTitle = "Faites de ce fil le vôtre"
-        override val ctaText = "Suivez la Bourse, l'espace ou votre ville – chaque thème avec autant d'articles que vous voulez."
+        override val ctaOverline = "Ton fil"
+        override val ctaTitle = "Fais de ce fil le tien"
+        override val ctaText = "Suis la Bourse, l'espace ou ta ville – chaque thème avec autant d'articles que tu veux."
         override val suggestionsOverline = "À découvrir"
-        override val suggestionsTitle = "Des thèmes qui pourraient vous plaire"
+        override val suggestionsTitle = "Des thèmes qui pourraient te plaire"
         override val allTopics = "Tous les thèmes"
         override val allTopicsText = "Catégories, sous-thèmes et lieux"
 
-        override val noTopicsTitle = "Vous ne suivez aucun thème"
-        override val noTopicsText = "Choisissez quelques thèmes et votre fil se remplit."
+        override val noTopicsTitle = "Tu ne suis aucun thème"
+        override val noTopicsText = "Choisis quelques thèmes et ton fil se remplit."
         override val offlineEmptyTitle = "Hors ligne – aucune actualité enregistrée"
-        override val offlineEmptyText = "Dès que vous retrouvez du réseau, l'app charge vos articles."
+        override val offlineEmptyText = "Dès que tu retrouves du réseau, l'app charge tes articles."
         override val offlineCachedTitle = "Hors ligne – voici les derniers articles chargés"
-        override val offlineCachedText = "Dès que le réseau revient, tirez vers le bas pour actualiser."
+        override val offlineCachedText = "Dès que le réseau revient, tire vers le bas pour actualiser."
         override val noArticlesTitle = "Aucun article"
         override val sourcesSilent = "Les sources ne répondent pas pour le moment."
         override val sourcesSwitchedOff = "Reste-t-il des sources activées dans « Sources » ?"
@@ -453,9 +453,9 @@ interface FeedStrings {
         override val weatherCreditOffline = "Météo : Open-Meteo (hors ligne)"
 
         override val headlineLoading = "Un instant – je jette un œil dehors."
-        override val headlineFallback = "Ravi de vous voir."
+        override val headlineFallback = "Ravi de te voir."
         override val weatherUnavailableTitle = "Météo injoignable pour le moment"
-        override val weatherUnavailableText = "Vérifiez votre connexion – je récupère ensuite la météo."
+        override val weatherUnavailableText = "Vérifie ta connexion – je récupère ensuite la météo."
     }
 
     private object Es : FeedStrings {

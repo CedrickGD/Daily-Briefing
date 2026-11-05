@@ -3,6 +3,7 @@ package com.cedrickgd.morgenbriefing.data
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
 import com.cedrickgd.morgenbriefing.data.remote.OpenMeteoClient
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
@@ -228,7 +229,7 @@ class OpenMeteoClientTest {
                 """.trimIndent(),
             ),
         )
-        val places = client.searchPlaces("  Bad Düben ")
+        val places = client.searchPlaces("  Bad Düben ", AppLanguage.DE)
 
         assertEquals(
             listOf(
@@ -247,14 +248,60 @@ class OpenMeteoClientTest {
     }
 
     @Test
+    fun `search speaks the interface language and names foreign places in their own language`() = runTest {
+        val requested = mutableListOf<String>()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val url = request.requestUrl!!
+                synchronized(requested) { requested += url.encodedPath + "?" + url.query }
+                return when {
+                    url.encodedPath == "/v1/search" -> MockResponse().setBody(
+                        """
+                        {"results":[
+                          {"id":3173435,"name":"Milan","latitude":45.46427,"longitude":9.18951,"country_code":"IT","admin1":"Lombardy","country":"Italy"},
+                          {"id":5056280,"name":"Milan","latitude":39.4,"longitude":-82.6,"country_code":"US","admin1":"Ohio","country":"United States"},
+                          {"id":2867714,"name":"Munich","latitude":48.13743,"longitude":11.57549,"country_code":"DE","admin1":"Bavaria","country":"Germany"}
+                        ]}
+                        """.trimIndent(),
+                    )
+                    url.encodedPath == "/v1/get" && url.queryParameter("id") == "3173435" ->
+                        MockResponse().setBody("""{"id":3173435,"name":"Milano","latitude":45.46427,"longitude":9.18951,"country_code":"IT"}""")
+                    // Munich's lookup fails: the place still comes, only without a local name.
+                    else -> MockResponse().setResponseCode(500)
+                }
+            }
+        }
+
+        val places = client.searchPlaces("Milan", AppLanguage.EN)
+
+        assertEquals(
+            listOf(
+                Place("Milan", 45.46427, 9.18951, "Lombardy, Italy", "IT", localName = "Milano"),
+                Place("Milan", 39.4, -82.6, "Ohio, United States", "US"),
+                Place("Munich", 48.13743, 11.57549, "Bavaria, Germany", "DE"),
+            ),
+            places,
+        )
+        val calls = synchronized(requested) { requested.toList() }
+        assertTrue(calls.toString(), "/v1/search?name=Milan&count=8&language=en&format=json" in calls)
+        assertTrue(calls.toString(), "/v1/get?id=3173435&language=it&format=json" in calls)
+        assertTrue(calls.toString(), "/v1/get?id=2867714&language=de&format=json" in calls)
+        // A place in the interface's own language (Milan, Ohio for an English user): no extra lookup.
+        assertFalse(calls.toString(), calls.any { "5056280" in it })
+        // The news search pages with the local name in the place's own edition.
+        assertEquals("Milano", places[0].newsName("it"))
+        assertEquals("Milan", places[0].newsName("en"))
+    }
+
+    @Test
     fun `search without results key returns empty list`() = runTest {
         server.enqueue(MockResponse().setBody("""{"generationtime_ms":0.3}"""))
-        assertEquals(emptyList<Place>(), client.searchPlaces("Xyzzy"))
+        assertEquals(emptyList<Place>(), client.searchPlaces("Xyzzy", AppLanguage.DE))
     }
 
     @Test
     fun `blank search does not hit the network`() = runTest {
-        assertEquals(emptyList<Place>(), client.searchPlaces("   "))
+        assertEquals(emptyList<Place>(), client.searchPlaces("   ", AppLanguage.EN))
         assertEquals(0, server.requestCount)
     }
 

@@ -75,6 +75,8 @@ interface RegionStrings {
     val select: String
     val locationNoPermission: String
     val locationUnavailable: String
+    /** "Mein Standort" for local news, but no town could be named for the position. */
+    val locationNoTown: String
 
     companion object {
         fun of(lang: AppLanguage): RegionStrings = when (lang) {
@@ -144,6 +146,7 @@ interface RegionStrings {
         override val select = "Auswählen"
         override val locationNoPermission = "Ohne Standortfreigabe geht das nicht – suche den Ort einfach oben."
         override val locationUnavailable = "Der Standort ließ sich gerade nicht bestimmen. Ist er im System eingeschaltet?"
+        override val locationNoTown = "Zu deinem Standort fand sich gerade kein Ortsname – suche den Ort einfach oben."
     }
 
     private object En : RegionStrings {
@@ -204,6 +207,7 @@ interface RegionStrings {
         override val select = "Select"
         override val locationNoPermission = "That needs location access – just search for the place above."
         override val locationUnavailable = "Your location couldn't be determined. Is it switched on in the system?"
+        override val locationNoTown = "No town name could be found for your location – just search for the place above."
     }
 
     private object Fr : RegionStrings {
@@ -264,6 +268,7 @@ interface RegionStrings {
         override val select = "Choisir"
         override val locationNoPermission = "Sans accès à la position, ça ne marche pas – cherche simplement le lieu ci-dessus."
         override val locationUnavailable = "Impossible de déterminer ta position. Est-elle activée dans le système ?"
+        override val locationNoTown = "Aucun nom de lieu trouvé pour ta position – cherche simplement le lieu ci-dessus."
     }
 
     private object Es : RegionStrings {
@@ -324,6 +329,7 @@ interface RegionStrings {
         override val select = "Elegir"
         override val locationNoPermission = "Sin acceso a la ubicación no funciona – busca el lugar arriba."
         override val locationUnavailable = "No se pudo determinar tu ubicación. ¿Está activada en el sistema?"
+        override val locationNoTown = "No se encontró el nombre de ningún lugar para tu ubicación – busca el lugar arriba."
     }
 
     private object It : RegionStrings {
@@ -384,6 +390,7 @@ interface RegionStrings {
         override val select = "Scegli"
         override val locationNoPermission = "Senza accesso alla posizione non funziona – cerca il luogo qui sopra."
         override val locationUnavailable = "Impossibile determinare la posizione. È attiva nel sistema?"
+        override val locationNoTown = "Nessun nome di luogo trovato per la tua posizione – cerca il luogo qui sopra."
     }
 }
 

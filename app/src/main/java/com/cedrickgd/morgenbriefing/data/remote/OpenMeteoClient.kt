@@ -5,9 +5,12 @@ import com.cedrickgd.morgenbriefing.data.model.CurrentConditions
 import com.cedrickgd.morgenbriefing.data.model.DayWeather
 import com.cedrickgd.morgenbriefing.data.model.HomeWeather
 import com.cedrickgd.morgenbriefing.data.model.HourPoint
+import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
@@ -30,7 +33,8 @@ import kotlin.math.roundToInt
 
 /**
  * Open-Meteo (no API key, CC BY 4.0). One forecast call per place with
- * `timezone=Europe/Berlin&forecast_days=2`, plus the geocoding API for the place picker.
+ * `timezone=Europe/Berlin&forecast_days=2`, plus the geocoding API for the place picker (in the
+ * interface language).
  */
 class OpenMeteoClient(
     private val http: OkHttpClient,
@@ -69,34 +73,72 @@ class OpenMeteoClient(
         )
     }
 
-    /** German place search (`language=de`, `count=8`). */
-    suspend fun searchPlaces(query: String): List<Place> {
+    /**
+     * Place search (`count=8`) in the interface language [lang]: names and region labels read
+     * "Milan · Lombardy, Italy" for an English user, "Mailand · Lombardei, Italien" for a German
+     * one (Open-Meteo matches the query against the names of that language).
+     *
+     * A place whose country speaks another language also gets its [Place.localName] ("Milano"):
+     * the local-news search pages with it, because Google News in the place's own edition hardly
+     * knows the foreign name ("Mailand" in IT:it: 2 results a week, "Milano": 100, checked
+     * 05.11.2026). One small lookup by id per such place, in parallel; a failed one only leaves
+     * the local name empty.
+     */
+    suspend fun searchPlaces(query: String, lang: AppLanguage): List<Place> {
         val name = query.trim()
         if (name.isEmpty()) return emptyList()
         val url = geocodingUrl.toHttpUrl().newBuilder()
             .addPathSegments("v1/search")
             .addQueryParameter("name", name)
             .addQueryParameter("count", "8")
-            .addQueryParameter("language", "de")
+            .addQueryParameter("language", lang.code)
             .addQueryParameter("format", "json")
             .build()
         val dto = get(url, GeocodingDto.serializer(), what = "Ortssuche")
-        return dto.results.orEmpty().mapNotNull { r ->
-            val placeName = r.name?.trim().orEmpty()
-            val lat = r.latitude
-            val lon = r.longitude
-            if (placeName.isEmpty() || lat == null || lon == null) return@mapNotNull null
-            Place(
-                name = placeName,
-                lat = lat,
-                lon = lon,
-                region = listOf(r.admin1, r.country)
-                    .mapNotNull { it?.trim() }
-                    .filter { it.isNotEmpty() }
-                    .joinToString(", "),
-                countryCode = r.countryCode?.trim()?.uppercase().orEmpty(),
-            )
+        val found = dto.results.orEmpty().mapNotNull { r -> r.toPlace()?.let { r to it } }
+        return coroutineScope {
+            found.map { (result, place) ->
+                val localLanguage = NewsEdition.forCountry(place.countryCode)?.language
+                if (result.id == null || localLanguage == null || localLanguage == lang.code) {
+                    async { place }
+                } else {
+                    async { place.copy(localName = localName(result.id, localLanguage, place.name)) }
+                }
+            }.awaitAll()
         }
+    }
+
+    /** The name of geocoding entry [id] in [language]; empty when it equals [shownName] or the lookup fails. */
+    private suspend fun localName(id: Long, language: String, shownName: String): String {
+        val url = geocodingUrl.toHttpUrl().newBuilder()
+            .addPathSegments("v1/get")
+            .addQueryParameter("id", id.toString())
+            .addQueryParameter("language", language)
+            .addQueryParameter("format", "json")
+            .build()
+        val local = try {
+            get(url, GeoResultDto.serializer(), what = "Ortsname").name?.trim().orEmpty()
+        } catch (e: IOException) {
+            return ""
+        }
+        return local.takeIf { it.isNotEmpty() && !it.equals(shownName, ignoreCase = true) }.orEmpty()
+    }
+
+    private fun GeoResultDto.toPlace(): Place? {
+        val placeName = name?.trim().orEmpty()
+        val lat = latitude
+        val lon = longitude
+        if (placeName.isEmpty() || lat == null || lon == null) return null
+        return Place(
+            name = placeName,
+            lat = lat,
+            lon = lon,
+            region = listOf(admin1, country)
+                .mapNotNull { it?.trim() }
+                .filter { it.isNotEmpty() }
+                .joinToString(", "),
+            countryCode = countryCode?.trim()?.uppercase().orEmpty(),
+        )
     }
 
     // ---------------------------------------------------------------------------------------
@@ -320,6 +362,7 @@ class OpenMeteoClient(
 
     @Serializable
     private class GeoResultDto(
+        val id: Long? = null,
         val name: String? = null,
         val latitude: Double? = null,
         val longitude: Double? = null,
