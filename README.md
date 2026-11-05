@@ -1,11 +1,16 @@
-# Morgenbriefing
+# Daily Briefing
 
-**Dein Morgen auf einen Blick:** das Wetter vor der Tür, der Tag an deinem Ort und die
-Nachrichten aus deinen Themen – frisch aus den RSS-Feeds der Redaktionen, jederzeit beim Öffnen
-der App und morgens als Benachrichtigung. Alles läuft auf deinem Handy: kein Konto, kein Server,
-keine Cloud, keine KI, keine Werbung.
+**Dein Tag auf einen Blick:** das Wetter vor der Tür und die Nachrichten aus deinen Themen –
+aus jedem Land, in deiner Sprache, **werbefrei in der App gelesen**. Alles läuft auf deinem
+Handy: kein Konto, kein Server, keine Cloud, keine KI, keine Tokens.
 
-Android-App (Kotlin, Jetpack Compose, Material 3), ab **Android 7.0** (API 24).
+*Daily Briefing is a free Android news and weather app: follow categories and sub-topics (e.g.
+Finance → Stock market, Trading, Crypto), search any subject, follow the local news of any place
+on earth, and read full articles inside the app without ads. Interface in English, German,
+French, Spanish and Italian; news from 23 country editions.*
+
+Android-App (Kotlin, Jetpack Compose, Material 3), ab **Android 7.0** (API 24). Früher hieß sie
+„Morgenbriefing“.
 
 ---
 
@@ -13,15 +18,14 @@ Android-App (Kotlin, Jetpack Compose, Material 3), ab **Android 7.0** (API 24).
 
 | | |
 |---|---|
-| **Heute** | Oben ein animierter Himmel passend zu Wetter und Tageszeit. Darunter „Vor der Tür“ an deinem Ort (jetzt und die nächsten Stunden, Sonnenauf- und -untergang), die Tageskurve für dein Zeitfenster mit Regenwahrscheinlichkeit, Wetterwarnungen und was du anziehen solltest – jeder Block abschaltbar. Dann die Nachrichten: **„Für dich“** zeigt pro Thema die neuesten Meldungen, **„Neueste“** alles chronologisch, und jedes Thema hat einen eigenen Chip mit **endlos scrollbarer** Liste. |
-| **Immer aktuell** | Die App holt die Feeds beim Öffnen, beim Herunterziehen und morgens zur Benachrichtigung. Die letzten Meldungen bleiben gespeichert, auch offline. Standardmäßig siehst du die letzten 24 Stunden; der Zeitraum ist einstellbar. |
-| **Artikel lesen** | Ein Tipp öffnet den Artikel **in der App**: Bild, Überschrift und der Text der Seite, ohne Werbung, Cookie-Banner und Navigation (Lesemodus nach Mozillas Readability). „Zuhören“ liest dort den ganzen Artikel vor. Teilen, Link kopieren, im Browser öffnen, Quelle oder Thema ausblenden – alles im ⋮-Menü. Wer lieber im Browser liest, schaltet das unter Feed um. |
-| **10 Themen** + eigene | 🤖 KI & Tech · 📈 Wirtschaft & Märkte · 🏛️ Politik · 🌍 Welt · 📍 Region · ⚽ Sport · 🔭 Wissenschaft & Raumfahrt · 🩺 Gesundheit · 🌱 Klima & Umwelt · 🎮 Games & Entertainment. Reihenfolge und Auswahl legst du fest – und du kannst **eigene Themen** anlegen (Name, Emoji, Farbe) und mit beliebigen Feeds füllen. |
-| **Quellen** | Rund 60 geprüfte deutschsprachige Feeds (tagesschau, SPIEGEL, ZEIT, FAZ, SZ, heise, Golem, kicker, Spektrum …), jeder einzeln abschaltbar. **Eigene Quelle hinzufügen:** Feed-Adresse oder einfach die Website eintippen – die App findet den Feed. |
-| **Region** | Das Thema „Region“ nimmt die öffentlich-rechtlichen Sender deines Bundeslandes (MDR, NDR, WDR, BR24, SWR, hessenschau, rbb24 …). Die Region folgt deinem Ort oder du wählst sie selbst. |
-| **Orte** | Ortssuche mit Vorschlägen und Flaggen, **„Mein Standort“** per GPS, Schnellauswahl großer Städte; getrennte Orte für „Vor der Tür“ und „Tagsüber“ plus Zeitfenster. |
-| **Einstellungen** | Hell, Dunkel oder wie das System; Akzentfarben (Material You, Morgenrot, Sonne, Ozean, Wald, Lavendel, Beere, Graphit); Meldungen pro Thema; Zeitraum; Bilder an/aus; Wetterblöcke; Uhrzeit der Benachrichtigung; Akku-Optimierung; Updates. |
-| **Morgen-Benachrichtigung** | Ein exakter Alarm (Standard 6:30) holt Wetter und Feeds und zeigt eine ausklappbare Benachrichtigung mit Wetter, Kleidungstipp und den Top-Schlagzeilen – eine je Thema. |
+| **Heute** | Oben ein animierter Himmel passend zu Wetter und Tageszeit, darunter „Vor der Tür“, die Tageskurve für dein Zeitfenster, Warnungen und was du anziehen solltest. Dann deine Nachrichten: **„Für dich“** zeigt pro Thema die neuesten Meldungen, **„Neueste“** alles chronologisch, und jedes Thema hat einen Chip mit einer **endlosen Liste** – am Ende lädt die App ältere Meldungen nach, so weit du willst. |
+| **Themen entdecken** | **12 Kategorien mit 47 Unterthemen**, jede mit eigenem Icon und eigener Farbe: Schlagzeilen · Politik (Inland, Wahlen, EU, USA, Sicherheit) · Welt (Europa, Amerika, Asien, Nahost, Afrika) · Wirtschaft & Finanzen (Börse & Märkte, Trading & Anlegen, Krypto, Konjunktur & Zinsen, Unternehmen, Verbraucher & Finanzen, Immobilien, Start-ups) · Tech & KI · Wissenschaft · Gesundheit · Klima & Energie · Sport · Kultur & Unterhaltung · Auto & Mobilität · Region. Du folgst einer ganzen Kategorie oder nur den Unterthemen, die dich interessieren; jede Kategorie zeigt vorab die neuesten Schlagzeilen. |
+| **Suche** | Beliebige Begriffe – „Midterms“, „Rheinmetall“, „Champions League“ – mit endlos nachladenden Ergebnissen, letzten Suchen und „Gerade wichtig“. **„Diesem Thema folgen“** macht aus einer Suche ein eigenes Thema im Feed. |
+| **Sprache & Region** | **App-Sprache** (wie das Handy, Deutsch, English, Français, Español, Italiano) und **Nachrichten-Ausgabe** (23 Länder, z. B. Deutschland, Österreich, Schweiz, USA, Großbritannien, Frankreich, Spanien, Italien …) sind getrennt einstellbar. **Lokale Nachrichten** gibt es für jeden Ort der Welt: in Deutschland wohnen und Washington, D.C. folgen bringt die Lokalnachrichten aus den USA, auf Englisch. In deutschen Ausgaben kommt das Thema „Region“ zusätzlich von den Sendern deines Bundeslandes. |
+| **Artikel lesen** | Ein Tipp öffnet den Artikel **in der App**: Bild, Überschrift und der ganze Text – ohne Werbung, Cookie-Banner, Navigation und ohne doppelte Absätze (Lesemodus nach Mozillas Readability). Die App lädt sichtbare Artikel auf Wunsch vorab (Standard: nur im WLAN), damit sie sofort und offline aufgehen; ein kleines „Volltext“-Zeichen zeigt, dass ein Artikel komplett lesbar ist. Seiten mit Bezahlschranke, Cookie-Wand oder Bot-Sperre erkennt sie, und mit **„Nur in der App lesbare Artikel“** (Standard an) bleiben solche Meldungen weg. „Zuhören“ liest den ganzen Artikel vor. |
+| **Quellen** | Rund 100 geprüfte Feeds von Redaktionen (deutschsprachig: tagesschau, SPIEGEL, DLF, DW, heise, taz, Handelsblatt, Spektrum, Sportschau …; englisch: BBC, Guardian, NPR, CNBC, The Verge, Ars Technica, NASA …) plus Google News je Ausgabe für Unterthemen, Suche und Lokales. Jede Quelle ist einzeln abschaltbar; eigene Feeds und eigene Themen (Name, Icon, Farbe, Feeds oder Suchbegriff) kommen dazu. |
+| **Einstellungen** | Hell, Dunkel oder wie das System; Akzentfarben; Meldungen pro Thema; Zeitraum; Bilder; Vorladen; Wetterblöcke; Orte fürs Wetter; Uhrzeit der Morgen-Benachrichtigung; Akku-Optimierung; Updates. |
+| **Morgen-Benachrichtigung** | Ein exakter Alarm (Standard 6:30) holt Wetter und Nachrichten und zeigt eine Benachrichtigung mit Wetter, Kleidungstipp und den Top-Schlagzeilen – in deiner App-Sprache. |
 | **Updates in der App** | Die App sieht selbst nach, ob es auf GitHub eine neuere Version gibt, lädt sie herunter, prüft die Signatur und startet die Installation. |
 
 Randlos (Edge-to-Edge), sauber mit **Gesten- und 3-Tasten-Navigation**, inklusive Predictive Back.
@@ -31,20 +35,12 @@ Randlos (Edge-to-Edge), sauber mit **Gesten- und 3-Tasten-Navigation**, inklusiv
 ```
 Beim Öffnen / Herunterziehen / morgens (AlarmManager, exakt)
   ├─ Open-Meteo: Wetter live für deine Orte (ohne Schlüssel)
-  ├─ RSS/Atom-Feeds der eingeschalteten Quellen, bis zu 6 parallel
-  │     → zusammengeführt pro Thema, Duplikate raus, neueste zuerst
-  │     → als JSON im App-Speicher (offline da)
-  └─ Benachrichtigung (BigText) mit Wetter, Kleidung, Schlagzeilen
+  ├─ je gefolgtem Thema: Redaktions-Feeds der Ausgabe + Google News (Rubrik, Suche, Ort)
+  │     → zusammengeführt, gleiche Meldungen raus, neueste zuerst
+  │     → als JSON im App-Speicher (offline da); am Listenende ältere Zeiträume nachladen
+  ├─ Artikel: Seite der Redaktion laden → Lesemodus (nur Text und Bilder) → Cache
+  └─ Benachrichtigung mit Wetter, Kleidung, Schlagzeilen
 ```
-
-- **Wetter** kommt live von [Open-Meteo](https://open-meteo.com) (ohne Schlüssel, ohne Konto).
-- **Nachrichten** liest die App direkt aus den öffentlichen RSS-/Atom-Feeds der Redaktionen –
-  Schlagzeile, Teaser, Bild und Link. Den ganzen Artikel zeigt die App im eigenen Lesemodus: sie
-  lädt die Seite der Redaktion und zeigt nur Text und Bilder, ohne Werbung, Skripte und
-  Cookie-Banner. Die Liste der eingebauten Quellen steht in
-  [`FeedCatalog.kt`](app/src/main/java/com/cedrickgd/morgenbriefing/data/news/FeedCatalog.kt).
-- **Fällt eine Quelle aus**, bleiben ihre letzten Meldungen drei Tage sichtbar; die Einstellungen
-  zeigen, welche Quelle gerade nicht antwortet.
 
 Mehr dazu: [Architektur](docs/ARCHITECTURE.md) · [Design](docs/DESIGN.md)
 
@@ -54,36 +50,36 @@ Mehr dazu: [Architektur](docs/ARCHITECTURE.md) · [Design](docs/DESIGN.md)
 
 ### 1. App installieren
 
-1. Unter **[Releases](https://github.com/CedrickGD/Morgenbriefing/releases)** die neueste
-   `Morgenbriefing-vX.Y.Z.apk` herunterladen.
+1. Unter **[Releases](https://github.com/CedrickGD/Daily-Briefing/releases)** die neueste
+   `DailyBriefing-vX.Y.Z.apk` herunterladen.
 2. Die Datei öffnen. Fragt Android nach „Unbekannte Apps installieren“, für Browser bzw.
    „Eigene Dateien“ **Zulassen** wählen und die Installation bestätigen.
-3. Beim ersten Start **Benachrichtigungen erlauben** (ab Android 13 fragt die App danach) und
-   **deinen Ort** wählen.
+3. Beim ersten Start **Sprache** und **Nachrichten-Ausgabe** wählen, **Benachrichtigungen
+   erlauben** (ab Android 13) und **deinen Ort** wählen.
 
-Das ist nur beim ersten Mal nötig: Spätere Versionen findet die App selbst (siehe
-[Updates](#updates)). Beim ersten Update fragt Android, ob **Morgenbriefing** Apps installieren
-darf – einmal **Zulassen**, danach geht es mit einem Tipp.
+Spätere Versionen findet die App selbst (siehe [Updates](#updates)). Wer noch das alte
+„Morgenbriefing“ installiert hat, bekommt Daily Briefing als normales Update – alle
+Einstellungen bleiben erhalten.
 
 > Lieber den neuesten Entwicklungsstand? Jeder Build auf `main` legt unter **Actions → Android →
-> Artefakt `morgenbriefing-debug-apk`** eine Debug-Version ab. Sie heißt
+> Artefakt `dailybriefing-debug-apk`** eine Debug-Version ab. Sie heißt
 > `com.cedrickgd.morgenbriefing.debug` und lässt sich parallel zur normalen App installieren.
 
 ### 2. Themen und Quellen anpassen
 
-- **Einstellungen → Themen:** antippen blendet ein Thema ein oder aus, lange drücken sortiert.
-  **„Eigenes Thema“** legt ein neues an.
-- **Einstellungen → Quellen:** je Thema alle Feeds mit Schalter. **„Eigene Quelle“** nimmt eine
-  Feed-Adresse oder die Website einer Redaktion und sucht den Feed selbst. Unter **„Deine
-  Region“** wählst du das Bundesland für die Regionalnachrichten.
-- **Einstellungen → Feed:** wie viele Meldungen ein Thema in „Für dich“ zeigt, wie weit der Feed
-  zurückreicht und ob Bilder geladen werden.
+- **Themen entdecken** (Kompass oben auf „Heute“ oder Einstellungen → Deine Themen): Kategorie
+  antippen, der ganzen Kategorie oder einzelnen Unterthemen folgen. In den Einstellungen
+  sortierst du deine Themen per Ziehen und legst **eigene Themen** an.
+- **Suche** (Lupe oben auf „Heute“): Begriff eingeben, „Diesem Thema folgen“.
+- **Einstellungen → Sprache & Region:** App-Sprache, Nachrichten-Ausgabe, Bundesland, lokale Orte.
+- **Einstellungen → Quellen:** je Thema alle Feeds mit Schalter; **„Eigene Quelle“** nimmt eine
+  Feed-Adresse oder die Website einer Redaktion und sucht den Feed selbst.
 
 ### 3. Samsung: Akku nicht einschränken
 
 Damit One UI die App morgens nicht schlafen legt:
 
-**Einstellungen → Apps → Morgenbriefing → Akku → „Nicht eingeschränkt“**
+**Einstellungen → Apps → Daily Briefing → Akku → „Nicht eingeschränkt“**
 
 Die App bietet unter **Einstellungen** zusätzlich „Akku-Optimierung aus“ an (System-Dialog).
 
@@ -94,8 +90,8 @@ Neue Versionen veröffentlichst du mit **`scripts/release.ps1`** (PowerShell): D
 Release-Schlüssel signierte APK und legt sie als GitHub-Release ab. Aufruf und Optionen stehen im
 Kopf des Skripts. Die App prüft daraufhin von selbst (und auf Wunsch in den Einstellungen), ob es
 eine neuere Version gibt, und bietet das Update an. Dafür muss das Repo öffentlich sein (die App
-liest GitHub Releases ohne Anmeldung). Weil jede Version mit demselben Schlüssel signiert ist,
-bleiben alle Einstellungen beim Update erhalten.
+liest GitHub Releases ohne Anmeldung). Weil jede Version mit demselben Schlüssel signiert ist und
+die Paket-Id gleich bleibt, bleiben alle Einstellungen beim Update erhalten.
 
 ---
 
@@ -151,7 +147,7 @@ git push origin v2.0.0
 ```
 
 Der Workflow **Android** testet, baut die signierte APK und veröffentlicht
-`Morgenbriefing-v2.0.0.apk` als GitHub-Release – aber nur, wenn die Signatur-Secrets hinterlegt
+`DailyBriefing-v2.0.0.apk` als GitHub-Release – aber nur, wenn die Signatur-Secrets hinterlegt
 sind (eine anders signierte APK ließe sich nicht als Update installieren). Tags mit Bindestrich
 (`v2.1.0-beta1`) werden als Vorabversion markiert.
 
@@ -197,18 +193,26 @@ scripts/             Release-Skript (Version erhöhen, signiert bauen, veröffen
 
 ## Quellen
 
-Die Nachrichten stammen aus den öffentlichen RSS-/Atom-Feeds der jeweiligen Redaktionen. Die App
-zeigt nur, was die Feeds liefern (Schlagzeile, Teaser, Vorschaubild) und verlinkt auf den Artikel.
-Alle Rechte an den Inhalten liegen bei den Verlagen und Sendern. Wer eine Quelle nicht in der App
-sehen möchte, schaltet sie in den Einstellungen ab.
+Die Nachrichten stammen aus den öffentlichen RSS-/Atom-Feeds der Redaktionen und aus den
+öffentlichen RSS-Feeds von Google News (für den persönlichen Feedreader-Gebrauch). Den Artikel
+lädt die App beim Lesen direkt von der Seite der Redaktion und zeigt dessen Text und Bilder;
+Bezahlschranken umgeht sie nicht – solche Artikel öffnest du über „Im Browser öffnen“. Alle Rechte
+an den Inhalten liegen bei den Verlagen und Sendern. Wer eine Quelle nicht sehen möchte, schaltet
+sie in den Einstellungen ab.
 
 ## Datenschutz
 
-- **Wetter:** Open-Meteo bekommt nur die Koordinaten deiner beiden Orte – kein Konto, kein Schlüssel.
-- **Nachrichten:** Die App ruft die Feeds direkt bei den Redaktionen ab, wie ein Feedreader; sie
-  sendet dabei nur die Feed-Adresse und eine beschreibende User-Agent-Kennung. Bilder lädt sie
-  ausschließlich über https direkt vom jeweiligen Verlag.
+- **Wetter:** Open-Meteo bekommt nur die Koordinaten deiner Orte und für die Ortssuche den
+  eingegebenen Namen – kein Konto, kein Schlüssel.
+- **Nachrichten:** Die App ruft die Feeds direkt bei den Redaktionen ab, wie ein Feedreader.
+  **Google News** erhält dabei die Ausgabe (Land/Sprache), die Suchbegriffe deiner Themen und
+  Suchen sowie die Namen deiner lokalen Orte; die App schickt Googles Cookie für „Alle ablehnen“
+  mit, kein Konto, keine Kennung. Um einen Google-News-Link in den Artikel der Redaktion
+  aufzulösen, fragt sie Google News einmal pro Artikel (das Ergebnis bleibt gespeichert).
+- **Artikel und Bilder** lädt die App nur über https direkt vom jeweiligen Verlag – beim Lesen und,
+  wenn „Artikel vorladen“ an ist, vorab für die Meldungen auf dem Bildschirm.
 - **Standort:** „Mein Standort“ fragt den Standort einmalig ab und wandelt ihn mit Androids
   Geocoder in einen Ortsnamen um; gespeichert werden nur Name und Koordinaten des Orts.
 - **Updates:** Die App fragt GitHub nach der neuesten Veröffentlichung dieses Repos.
 - Es gibt keine Konten, keine Analyse-Dienste, keine Werbung und keine Server des Entwicklers.
+  Einstellungen, gespeicherte Meldungen und Artikel bleiben auf dem Handy.

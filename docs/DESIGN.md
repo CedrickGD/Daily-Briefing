@@ -1,4 +1,4 @@
-# Morgenbriefing – Designsprache „Morgenglas“
+# Daily Briefing – Designsprache „Morgenglas“
 
 Ziel: Die App soll sich anfühlen wie ein ruhiger, lebendiger Morgenhimmel, über dem Inhalte als
 **Glas** schweben – von oben bis ganz unten, auf jeder Seite. Kein flacher Hintergrund, keine
@@ -111,10 +111,9 @@ für Android.
   Glas-Kopfleiste, nimmt die Leiste sie auf: **eine** Glasfläche (Titel + Chips) mit einer Kante.
 * Hinweise (offline, Quellen antworten nicht, alles ausgeblendet) als schmales getöntes Band über
   dem Feed – keine Kartenstapel vor dem ersten Artikel.
-* Themen beginnen mit einer feinen Linie und „🤖 KI & TECH … 37 Meldungen“ (keine Pill).
+* Themen beginnen mit einer feinen Linie, der Icon-Kachel des Themas (Material Symbol auf getönter Fläche in Themenfarbe) und „TECH & KI … 37 Meldungen“ (keine Pill). Themen haben **Icons, keine Emojis** (nur alte eigene Themen behalten ihr Emoji).
 * Ohne Bild im Feed (oder mit „Bilder anzeigen“ aus) ein **typografisches Cover**: Mesh-Verlauf
-  in Themenfarbe, große Serif-Initiale als Wasserzeichen, kleines Glas-Badge mit Thema – kein
-  Riesen-Emoji. Rechts neben den Chips ein runder Glas-Button „Themen“ (Herz-mit-Plus-Symbol) →
+  in Themenfarbe, große Serif-Initiale als Wasserzeichen, kleines Glas-Badge mit Thema-Icon. Rechts neben den Chips ein runder Glas-Button „Themen“ (Herz-mit-Plus-Symbol) →
   Bottom-Sheet zum Ein-/Ausblenden und Sortieren, mit Sprung zu „Quellen & eigene Themen“.
 * **Feed-Eintrag ohne Kartenrahmen**, direkt auf dem Hintergrund: Bild in voller Breite,
   22–24 dp Radius, ~16:10 (oder generiertes Cover in Themenfarbe); darunter die **Schlagzeile
@@ -123,30 +122,43 @@ für Android.
   dann die Meta-Zeile: „vor 3 Std. · Quelle“ links, rechts **„🎧 Zuhören“**, Teilen, ⋮-Menü
   (Thema ausblenden, Quellen anzeigen, Link kopieren). 24–32 dp Abstand zwischen Einträgen,
   dezente Trennlinie optional. Antippen (Bild/Schlagzeile/Text) → Artikel-Leser.
-* **Zuhören**: Android TextToSpeech (Deutsch) liest Schlagzeile + Teaser vor; ein schwebender
+* **Zuhören**: Android TextToSpeech (in der Sprache der Nachrichten) liest Schlagzeile + Teaser vor; ein schwebender
   Glas-Mini-Player (über dem Seitenindikator) zeigt Titel, Pause/Weiter, Stopp; Antippen öffnet
   den Artikel.
 * Unten ein ruhiger Ausklang (Stand, Anzahl Meldungen, kleines „Bis später ☀️“).
+
+**Themen entdecken** – über die Seite geschoben (wie der Reader): 12 große Kategorie-Kacheln im
+Raster, jede ein Verlauf in Themenfarbe mit weichem Glanz, großem Icon als Wasserzeichen, Titel,
+Untertitel und Zähler (gefolgt/Unterthemen). Antippen → Kategorie: farbiger Kopf, „Ganze
+Kategorie folgen“, die drei neuesten Schlagzeilen, darunter die Unterthemen als Zeilen mit
+Icon-Kachel und Folgen-Knopf. Darunter „Lokal“ (Orte) und „Deine Suchen“.
+
+**Suche** – Glas-Suchfeld oben, letzte Suchen als Chips, „Gerade wichtig“, Ergebnisse als
+dieselben Feed-Einträge, endlos; „Diesem Thema folgen“ als gefüllte Pill.
 
 **Einstellungen** – Kopf „DEIN MORGEN / Einstellungen“, dann:
 1. **Status-Karte**: großes ✓ „Alles bereit für morgen, 06:30“ oder freundliche Hinweise;
    Status-Pills (Benachrichtigungen, Exakte Uhrzeit, Akku) grün/amber – Antippen behebt.
 2. **Morgenbriefing**: riesige Uhrzeit in Serif („06:30“, antippen → Zeitwahl), Schalter,
    „Nächstes Briefing: morgen · in 9 Std.“, Test-Benachrichtigung als Glas-Pill.
-3. **Themen**: farbige Themen-Kacheln (Emoji, Name) – antippen an/aus, lange drücken zum
-   Sortieren; „Eigenes Thema“ (Name, Emoji, Farbe aus zwölf Perlen).
-4. **Quellen**: eine Glaskarte mit „Deine Region“ (Bundesland-Preset) und je Thema einer
+3. **Sprache & Region**: App-Sprache als Pills (wie das Handy + 5 Sprachen, wirkt sofort),
+   Nachrichten-Ausgabe (Flagge, Land, Sprache → durchsuchbares Glas-Sheet), Bundesland nur für
+   deutsche Ausgaben; darunter „Lokale Nachrichten“ mit Orten aus aller Welt.
+4. **Deine Themen**: Banner „Themen entdecken“ (Verlauf), gefolgte Themen als Zeilen mit
+   Icon-Kachel – ziehen zum Sortieren, ✕ zum Entfernen; „Eigenes Thema“ (Name, Icon aus dem
+   Raster, Farbe aus zwölf Perlen, Feeds oder Suchbegriff).
+5. **Quellen**: eine Glaskarte mit „Deine Region“ (Bundesland-Preset) und je Thema einer
    aufklappbaren Zeile: alle Feeds mit Schalter, „Eigene Quelle“ (Adresse oder Website, die App
    findet den Feed und zeigt Titel + Anzahl vor dem Speichern), bei eigenen Themen Bearbeiten/Löschen.
-5. **Feed**: Meldungen pro Thema als große Zahl mit ruhigem Slider, Zeitraum als Auswahl-Pills,
-   „Bilder anzeigen“.
-6. **Darstellung**: drei Vorschau-Kacheln (Mini-Handy mit Himmel + Glaskarte) für
+6. **Feed & Lesen**: Meldungen pro Thema als große Zahl mit ruhigem Slider, Zeitraum als
+   Auswahl-Pills, „Bilder anzeigen“; „In der App lesen“, „Nur lesbare Artikel“, „Vorladen“.
+7. **Darstellung**: drei Vorschau-Kacheln (Mini-Handy mit Himmel + Glaskarte) für
    System/Hell/Dunkel; Akzentfarben als große Farbperlen mit gleitendem Auswahlring + Name.
-7. **Orte & Zeitfenster**: zwei Ortskarten mit Live-Mini-Wetter; Zeitfenster-Slider mit
+8. **Orte & Zeitfenster**: zwei Ortskarten mit Live-Mini-Wetter; Zeitfenster-Slider mit
    Sonnensymbolen. Der Ort-Picker ist ein Glas-Sheet: Suchfeld mit Live-Ergebnissen (Flagge, Name,
    Region), „Mein Standort“ als Akzent-Pill, Schnellauswahl großer Städte, der aktuelle Ort als
    Chip. Darunter die Wetterblöcke von „Heute“ als Schalter.
-8. **App**: Version, Update-Karte, Links (Open-Meteo, Quellen, Quellcode).
+9. **App**: Version, Update-Karte, Links (Open-Meteo, Quellen, Quellcode).
 
 ## 8. Qualitätsregeln
 
