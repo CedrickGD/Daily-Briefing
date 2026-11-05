@@ -135,7 +135,7 @@ data class SearchPage(
     val query: String,
     /** 0 = the newest results; each further page reaches one week further back. */
     val page: Int,
-    /** Newest first, duplicates removed. Items found in Google News carry [Topics.SEARCH_ID]. */
+    /** Most relevant first ([com.cedrickgd.morgenbriefing.data.news.SearchRanking]), duplicates removed. Items found in Google News carry [Topics.SEARCH_ID]. */
     val items: List<NewsItem>,
     /** Whether asking for [page] + 1 can bring more. */
     val hasMore: Boolean,

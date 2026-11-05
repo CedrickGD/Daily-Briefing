@@ -10,8 +10,12 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,12 +40,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.FactCheck
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material.icons.rounded.TaskAlt
@@ -73,12 +81,14 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -98,6 +108,7 @@ import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.SearchStrings
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
+import com.cedrickgd.morgenbriefing.i18n.listenStrings
 import com.cedrickgd.morgenbriefing.i18n.searchStrings
 import com.cedrickgd.morgenbriefing.listen
 import com.cedrickgd.morgenbriefing.ui.components.GlassIconButton
@@ -128,6 +139,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
+import java.util.Locale
 
 private const val TAG = "SearchScreen"
 
@@ -141,9 +153,12 @@ private const val LOAD_AHEAD = 4
  * The news search, glass over the living sky: a floating frosted search field (focused at once,
  * the keyboard's search key searches, ✕ clears) with the back button; below it, before a
  * search, the recent searches as chips and "Gerade wichtig" – the edition's top stories. Typing
- * searches after a short pause; results are the feed's own entries, endless into the past,
- * prefetched for the reader as they come on screen. "Diesem Thema folgen" turns the query into a
- * topic of the feed.
+ * searches after a short pause; results are the feed's own entries, most relevant first (or
+ * newest first, a choice above them, next to "Alle Sprachen" / "Nur Deutsch"), endless into the
+ * past, prefetched for the reader as they come on screen; a result in another language than the
+ * interface wears a small "EN" on its picture. With "only readable articles" only results the
+ * reader verified as complete show, the rest is checked in list order ("weitere Artikel werden
+ * geprüft"). "Diesem Thema folgen" turns the query into a topic of the feed.
  *
  * @param contentPadding bottom room (navigation bar, mini player).
  */
@@ -159,6 +174,7 @@ fun SearchScreen(
     val viewModel: SearchViewModel = viewModel(factory = SearchViewModel.factory(route.query))
     val state by viewModel.state.collectAsStateWithLifecycle()
     val strings = searchStrings()
+    val listenStrings = listenStrings()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val now = rememberNow()
@@ -200,8 +216,8 @@ fun SearchScreen(
     }
 
     val results = state.results
-    // A new query starts at the top.
-    LaunchedEffect(results.query) { if (listState.firstVisibleItemIndex > 0) listState.scrollToItem(0) }
+    // A new query, or another order, starts at the top.
+    LaunchedEffect(results.query, state.options.sort) { if (listState.firstVisibleItemIndex > 0) listState.scrollToItem(0) }
     // Scrolling the results by hand puts the keyboard away.
     val hideKeyboardOnDrag = remember(keyboard) {
         object : NestedScrollConnection {
@@ -212,30 +228,33 @@ fun SearchScreen(
         }
     }
     // Endless: the next page loads as the end comes near – again after every page that still
-    // leaves the end in sight (each page ends its loading, which makes the trigger true again).
-    val latestResults by rememberUpdatedState(results)
+    // leaves the end in sight (each page ends its loading, which makes the trigger true again) –
+    // but not while many results still wait for their readability check.
+    val latestState by rememberUpdatedState(state)
     LaunchedEffect(listState, viewModel) {
         snapshotFlow {
             val info = listState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            SearchPaging.shouldLoadMore(latestResults, nearEnd = last >= info.totalItemsCount - 1 - LOAD_AHEAD)
+            SearchView.shouldLoadMore(latestState, nearEnd = last >= info.totalItemsCount - 1 - LOAD_AHEAD)
         }
             .distinctUntilChanged()
             .filter { it }
             .collect { viewModel.loadMore() }
     }
-    // The visible results are warmed for the reader (and get their pictures).
-    val latestArticles by rememberUpdatedState(state.articles)
+    // The visible results are warmed for the reader (and get their pictures); with "only
+    // readable articles" the next results to verify go along, in list order.
     LaunchedEffect(listState, viewModel) {
         snapshotFlow {
-            listState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
+            val visible = listState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
                 (info.key as? String)?.takeIf { it.startsWith(RESULT_PREFIX) }?.removePrefix(RESULT_PREFIX)
             }
+            visible to latestState.candidates.map { it.id }
         }
             .distinctUntilChanged()
-            .collect { ids ->
-                val byId = latestArticles.associateBy { it.item.id }
-                viewModel.prefetch(ids.mapNotNull { byId[it]?.item })
+            .collect { (ids, _) ->
+                val current = latestState
+                val byId = current.articles.associateBy { it.item.id }
+                viewModel.prefetch((ids.mapNotNull { byId[it]?.item } + current.candidates).distinctBy { it.id })
             }
     }
 
@@ -277,6 +296,9 @@ fun SearchScreen(
 
                 SearchPhase.LOADING -> {
                     item(key = "searching", contentType = "header") { Searching(strings.searching(results.query)) }
+                    item(key = "options", contentType = "options") {
+                        ResultOptions(state, strings, onSort = viewModel::setSort, onAllLanguages = viewModel::setAllLanguages)
+                    }
                     items(count = 3, key = { "skeleton-$it" }, contentType = { "skeleton" }) { ResultSkeleton() }
                 }
 
@@ -295,42 +317,82 @@ fun SearchScreen(
                     item(key = "header", contentType = "header") {
                         ResultsHeader(
                             strings = strings,
-                            count = results.items.size,
+                            count = state.articles.size,
                             followed = state.followedTopicId != null,
                             onToggleFollow = viewModel::toggleFollow,
                         )
                     }
+                    item(key = "options", contentType = "options") {
+                        ResultOptions(state, strings, onSort = viewModel::setSort, onAllLanguages = viewModel::setAllLanguages)
+                    }
                     if (results.offline) {
                         item(key = "offline", contentType = "banner") { OfflineBanner(strings.offline) }
                     }
-                    if (state.articles.isEmpty()) {
+                    SearchView.empty(state)?.let { empty ->
                         item(key = "empty", contentType = "message") {
-                            Message(
-                                icon = Icons.Rounded.SearchOff,
-                                title = strings.emptyTitle(results.query),
-                                body = strings.emptyBody,
-                                action = strings.discover,
-                                actionIcon = Icons.Rounded.Explore,
-                                onAction = onOpenDiscover,
-                            )
+                            when (empty) {
+                                // Results there are, but none verified yet: the check runs.
+                                SearchView.Empty.CHECKING -> Message(
+                                    icon = Icons.AutoMirrored.Rounded.FactCheck,
+                                    title = strings.checkingTitle,
+                                    body = strings.checkingBody,
+                                    progress = true,
+                                )
+                                SearchView.Empty.NONE_READABLE -> Message(
+                                    icon = Icons.Rounded.SearchOff,
+                                    title = strings.noneReadableTitle(results.query),
+                                    body = strings.noneReadableBody,
+                                    action = strings.discover,
+                                    actionIcon = Icons.Rounded.Explore,
+                                    onAction = onOpenDiscover,
+                                )
+                                SearchView.Empty.NOTHING -> Message(
+                                    icon = Icons.Rounded.SearchOff,
+                                    title = strings.emptyTitle(results.query),
+                                    body = strings.emptyBody,
+                                    action = strings.discover,
+                                    actionIcon = Icons.Rounded.Explore,
+                                    onAction = onOpenDiscover,
+                                )
+                            }
                         }
                     }
                     itemsIndexed(state.articles, key = { _, article -> RESULT_PREFIX + article.item.id }, contentType = { _, _ -> "result" }) { _, article ->
                         val key = article.item.key
-                        FeedEntry(
-                            article = article,
-                            now = now,
-                            listening = listenState.articleKey == key && listenState.speaking,
-                            paused = listenState.articleKey == key && listenState.paused,
-                            actions = actions,
-                            // Stories from the phone's own topics say which one; Google News results all belong to the query.
-                            showTopic = article.topic.id != Topics.SEARCH_ID,
-                            showImage = state.showImages,
-                            modifier = Modifier.padding(top = 20.dp, bottom = 12.dp),
-                        )
+                        Box(Modifier.padding(top = 20.dp, bottom = 12.dp)) {
+                            FeedEntry(
+                                article = article,
+                                now = now,
+                                listening = listenState.articleKey == key && listenState.speaking,
+                                paused = listenState.articleKey == key && listenState.paused,
+                                actions = actions,
+                                // Stories from the phone's own topics say which one; Google News results all belong to the query.
+                                showTopic = article.topic.id != Topics.SEARCH_ID,
+                                showImage = state.showImages,
+                            )
+                            // A result in another language says so on its picture, opposite the readability hint.
+                            state.languageTags[article.item.id]?.let { tag ->
+                                LanguageTag(
+                                    tag = tag,
+                                    description = strings.inLanguage(listenStrings.languageName(tag.lowercase(Locale.ROOT))),
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .padding(10.dp),
+                                )
+                            }
+                        }
+                    }
+                    if (state.checking > 0 && state.articles.isNotEmpty()) {
+                        item(key = "checking", contentType = "checking") { Checking(strings.checking(state.checking)) }
                     }
                     item(key = "footer", contentType = "footer") {
-                        ResultsFooter(results = results, strings = strings, onRetry = viewModel::retry)
+                        ResultsFooter(
+                            results = results,
+                            shown = state.articles.size,
+                            checking = state.checking > 0,
+                            strings = strings,
+                            onRetry = viewModel::retry,
+                        )
                     }
                 }
             }
@@ -668,20 +730,25 @@ private fun OfflineBanner(text: String) {
     }
 }
 
-/** A calm centred state: an icon tile, a title, a line and one action. */
+/**
+ * A calm centred state: an icon tile, a title, a line and one action – or, with [progress], a
+ * small spinner instead (a state that resolves by itself).
+ */
 @Composable
 private fun Message(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     body: String,
-    action: String,
-    actionIcon: androidx.compose.ui.graphics.vector.ImageVector,
-    onAction: () -> Unit,
+    action: String? = null,
+    actionIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    onAction: (() -> Unit)? = null,
+    progress: Boolean = false,
 ) {
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 36.dp),
+            .padding(horizontal = 12.dp, vertical = 36.dp)
+            .semantics { if (progress) liveRegion = LiveRegionMode.Polite },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -689,12 +756,20 @@ private fun Message(
         Text(title, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
         Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         Spacer(Modifier.height(4.dp))
-        GlassPillButton(text = action, icon = actionIcon, onClick = onAction, filled = true)
+        if (progress) {
+            CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.5.dp)
+        } else if (action != null && onAction != null) {
+            GlassPillButton(text = action, icon = actionIcon, onClick = onAction, filled = true)
+        }
     }
 }
 
+/**
+ * The end of the list: a spinner while the next page loads, "try again" after a failed one,
+ * "Das war's · [shown] Treffer" at the end – not while results are still being checked.
+ */
 @Composable
-private fun ResultsFooter(results: SearchResults, strings: SearchStrings, onRetry: () -> Unit) {
+private fun ResultsFooter(results: SearchResults, shown: Int, checking: Boolean, strings: SearchStrings, onRetry: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -703,18 +778,113 @@ private fun ResultsFooter(results: SearchResults, strings: SearchStrings, onRetr
         contentAlignment = Alignment.Center,
     ) {
         when {
-            results.loadingMore -> CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.5.dp)
+            results.loadingMore && shown > 0 -> CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.5.dp)
             results.moreFailed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(strings.moreFailed, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
                 GlassPillButton(text = commonStrings().retry, icon = Icons.Rounded.Refresh, onClick = onRetry)
             }
-            results.isEnd && results.items.isNotEmpty() -> Text(
-                text = strings.end(results.items.size),
+            results.isEnd && shown > 0 && !checking -> Text(
+                text = strings.end(shown),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * The choices above the results: "Relevanz" / "Neueste zuerst" and, when the search can add
+ * the English editions, "Alle Sprachen" / "Nur Deutsch". Wraps onto a second line on narrow
+ * screens.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ResultOptions(state: SearchUiState, strings: SearchStrings, onSort: (SearchSort) -> Unit, onAllLanguages: (Boolean) -> Unit) {
+    val options = state.options
+    val languageName = listenStrings().languageName(state.editionLanguage)
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChoicePill(strings.sortRelevance, Icons.Rounded.AutoAwesome, selected = options.sort == SearchSort.RELEVANCE) { onSort(SearchSort.RELEVANCE) }
+            ChoicePill(strings.sortNewest, Icons.Rounded.Schedule, selected = options.sort == SearchSort.NEWEST) { onSort(SearchSort.NEWEST) }
+        }
+        if (state.offerLanguages) {
+            Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ChoicePill(strings.allLanguages, Icons.Rounded.Public, selected = options.allLanguages) { onAllLanguages(true) }
+                ChoicePill(strings.onlyLanguage(languageName), icon = null, selected = !options.allLanguages) { onAllLanguages(false) }
+            }
+        }
+    }
+}
+
+/** One choice of [ResultOptions]: frosted glass, filled with the accent when [selected]; 48 dp touch target. */
+@Composable
+private fun ChoicePill(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector?, selected: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val content = if (selected) colors.onPrimary else colors.onSurface
+    Box(
+        Modifier
+            .heightIn(min = 48.dp)
+            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton, interactionSource = interaction, indication = null),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier
+                .height(38.dp)
+                .pressScale(interaction, pressedScale = 0.95f)
+                .then(if (selected) Modifier.background(colors.primary, CircleShape) else Modifier.glass(shape = GlassShapes.pill, level = GlassLevel.Thin))
+                .clip(CircleShape)
+                .indication(interaction, ripple())
+                .padding(start = if (icon != null) 12.dp else 16.dp, end = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = if (selected) content else colors.primary, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(text, style = MaterialTheme.typography.labelLarge, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** "EN" on the picture of a result in another language: a small dark frosted pill like the readability hint. */
+@Composable
+private fun LanguageTag(tag: String, description: String, modifier: Modifier = Modifier) {
+    Text(
+        text = tag,
+        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.8.sp),
+        color = Color.White,
+        maxLines = 1,
+        modifier = modifier
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.52f))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+            .clearAndSetSemantics { contentDescription = description }
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
+}
+
+/** "12 weitere Artikel werden geprüft …" under the verified results. */
+@Composable
+private fun Checking(text: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, top = 16.dp, bottom = 4.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+        Spacer(Modifier.width(10.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

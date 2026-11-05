@@ -276,7 +276,7 @@ class RssClient(
     }
 
     companion object {
-        /** Above what the news repository runs at once (6 refresh + 2 interactive fetches). */
+        /** Above what the news repository runs at once (6 refresh + 3 interactive fetches). */
         private const val MAX_REQUESTS_PER_HOST = 10
         private const val MAX_SUMMARY = 600
         private const val MAX_HTML_BYTES = 400 * 1024

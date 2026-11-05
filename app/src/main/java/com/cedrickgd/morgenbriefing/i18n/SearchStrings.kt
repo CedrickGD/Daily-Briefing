@@ -28,6 +28,26 @@ interface SearchStrings {
     val resultsOverline: String
     fun resultCount(count: Int): String
 
+    /** Result order: as ranked / newest first. */
+    val sortRelevance: String
+    val sortNewest: String
+
+    /** Language choice: every edition / only the edition's language [name] ("Deutsch"). */
+    val allLanguages: String
+    fun onlyLanguage(name: String): String
+
+    /** Spoken for the small language tag on a result in another language ([name]: "Englisch"). */
+    fun inLanguage(name: String): String
+
+    /** "Only readable articles": [count] results are still being checked. */
+    fun checking(count: Int): String
+    val checkingTitle: String
+    val checkingBody: String
+
+    /** "Only readable articles" left nothing: there were results, none complete in the app. */
+    fun noneReadableTitle(query: String): String
+    val noneReadableBody: String
+
     val follow: String
     val following: String
     fun followed(query: String): String
@@ -78,6 +98,16 @@ interface SearchStrings {
         override val trendingEmpty = "Die Schlagzeilen laden gleich."
         override val resultsOverline = "Treffer"
         override fun resultCount(count: Int) = if (count == 1) "1 Meldung" else "$count Meldungen"
+        override val sortRelevance = "Relevanz"
+        override val sortNewest = "Neueste zuerst"
+        override val allLanguages = "Alle Sprachen"
+        override fun onlyLanguage(name: String) = "Nur $name"
+        override fun inLanguage(name: String) = "Auf $name"
+        override fun checking(count: Int) = if (count == 1) "1 weiterer Artikel wird geprüft …" else "$count weitere Artikel werden geprüft …"
+        override val checkingTitle = "Artikel werden geprüft"
+        override val checkingBody = "Du siehst nur Artikel, die sich komplett in der App lesen lassen – sie erscheinen, sobald sie geprüft sind."
+        override fun noneReadableTitle(query: String) = "Nichts komplett Lesbares zu „$query“"
+        override val noneReadableBody = "Treffer gab es, aber keiner lässt sich ganz in der App lesen. Mehr Wörter oder ein anderer Begriff helfen oft."
         override val follow = "Diesem Thema folgen"
         override val following = "Du folgst diesem Thema"
         override fun followed(query: String) = "„$query“ ist jetzt in deinem Feed"
@@ -112,6 +142,16 @@ interface SearchStrings {
         override val trendingEmpty = "The top stories are on their way."
         override val resultsOverline = "Results"
         override fun resultCount(count: Int) = if (count == 1) "1 story" else "$count stories"
+        override val sortRelevance = "Most relevant"
+        override val sortNewest = "Newest first"
+        override val allLanguages = "All languages"
+        override fun onlyLanguage(name: String) = "Only $name"
+        override fun inLanguage(name: String) = "In $name"
+        override fun checking(count: Int) = if (count == 1) "Checking 1 more article …" else "Checking $count more articles …"
+        override val checkingTitle = "Checking articles"
+        override val checkingBody = "You only see articles that can be read in full in the app – they appear as soon as they’re checked."
+        override fun noneReadableTitle(query: String) = "Nothing fully readable for “$query”"
+        override val noneReadableBody = "There were results, but none can be read in full in the app. More words or a different term often help."
         override val follow = "Follow this topic"
         override val following = "You follow this topic"
         override fun followed(query: String) = "“$query” is now in your feed"
@@ -146,6 +186,16 @@ interface SearchStrings {
         override val trendingEmpty = "Les gros titres arrivent."
         override val resultsOverline = "Résultats"
         override fun resultCount(count: Int) = if (count == 1) "1 article" else "$count articles"
+        override val sortRelevance = "Pertinence"
+        override val sortNewest = "Plus récents d’abord"
+        override val allLanguages = "Toutes les langues"
+        override fun onlyLanguage(name: String) = "Seulement en $name"
+        override fun inLanguage(name: String) = "En $name"
+        override fun checking(count: Int) = if (count == 1) "Vérification d’un autre article …" else "Vérification de $count autres articles …"
+        override val checkingTitle = "Vérification des articles"
+        override val checkingBody = "Tu ne vois que les articles lisibles en entier dans l’app – ils s’affichent dès qu’ils sont vérifiés."
+        override fun noneReadableTitle(query: String) = "Rien de lisible en entier pour « $query »"
+        override val noneReadableBody = "Il y avait des résultats, mais aucun n’est lisible en entier dans l’app. Ajoute des mots ou essaie un autre terme."
         override val follow = "Suivre ce thème"
         override val following = "Tu suis ce thème"
         override fun followed(query: String) = "« $query » est maintenant dans ton fil"
@@ -180,6 +230,16 @@ interface SearchStrings {
         override val trendingEmpty = "Los titulares están en camino."
         override val resultsOverline = "Resultados"
         override fun resultCount(count: Int) = if (count == 1) "1 noticia" else "$count noticias"
+        override val sortRelevance = "Relevancia"
+        override val sortNewest = "Más recientes primero"
+        override val allLanguages = "Todos los idiomas"
+        override fun onlyLanguage(name: String) = "Solo en $name"
+        override fun inLanguage(name: String) = "En $name"
+        override fun checking(count: Int) = if (count == 1) "Comprobando 1 artículo más …" else "Comprobando $count artículos más …"
+        override val checkingTitle = "Comprobando artículos"
+        override val checkingBody = "Solo ves artículos que se pueden leer completos en la app: aparecen en cuanto se comprueban."
+        override fun noneReadableTitle(query: String) = "Nada legible completo para «$query»"
+        override val noneReadableBody = "Hubo resultados, pero ninguno se puede leer completo en la app. Más palabras u otro término suelen ayudar."
         override val follow = "Seguir este tema"
         override val following = "Sigues este tema"
         override fun followed(query: String) = "«$query» ya está en tu feed"
@@ -214,6 +274,16 @@ interface SearchStrings {
         override val trendingEmpty = "I titoli stanno arrivando."
         override val resultsOverline = "Risultati"
         override fun resultCount(count: Int) = if (count == 1) "1 notizia" else "$count notizie"
+        override val sortRelevance = "Rilevanza"
+        override val sortNewest = "Più recenti prima"
+        override val allLanguages = "Tutte le lingue"
+        override fun onlyLanguage(name: String) = "Solo in $name"
+        override fun inLanguage(name: String) = "In $name"
+        override fun checking(count: Int) = if (count == 1) "Verifica di un altro articolo …" else "Verifica di altri $count articoli …"
+        override val checkingTitle = "Verifica degli articoli"
+        override val checkingBody = "Vedi solo articoli leggibili per intero nell’app: compaiono appena sono verificati."
+        override fun noneReadableTitle(query: String) = "Niente di leggibile per intero per «$query»"
+        override val noneReadableBody = "C’erano risultati, ma nessuno si legge per intero nell’app. Più parole o un altro termine spesso aiutano."
         override val follow = "Segui questo tema"
         override val following = "Stai seguendo questo tema"
         override fun followed(query: String) = "«$query» ora è nel tuo feed"

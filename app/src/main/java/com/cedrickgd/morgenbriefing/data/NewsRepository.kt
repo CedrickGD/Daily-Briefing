@@ -5,6 +5,7 @@ import com.cedrickgd.morgenbriefing.data.article.KnownWalls
 import com.cedrickgd.morgenbriefing.data.local.NewsCache
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.FeedSource
+import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.SearchPage
 import com.cedrickgd.morgenbriefing.data.model.SourceKind
@@ -14,6 +15,8 @@ import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.news.GoogleNews
 import com.cedrickgd.morgenbriefing.data.news.PagingQuery
 import com.cedrickgd.morgenbriefing.data.news.RssDates
+import com.cedrickgd.morgenbriefing.data.news.SearchQuery
+import com.cedrickgd.morgenbriefing.data.news.SearchRanking
 import com.cedrickgd.morgenbriefing.data.news.TopicSources
 import com.cedrickgd.morgenbriefing.data.remote.FeedError
 import com.cedrickgd.morgenbriefing.data.remote.FeedException
@@ -35,12 +38,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.IOException
-import java.text.Normalizer
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZonedDateTime
-import java.util.Locale
 
 /** What a refresh of several topics ended in. */
 data class RefreshOutcome(
@@ -149,7 +150,7 @@ class NewsRepository(
     fun isStale(topicId: String, maxAge: Duration, settings: AppSettings): Boolean {
         val news = _state.value.topics[topicId] ?: return true
         if (news.allFailed) return true
-        val wanted = TopicSources.resolve(topicId, settings, blockedDomains()).mapTo(HashSet()) { it.id }
+        val wanted = sourcesOf(topicId, settings, blockedDomains()).mapTo(HashSet()) { it.id }
         if (news.sources.mapTo(HashSet()) { it.sourceId } != wanted) return true
         val at = parseInstantOrNull(news.fetchedAt) ?: return true
         return Duration.between(at, clock().toInstant()) > maxAge
@@ -216,7 +217,7 @@ class NewsRepository(
         var cursor = synchronized(cursors) { cursors[topicId] }?.takeIf { it.paging == paging }
             ?: PageCursor(paging, before = initialCursor(previous, paging, today), days = FIRST_WINDOW_DAYS)
         val blocked = blockedDomains().toSet()
-        val exclusions = TopicSources.exclusions(settings, paging.edition, blocked)
+        val exclusions = TopicSources.searchExclusions(topicId, settings, paging.edition, blocked)
         repeat(MAX_EMPTY_WINDOWS) {
             if (cursor.before.isBefore(today.minusDays(MAX_HISTORY_DAYS))) {
                 remember(topicId, cursor)
@@ -263,47 +264,69 @@ class NewsRepository(
 
     /**
      * One page of results for [query]: page 0 is Google News' best current matches plus the
-     * cached articles of every topic that contain all of the query's words; page n ≥ 1 is the
-     * n-th week back. Newest first, the same story once. Nothing is cached.
+     * cached articles of every topic that contain the whole query ([SearchQuery.matchesAll]);
+     * page n ≥ 1 is the n-th week back. Each page reads the main edition and, with
+     * [allLanguages], the English ones too ([GoogleNews.searchEditions]), in parallel. Most
+     * relevant first ([SearchRanking]), the same story once. Nothing is cached.
      *
-     * A week without results does not end the search ([SearchPage.hasMore] stays true up to
-     * [MAX_SEARCH_PAGES]): a story of a small town can be quiet for weeks; the caller decides how
-     * many quiet weeks in a row it skips. Only an empty page 0 (no window: nothing at all) ends it.
+     * The query goes to Google News as [SearchQuery.googleQuery] (tickers quoted, the user's
+     * operators kept). A week without results does not end the search ([SearchPage.hasMore]
+     * stays true up to [MAX_SEARCH_PAGES]): a story of a small town can be quiet for weeks; the
+     * caller decides how many quiet weeks in a row it skips. Only an empty page 0 (no window:
+     * nothing at all) ends it. [SearchPage.failed] when no edition answered.
      */
-    suspend fun search(query: String, settings: AppSettings, page: Int = 0): SearchPage {
+    suspend fun search(query: String, settings: AppSettings, page: Int = 0, allLanguages: Boolean = true): SearchPage {
         warm()
         val text = query.trim().replace(WHITESPACE, " ")
         if (text.isEmpty()) return SearchPage(text, page, emptyList(), hasMore = false)
-        val edition = settings.edition
+        val parsed = SearchQuery.parse(text)
         val today = clock().toLocalDate()
         val window = if (page <= 0) null else GoogleNews.DateWindow(after = today.minusDays(7L * page), before = today.minusDays(7L * (page - 1)).plusDays(1))
         val blocked = blockedDomains().toSet()
-        val source = FeedSource(
-            id = "gn:${Topics.SEARCH_ID}@${edition.key}",
-            name = GoogleNews.SOURCE_NAME,
-            url = GoogleNews.searchUrl(GoogleNews.buildQuery(text, TopicSources.exclusions(settings, edition, blocked), window), edition),
-            topicId = Topics.SEARCH_ID,
-            kind = SourceKind.GOOGLE_NEWS,
-            edition = edition.key,
-        )
-        var failed = false
-        val found = try {
-            interactiveLimit.withPermit { client.fetch(source) }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: IOException) {
-            Log.i(TAG, "Search failed: ${e.message}")
-            failed = true
-            emptyList()
+        val editions = GoogleNews.searchEditions(settings.edition, allLanguages)
+        val answers = coroutineScope {
+            editions.map { edition ->
+                async {
+                    val source = searchSource(parsed, edition, window)
+                    try {
+                        interactiveLimit.withPermit { client.fetch(source) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: IOException) {
+                        Log.i(TAG, "Search in ${edition.key} failed: ${e.message}")
+                        null
+                    }
+                }
+            }.awaitAll()
         }
+        val failed = answers.all { it == null }
         val items = withContext(compute) {
-            val local = if (page <= 0) cachedMatches(text) else emptyList()
-            val all = local + if (settings.readableOnly) readable(found, blocked) else found
-            newestFirst(dedupe(all, resolvedUrl))
+            val local = if (page <= 0) cachedMatches(parsed) else emptyList()
+            val found = answers.mapIndexed { index, answer ->
+                val delivered = answer.orEmpty()
+                SearchRanking.Found(if (settings.readableOnly) readable(delivered, blocked) else delivered, main = index == 0)
+            }
+            searchResults(parsed, local, found, clock().toInstant(), resolvedUrl)
         }
-        val more = page + 1 < MAX_SEARCH_PAGES && !failed && (page > 0 || found.isNotEmpty())
+        val any = answers.any { !it.isNullOrEmpty() }
+        val more = page + 1 < MAX_SEARCH_PAGES && !failed && (page > 0 || any)
         return SearchPage(query = text, page = page, items = items, hasMore = more, failed = failed)
     }
+
+    /**
+     * The search in [edition]: without `-site:` exclusions – any `site:` operator makes Google
+     * News answer loosely (100 results whatever the query: "Bundestagswahl" gives 18 results,
+     * 15 naming it, with one `-site:` 100 results, 4 naming it; checked 05.11.2026). Walled
+     * sites are left out by domain afterwards ([readable]).
+     */
+    private fun searchSource(query: SearchQuery, edition: NewsEdition, window: GoogleNews.DateWindow?) = FeedSource(
+        id = TopicSources.googleNewsId(Topics.SEARCH_ID, edition),
+        name = GoogleNews.SOURCE_NAME,
+        url = GoogleNews.searchUrl(GoogleNews.buildQuery(query.googleQuery, window = window), edition),
+        topicId = Topics.SEARCH_ID,
+        kind = SourceKind.GOOGLE_NEWS,
+        edition = edition.key,
+    )
 
     /** Forgets a topic (a custom topic was deleted, a place unfollowed). */
     suspend fun forget(topicId: String) {
@@ -321,12 +344,14 @@ class NewsRepository(
     /** Refreshes one topic; returns whether at least one source answered. */
     private suspend fun refreshTopic(topicId: String, settings: AppSettings): Boolean = coroutineScope {
         val blocked = blockedDomains()
-        val sources = TopicSources.resolve(topicId, settings, blocked)
+        val sources = sourcesOf(topicId, settings, blocked)
+        val followed = followedSearch(topicId, settings)
         val results = sources.map { source ->
             async {
                 fetchLimit.withPermit {
                     try {
-                        FetchResult(source, client.fetch(source), null)
+                        val items = client.fetch(source)
+                        FetchResult(source, if (followed != null && isExtraEdition(source, settings)) SearchRanking.relevantExtra(followed, items, clock().toInstant()) else items, null)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: FeedException) {
@@ -391,7 +416,19 @@ class NewsRepository(
         _state.update { it.copy(endReached = if (end) it.endReached + topicId else it.endReached - topicId) }
     }
 
-    private fun cachedMatches(query: String): List<NewsItem> = matching(_state.value.topics.values, query)
+    private fun cachedMatches(query: SearchQuery): List<NewsItem> = matching(_state.value.topics.values, query)
+
+    /** What a refresh of [topicId] reads: its sources plus, for a followed search, the English editions ([TopicSources.extraEditions]). */
+    private fun sourcesOf(topicId: String, settings: AppSettings, blocked: Collection<String>): List<FeedSource> =
+        TopicSources.resolve(topicId, settings, blocked) + TopicSources.extraEditions(topicId, settings, blocked)
+
+    /** The query of [topicId] when it is a followed search ("Diesem Thema folgen"), else null. */
+    private fun followedSearch(topicId: String, settings: AppSettings): SearchQuery? =
+        if (!Topics.isCustomId(topicId)) null else settings.customTopics.firstOrNull { it.id == topicId }?.query?.takeIf { it.isNotBlank() }?.let(SearchQuery::parse)
+
+    /** A Google News source of another edition than the main one: the English breadth of a followed search. */
+    private fun isExtraEdition(source: FeedSource, settings: AppSettings): Boolean =
+        source.isGoogleNews && source.edition != null && source.edition != settings.edition.key
 
     internal class FetchResult(val source: FeedSource, val items: List<NewsItem>, val error: String?)
 
@@ -402,8 +439,8 @@ class NewsRepository(
         private const val TAG = "NewsRepository"
         private const val PARALLEL_FETCHES = 6
 
-        /** Connections of their own for [search] and [loadMore], which the user waits for. */
-        private const val INTERACTIVE_FETCHES = 2
+        /** Connections of their own for [search] and [loadMore], which the user waits for (a search reads up to three editions at once). */
+        private const val INTERACTIVE_FETCHES = 3
 
         /** Articles kept per topic (the newest); paging stops here. */
         const val MAX_PER_TOPIC = 1000
@@ -437,8 +474,6 @@ class NewsRepository(
         private val JOIN_SLACK: Duration = Duration.ofDays(1)
 
         private val WHITESPACE = Regex("\\s+")
-        private val MARKS = Regex("\\p{M}+")
-        private val NON_WORD = Regex("[^\\p{L}\\p{N}]+")
 
         /**
          * Merges fetch results into the topic's articles: failed sources keep what they delivered
@@ -567,36 +602,42 @@ class NewsRepository(
             (if (item.aggregator == null) 4 else 0) + (if (item.image != null) 2 else 0) + (if (item.summary.isNotBlank()) 1 else 0)
 
         /** Lower case, accents and punctuation removed, single spaces: "„Börse: DAX-Rekord!“" → "borse dax rekord". */
-        internal fun normalizeText(text: String): String =
-            Normalizer.normalize(text, Normalizer.Form.NFD)
-                .replace(MARKS, "")
-                .lowercase(Locale.ROOT)
-                .replace("ß", "ss")
-                .replace(NON_WORD, " ")
-                .trim()
+        internal fun normalizeText(text: String): String = SearchQuery.fold(text)
 
         /**
-         * The articles of [topics] that contain all words of [query] (headline or teaser): the
-         * newest [MAX_CACHED_MATCHES] over all topics, newest first. Pure.
+         * The articles of [topics] that meet the whole [query] (every word as a whole word in
+         * headline or teaser, see [SearchQuery.matchesAll]): the newest [MAX_CACHED_MATCHES]
+         * over all topics, newest first. Pure.
          */
-        internal fun matching(topics: Collection<TopicNews>, query: String): List<NewsItem> {
-            val words = searchWords(query)
-            if (words.isEmpty()) return emptyList()
+        internal fun matching(topics: Collection<TopicNews>, query: SearchQuery): List<NewsItem> {
+            if (!query.hasTerms) return emptyList()
             val matches = topics.asSequence()
                 .flatMap { it.items.asSequence() }
-                .filter { item -> normalizeText(item.headline + " " + item.summary).let { text -> words.all { it in text } } }
+                .filter { item -> query.matchesAll(item.headline, item.summary, item.publisherDomain.ifEmpty { GoogleNews.domainOf(item.url) }) }
                 .toList()
             return newestFirst(matches).take(MAX_CACHED_MATCHES)
         }
 
-        /** The words a cached article must contain: operators and `OR` are left out. */
-        internal fun searchWords(query: String): List<String> =
-            query.split(WHITESPACE)
-                .filterNot { it.equals("OR", ignoreCase = false) || it.startsWith("-") || it.contains(':') }
-                .map { normalizeText(it) }
-                .flatMap { it.split(' ') }
-                .filter { it.length >= 2 }
-                .distinct()
+        internal fun matching(topics: Collection<TopicNews>, query: String): List<NewsItem> = matching(topics, SearchQuery.parse(query))
+
+        /**
+         * One page of search results: [found] (per edition, Google's order) and [local] (cached
+         * matches) ranked ([SearchRanking.rank]), then the same story once – the same link or
+         * headline ([dedupe], the better copy at the better place; an article the phone holds
+         * shows as its cached copy, which names its topic) or a near-identical headline
+         * ([SearchRanking.dropNearDuplicates]). Pure.
+         */
+        internal fun searchResults(
+            query: SearchQuery,
+            local: List<NewsItem>,
+            found: List<SearchRanking.Found>,
+            now: Instant,
+            resolved: (String) -> String? = { null },
+        ): List<NewsItem> {
+            val held = local.associateBy { it.id }
+            val ranked = SearchRanking.rank(query, local, found, now).map { held[it.id] ?: it }
+            return SearchRanking.dropNearDuplicates(dedupe(ranked, resolved))
+        }
 
         /**
          * Without the articles the reader cannot show: those of [blocked] sites (by publisher
