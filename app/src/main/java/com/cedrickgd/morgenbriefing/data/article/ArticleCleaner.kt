@@ -35,14 +35,45 @@ internal object ArticleCleaner {
     private const val AUTHOR_TAIL_BLOCKS = 5
     private const val CONSENT_TAIL_SHARE = 0.35
 
+    /**
+     * The word that opens a date line: "Stand: …", "Veröffentlicht am 5. November 2026",
+     * "Updated 2 hours ago". Followed by a colon, or by nothing but the date (see [isMetaLine]) –
+     * "Stand heute sind 23 Menschen gestorben." is the text's first sentence.
+     */
+    private val META_WORD = Regex("(?i)^(zuletzt aktualisiert|aktualisiert|stand|veröffentlicht|erschienen|erstellt|last updated|updated|first published|published|posted|modified)\\b")
+
+    /** After the date a separator may lead on to other meta ("— 3 minute read", "| Von …"). */
+    private val META_SEPARATOR = Regex("\\s[•|—–·]\\s|\\s-\\s")
+    private val META_TOKEN_SPLIT = Regex("[\\s,]+")
+
+    /** A token of a date or time: "05.11.2026", "09:03", "5.", "2026", "11/05/2026". */
+    private val DATE_TOKEN = Regex("\\d{1,4}([./:-]\\d{1,4}){0,2}[.,]?")
+    private val MONTHS = Regex(
+        "(?i)(jan|januar|january|feb|februar|february|mär|märz|mar|march|apr|april|mai|may|jun|juni|june|jul|juli|july|aug|august|" +
+            "sep|sept|september|okt|oktober|oct|october|nov|november|dez|dezember|dec|december)\\.?",
+    )
+    private val WEEKDAYS = Regex(
+        "(?i)(mo|di|mi|do|fr|sa|so|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|" +
+            "mon|tue|tues|wed|thu|thurs|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\.?",
+    )
+
+    /** Small words of a date line: "am", "um … Uhr", "vor 2 Stunden", "2 hours ago", time zones. */
+    private val META_FILLER = setOf(
+        "am", "um", "uhr", "vor", "seit", "on", "at", "ago", "heute", "gestern", "today", "yesterday", "und", "and",
+        "minute", "minuten", "minutes", "min", "stunde", "stunden", "hour", "hours", "h", "tag", "tagen", "day", "days",
+        "am", "pm", "a.m.", "p.m.", "mez", "mesz", "cet", "cest", "utc", "gmt", "et", "est", "edt", "pt", "pst", "pdt", "bst",
+    )
+
+    /** Links of an author box: "Posts from this author", "Mehr Artikel von …". */
+    private val AUTHOR_LINKS = Regex("(?i)(posts from this author|see all by|alle artikel von|mehr artikel von|mehr von (diesem|dieser) autor|folgen sie (dem autor|der autorin)|follow (the )?author)")
+
     private val NOISE = listOf(
-        Regex("(?i)^(stand|aktualisiert|zuletzt aktualisiert|veröffentlicht|erschienen|erstellt|updated|last updated|published|first published|posted|modified)\\b[:\\s]"),
         Regex("(?i)\\b(lesezeit|lesedauer|reading time|\\d+\\s*min(\\.|ute|uten|s)?\\s+(read|lesen|lesezeit)|minute read|minutes read)\\b"),
         Regex("^\\d{1,2}\\.\\s?\\d{1,2}\\.\\s?(\\d{2}|\\d{4})\\b"),
         Regex("(?i)^\\d{1,2}\\.\\s+(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\\s+\\d{4}"),
         Regex("(?i)^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2},\\s+\\d{4}"),
         Regex("(?i)^\\d{1,2}\\s+(january|february|march|april|may|june|july|august|september|october|november|december)\\s+\\d{4}"),
-        Regex("(?i)(posts from this author|see all by|alle artikel von|mehr artikel von|mehr von (diesem|dieser) autor|folgen sie (dem autor|der autorin)|follow (the )?author)"),
+        AUTHOR_LINKS,
         Regex("(?i)^(artikel anhören|anhören|audio|hören sie|listen|listen to (this )?(article|story)|vorlesen|teilen|share|drucken|print|kommentare|comments|merken|save)\\b.{0,40}$"),
         // Audio players: "00:00 1.0x 08:58", "Narrated by …", "Gelesen von …".
         Regex("(?i)^(\\d{1,2}:\\d{2}(\\s|$)|narrated by|read by|gelesen von|vorgelesen von|audio version)"),
@@ -78,11 +109,28 @@ internal object ArticleCleaner {
             "(keine meldungen mehr verpassen|newsletter abonnieren|sign up for (our|the) newsletter|subscribe to (our|the) newsletter))",
     )
 
-    /** The author's portrait opens the bio box at the end: "Photo of Kyle Orland", "Porträt von …". */
-    private val AUTHOR_PHOTO = Regex("(?i)^(photo|picture|portrait|headshot|foto|bild|porträt|autorenbild|autorenfoto) (of|von|:)\\s")
+    /**
+     * The author's portrait opens the bio box at the end: "Photo of Kyle Orland", "Porträt von …".
+     * Group 2 is the name; "Autorenbild"/"headshot" say "author" by themselves.
+     */
+    private val AUTHOR_PHOTO = Regex("(?i)^(photo|picture|portrait|headshot|foto|bild|porträt|autorenbild|autorenfoto) (of|von|:)\\s+(.+)$")
+    private val AUTHOR_WORD = Regex("(?i)^(headshot|autorenbild|autorenfoto)\\b")
+    private const val NAME_MAX_WORDS = 4
+    private const val ROLE_LINE_WORDS = 8
 
-    /** The consent dialog some pages carry in their article container ("Weiter mit Werbung", "Zustimmen"). */
-    private val CONSENT_TAIL = Regex("(?i)^(weiter mit werbung|zustimmen|alle akzeptieren|accept( all)?( cookies)?|werbefrei (mit|lesen)|datenschutzoptionen|cookie settings|privacy settings|manage (cookies|consent))\\b")
+    /** Lower-case parts of names: "Ursula von der Leyen", "Ludwig van Beethoven". */
+    private val NAME_PARTICLES = setOf("von", "van", "der", "den", "de", "del", "della", "di", "da", "du", "la", "le", "zu", "ten", "ter", "al", "bin", "ibn", "dos", "das")
+
+    /**
+     * The consent dialog some pages carry in their article container: button lines ("Weiter
+     * mit Werbung", "Datenschutzoptionen …") and bare buttons ("Zustimmen", "Accept all") – a
+     * line of at most [CONSENT_LINE_WORDS] words without a sentence ending, never a sentence that
+     * opens with the word ("Zustimmen muss nun noch der Bundesrat.").
+     */
+    private val CONSENT_LINE = Regex("(?i)^(weiter mit werbung|alle (cookies )?akzeptieren|accept all cookies|werbefrei (mit|lesen)|datenschutzoptionen|cookie[- ]einstellungen|cookie settings|privacy settings|manage (cookies|consent))\\b")
+    private val CONSENT_BUTTON = Regex("(?i)^(zustimmen|akzeptieren|einverstanden|accept|accept all|agree|i agree)[.!]?$")
+    private const val CONSENT_LINE_WORDS = 6
+    private val SENTENCE_STOP = Regex("[.!?]$")
     private val TEASER_TAIL = Regex("(?i)\\s*(continue reading|read more|weiterlesen|mehr lesen|lesen sie mehr|\\[…]|\\[\\.\\.\\.])\\s*(\\.{3}|…)?\\s*$")
 
     // ---------------------------------------------------------------------------------- page
@@ -196,8 +244,34 @@ internal object ArticleCleaner {
     internal fun isNoise(text: String): Boolean {
         val words = TextMatch.wordCount(text)
         if (words == 0 || words > NOISE_MAX_WORDS) return false
-        if (NOISE.any { it.containsMatchIn(text) }) return true
+        if (isMetaLine(text) || NOISE.any { it.containsMatchIn(text) }) return true
         return words <= 10 && BYLINE.containsMatchIn(text) && !SENTENCE_END.containsMatchIn(text.trim())
+    }
+
+    /**
+     * A date line: "Stand: 05.11.2026 • 09:03 Uhr", "Veröffentlicht am 5. November 2026",
+     * "Updated 2 hours ago", "Published 5 November 2026 — 3 minute read". The opening word with
+     * a colon, or with only a date or time after it (up to a separator) – not a sentence that
+     * happens to start with the word ("Stand Mittwochabend wurden 23 Verletzte gezählt.",
+     * "Veröffentlicht wurde die Studie im Fachblatt Nature.").
+     */
+    internal fun isMetaLine(text: String): Boolean {
+        val t = text.trim()
+        val word = META_WORD.find(t) ?: return false
+        val rest = t.substring(word.range.last + 1)
+        if (rest.trimStart().startsWith(":")) return true
+        val head = rest.split(META_SEPARATOR, limit = 2).first()
+        val tokens = head.split(META_TOKEN_SPLIT).filter { it.isNotEmpty() }
+        if (tokens.isEmpty()) return false
+        var dated = false
+        for (token in tokens) {
+            when {
+                DATE_TOKEN.matches(token) || MONTHS.matches(token) -> dated = true
+                WEEKDAYS.matches(token) || token.lowercase() in META_FILLER -> Unit
+                else -> return false
+            }
+        }
+        return dated
     }
 
     private fun isBreadcrumb(block: ArticleBlock): Boolean =
@@ -231,11 +305,11 @@ internal object ArticleCleaner {
         for ((x, entry) in texts.withIndex()) {
             val (i, block) = entry
             val key = TextMatch.normalize(block.text)
-            if (!seen.add(key)) {
+            if (repeatsCount(block) && !seen.add(key)) {
                 dropped[i] = true
                 continue
             }
-            if (block.type == ArticleBlock.HEADING) continue
+            if (block.type == ArticleBlock.HEADING || !repeatsCount(block)) continue
             for (y in 0 until x) {
                 val (j, earlier) = texts[y]
                 if (dropped[j] || earlier.type == ArticleBlock.HEADING) continue
@@ -258,6 +332,15 @@ internal object ArticleCleaner {
         }
         return blocks.filterIndexed { i, _ -> !dropped[i] }
     }
+
+    /**
+     * True when [block] seen a second time word for word is a duplicate: headings (a repeated
+     * short heading is page chrome) and texts of at least [TextMatch.MIN_FUZZY_WORDS] words. A
+     * short paragraph may repeat on purpose: "Nein." as the answer to two questions of an
+     * interview, a refrain.
+     */
+    internal fun repeatsCount(block: ArticleBlock): Boolean =
+        block.type == ArticleBlock.HEADING || TextMatch.words(block.text).size >= TextMatch.MIN_FUZZY_WORDS
 
     /** A picture that was shown before (another rendition of it) goes, with its caption. */
     private fun dropRepeatedImages(blocks: List<ArticleBlock>): List<ArticleBlock> {
@@ -351,10 +434,10 @@ internal object ArticleCleaner {
             val block = blocks[k]
             after += TextMatch.wordCount(block.text) + block.items.sumOf(TextMatch::wordCount)
             if (after > total * CONSENT_TAIL_SHARE) break
-            if ((block.type == ArticleBlock.HEADING || block.type == ArticleBlock.PARAGRAPH) && CONSENT_TAIL.containsMatchIn(block.text.trim())) end = k
+            if ((block.type == ArticleBlock.HEADING || block.type == ArticleBlock.PARAGRAPH) && isConsentLine(block.text)) end = k
         }
         // The author's bio box: portrait, name, bio.
-        val portrait = (maxOf(0, end - AUTHOR_TAIL_BLOCKS) until end).firstOrNull { blocks[it].type == ArticleBlock.IMAGE && AUTHOR_PHOTO.containsMatchIn(blocks[it].alt) }
+        val portrait = (maxOf(0, end - AUTHOR_TAIL_BLOCKS) until end).firstOrNull { opensAuthorBox(blocks, it, end) }
         if (portrait != null) end = portrait
         while (end > 0) {
             val block = blocks[end - 1]
@@ -364,6 +447,45 @@ internal object ArticleCleaner {
             if (tail || block.type == ArticleBlock.HEADING) end-- else break
         }
         return if (end == blocks.size) blocks else blocks.subList(0, end)
+    }
+
+    /** A line of a consent dialog: a button, not a sentence. */
+    internal fun isConsentLine(text: String): Boolean {
+        val t = text.trim()
+        if (CONSENT_BUTTON.matches(t)) return true
+        return TextMatch.wordCount(t) <= CONSENT_LINE_WORDS && !SENTENCE_STOP.containsMatchIn(t) && CONSENT_LINE.containsMatchIn(t)
+    }
+
+    /**
+     * True when the picture at [index] opens the author's bio box (before [end]): its alt text
+     * names a person ("Photo of Kyle Orland") and what follows is about that person – a line
+     * that starts with the name ("Kyle Orland Senior Gaming Editor", "Kyle Orland has been …")
+     * or an author link ("Posts from this author"). "Foto von der Unfallstelle" or "Bild von
+     * Demonstranten vor dem Reichstag" are pictures of the story.
+     */
+    internal fun opensAuthorBox(blocks: List<ArticleBlock>, index: Int, end: Int = blocks.size): Boolean {
+        val image = blocks[index]
+        if (image.type != ArticleBlock.IMAGE) return false
+        val alt = image.alt.trim()
+        val name = AUTHOR_PHOTO.find(alt)?.groupValues?.get(3)?.trim()?.trimEnd('.') ?: return false
+        if (!isPersonName(name)) return false
+        val after = blocks.subList(index + 1, end).filter { it.type == ArticleBlock.PARAGRAPH || it.type == ArticleBlock.HEADING }
+        if (after.any { AUTHOR_LINKS.containsMatchIn(it.text) }) return true
+        val nameKey = TextMatch.normalize(name)
+        val next = after.take(2)
+        val aboutTheName = next.filter { TextMatch.normalize(it.text).startsWith(nameKey) }
+        if (aboutTheName.isEmpty()) return false
+        // "Autorenbild von …" says so itself; else the name with the role ("Kyle Orland Senior Gaming Editor").
+        return AUTHOR_WORD.containsMatchIn(alt) ||
+            aboutTheName.any { TextMatch.wordCount(it.text) <= ROLE_LINE_WORDS && !SENTENCE_STOP.containsMatchIn(it.text.trim()) }
+    }
+
+    /** "Kyle Orland", "Ursula von der Leyen": a few words, each a capitalised name or a name particle. */
+    private fun isPersonName(text: String): Boolean {
+        val words = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.isEmpty() || words.size > NAME_MAX_WORDS) return false
+        if (!words.first().first().isUpperCase()) return false
+        return words.all { w -> w.first().isUpperCase() || w.lowercase() in NAME_PARTICLES }
     }
 
     /** A caption whose picture went (or that opens the article) has nothing to describe. */

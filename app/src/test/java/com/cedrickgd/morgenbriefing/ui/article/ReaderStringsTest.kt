@@ -53,4 +53,24 @@ class ReaderStringsTest {
         assertEquals(null, unknown.outcome)
         assertTrue(ReaderStrings.of(AppLanguage.EN).failureReason(unknown.outcome, unknown.site).isNotBlank())
     }
+
+    @Test
+    fun `a Google News link that could not be resolved says so, can be retried, in every language`() {
+        val failure = ArticleFailure.of(ArticleException(ReadOutcome.NETWORK, "", 503, via = "Google News"), fallbackSite = "CNN")
+        assertEquals("Google News", failure.via)
+        assertEquals(listOf(FailureAction.RETRY, FailureAction.OPEN_IN_BROWSER), failureActions(failure))
+        assertEquals(FailureIcon.OFFLINE, failureIcon(failure))
+        for (lang in AppLanguage.entries) {
+            val s = ReaderStrings.of(lang)
+            val down = s.failureReason(failure.outcome, failure.site, failure.httpCode, failure.via)
+            assertTrue("$lang $down", down.contains("Google News") && down.contains("503"))
+            val offline = s.failureReason(ReadOutcome.NETWORK, "CNN", null, "Google News")
+            assertTrue("$lang $offline", offline.contains("Google News"))
+            assertNotEquals(s.failureReason(ReadOutcome.NETWORK, "CNN"), offline)
+        }
+        assertEquals(
+            "Der Link führt über Google News, und Google News ist gerade nicht erreichbar. Bist du online?",
+            ReaderStrings.of(AppLanguage.DE).failureReason(ReadOutcome.NETWORK, "CNN", null, "Google News"),
+        )
+    }
 }

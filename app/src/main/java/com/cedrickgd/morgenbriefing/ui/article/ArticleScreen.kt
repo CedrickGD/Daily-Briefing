@@ -420,7 +420,7 @@ private fun LoadFailed(failure: ArticleFailure?, accent: TopicColors, onRetry: (
             modifier = Modifier.semantics { heading() },
         )
         Text(
-            text = reader.failureReason(failure?.outcome, failure?.site.orEmpty(), failure?.httpCode),
+            text = reader.failureReason(failure?.outcome, failure?.site.orEmpty(), failure?.httpCode, failure?.via),
             style = MaterialTheme.typography.bodyMedium,
             color = colors.onSurfaceVariant,
             textAlign = TextAlign.Center,

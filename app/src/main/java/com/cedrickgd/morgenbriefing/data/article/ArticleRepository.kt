@@ -32,17 +32,21 @@ import java.util.concurrent.TimeUnit
 /**
  * The reader could not show the article. [outcome] says why (never [ReadOutcome.OK]); [site] is
  * the newsroom's name when known, [httpCode] the server's status when it answered with an
- * error. The reader turns this into text with `ReaderStrings`.
+ * error. [via] is set when the article's link goes through an aggregator ("Google News") that
+ * could not be asked for the publisher's address – then [httpCode] is the aggregator's. The
+ * reader turns this into text with `ReaderStrings`.
  */
 class ArticleException(
     val outcome: ReadOutcome,
     val site: String = "",
     val httpCode: Int? = null,
     cause: Throwable? = null,
+    val via: String? = null,
 ) : IOException(buildString {
     append(outcome.name)
     if (httpCode != null) append(" (HTTP ").append(httpCode).append(')')
     if (site.isNotBlank()) append(" – ").append(site)
+    if (via != null) append(" via ").append(via)
 }, cause)
 
 /**
@@ -51,7 +55,8 @@ class ArticleException(
  * jar per load, so sites that set a cookie and redirect work; `Accept-Language` in the
  * article's language; no scripts), extracts the article with [ArticleExtractor] and keeps the
  * result as JSON (`<dir>/articles/<id>.json`) and in memory, so a second visit is instant and
- * offline. Every outcome is noted in [readability] for the publisher's domain.
+ * offline. Every outcome is noted in [readability] for the publisher's domain (each article
+ * once). When a fresh read fails, a stored copy (even one of an older extractor) is shown.
  *
  * Publishers are respected: no paywall, consent or bot-check is worked around. The only second
  * try is the AMP version a page links to itself, when the page gave no readable text.
@@ -91,16 +96,27 @@ class ArticleRepository(
     suspend fun load(item: NewsItem, refresh: Boolean = false, language: String? = null): ArticleContent {
         val id = item.id
         if (!refresh) cachedOrNull(item)?.let { return it }
-        val url = resolve(item)
-        val host = url.toHttpUrlOrNull()?.host.orEmpty()
-        val site = item.source.ifBlank { item.publisherDomain }
         val content = try {
-            read(url, site, language)
+            val url = resolve(item)
+            val host = url.toHttpUrlOrNull()?.host.orEmpty()
+            val site = item.source.ifBlank { item.publisherDomain }
+            val fresh = try {
+                read(url, site, language)
+            } catch (e: ArticleException) {
+                readability?.record(host, e.outcome, article = url)
+                throw e
+            }
+            readability?.record(host, ReadOutcome.OK, article = url)
+            fresh
         } catch (e: ArticleException) {
-            readability?.record(host, e.outcome)
+            // A copy read before (by an older extractor, or before this refresh) beats an error:
+            // offline, or the page changed since. It stays on disk until a fresh read replaces it.
+            storedOrNull(id)?.let { stale ->
+                Log.i(TAG, "Showing the stored copy of $id: ${e.message}")
+                return stale
+            }
             throw e
         }
-        readability?.record(host, ReadOutcome.OK)
         synchronized(memory) { memory[id] = content }
         store(id, content)
         return content
@@ -109,20 +125,30 @@ class ArticleRepository(
     /** The cached article of [item] in memory (no disk, no network), or null. */
     fun peek(item: NewsItem): ArticleContent? = synchronized(memory) { memory[item.id] }?.takeIf(::isCurrent)
 
-    /** The cached article of [item] (memory, then disk; never the network), or null. */
+    /**
+     * The cached article of [item] (memory, then disk; never the network), or null. A copy by an
+     * older extractor does not count (the page is read again for the current cleanup) but is
+     * kept as the fallback of [load]; a stored consent page is deleted.
+     */
     suspend fun cachedOrNull(item: NewsItem): ArticleContent? {
         val id = item.id
         synchronized(memory) { memory[id] }?.let { content ->
             if (isCurrent(content)) return content
             synchronized(memory) { memory.remove(id) }
         }
+        val content = storedOrNull(id) ?: return null
+        if (!isCurrent(content)) return null
+        synchronized(memory) { memory[id] = content }
+        return content
+    }
+
+    /** The article stored on disk for [id], of any extractor version, never a consent page (that one is deleted). */
+    private suspend fun storedOrNull(id: String): ArticleContent? {
         val content = cached(id) ?: return null
-        if (!isCurrent(content)) {
-            // Read by an older extractor (other cleanup) or a consent page: forget it, read the page again.
+        if (ArticleExtractor.looksLikeConsentWall(content)) {
             withContext(Dispatchers.IO) { lock.withLock { fileFor(id).delete() } }
             return null
         }
-        synchronized(memory) { memory[id] = content }
         return content
     }
 
@@ -149,13 +175,15 @@ class ArticleRepository(
         if (!aggregated) return item.url
         val site = item.source.ifBlank { item.publisherDomain }
         val resolved = try {
-            linkResolver.resolve(item.url)
+            linkResolver.resolveOrThrow(item.url)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            throw ArticleException(ReadOutcome.NETWORK, site, cause = e)
+            // Google could not be asked (offline, rate limit, changed page): worth another try.
+            throw ArticleException(ReadOutcome.NETWORK, site, (e as? LinkResolveException)?.httpCode, e, via = AGGREGATOR_NAME)
         }
         val url = resolved.toHttpUrlOrNull()
+        // Resolved, but not to a publisher's page: the link itself holds no article.
         if (url == null || isAggregatorHost(url.host)) throw ArticleException(ReadOutcome.NOT_ARTICLE, site)
         return url.toString()
     }
@@ -306,6 +334,9 @@ class ArticleRepository(
         private const val MAX_HTML_BYTES = 3 * 1024 * 1024
         private const val ERROR_BYTES = 64 * 1024
         private const val MAX_REDIRECTS = 10
+
+        /** The only aggregator whose links the reader resolves. */
+        private const val AGGREGATOR_NAME = "Google News"
 
         /** Cached articles are kept this long (the feed itself forgets articles after a few days). */
         val KEEP_FOR: Duration = Duration.ofDays(7)

@@ -1,12 +1,16 @@
 package com.cedrickgd.morgenbriefing.data.remote
 
 import android.util.Log
+import com.cedrickgd.morgenbriefing.data.article.LinkResolveException
 import com.cedrickgd.morgenbriefing.data.article.LinkResolver
 import com.cedrickgd.morgenbriefing.data.local.JsonFiles
 import com.cedrickgd.morgenbriefing.data.news.GoogleNews
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -47,8 +51,9 @@ import java.util.concurrent.TimeUnit
  *    consent cookie, otherwise EU requests end on consent.google.com (checked 05.11.2026).
  *
  * Results are kept in a small JSON file ([cacheFile], at most [maxEntries], oldest dropped
- * first). Every failure (offline, timeout, changed page) returns the original link, which the
- * browser can still open; it is tried again next time.
+ * first). Failures (offline, timeout, an error status, a changed page) are not remembered: the
+ * link is tried again next time. [resolve] then returns the original link, which the browser can
+ * still open; [resolveOrThrow] says why, so the reader can offer to try again.
  */
 class GoogleNewsDecoder(
     http: OkHttpClient,
@@ -74,36 +79,81 @@ class GoogleNewsDecoder(
     @Volatile
     private var snapshot: Map<String, String> = emptyMap()
 
-    /** Decodes in flight, so two screens asking for the same link share one round trip. */
-    private val inFlight = HashMap<String, CompletableDeferred<String?>>()
+    /**
+     * Decodes in flight, so two screens asking for the same link share one round trip. A decode
+     * that ends hands its result – the URL or why it failed – to everyone waiting; one that is
+     * cancelled (its screen was left) cancels the deferred, and a waiter that still wants the
+     * link decodes it itself.
+     */
+    private val inFlight = HashMap<String, CompletableDeferred<Result<String>>>()
 
-    override suspend fun resolve(url: String): String {
+    /** The publisher URL, or the original link when it cannot be resolved now (the browser can still open it). */
+    override suspend fun resolve(url: String): String = try {
+        resolveOrThrow(url)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: IOException) {
+        Log.i(TAG, "Google News link not resolved: ${e.message}")
+        url
+    } catch (e: Exception) {
+        Log.w(TAG, "Google News link not resolved", e)
+        url
+    }
+
+    /**
+     * The publisher URL; [url] itself when it is no Google News article link.
+     *
+     * @throws LinkResolveException when Google could not be asked or did not tell (offline,
+     *   timeout, an error status, a changed page) – it is tried again next time.
+     */
+    override suspend fun resolveOrThrow(url: String): String {
         val id = GoogleNews.articleId(url) ?: return url
         cached(id)?.let { return it }
         decodeOffline(id)?.let { found ->
             remember(id, found)
             return found
         }
-        val (deferred, owner) = synchronized(inFlight) {
-            inFlight[id]?.let { it to false } ?: CompletableDeferred<String?>().also { inFlight[id] = it }.let { it to true }
+        while (true) {
+            val (deferred, owner) = synchronized(inFlight) {
+                inFlight[id]?.let { it to false } ?: CompletableDeferred<Result<String>>().also { inFlight[id] = it }.let { it to true }
+            }
+            if (owner) return decodeShared(id, url, deferred)
+            val result = try {
+                deferred.await()
+            } catch (e: CancellationException) {
+                // Either this caller was cancelled (rethrow) or the decode it waited for was: decode here.
+                currentCoroutineContext().ensureActive()
+                null
+            }
+            if (result != null) return result.getOrThrow()
         }
-        if (!owner) return deferred.await() ?: url
-        var found: String? = null
+    }
+
+    /** Decodes [id] online as the owner of [deferred]; whoever waits on it gets the same result. */
+    private suspend fun decodeShared(id: String, url: String, deferred: CompletableDeferred<Result<String>>): String {
+        var result: Result<String>? = null
         try {
-            found = decodeOnline(id, url)
+            result = Result.success(decodeOnline(id, url))
         } catch (e: CancellationException) {
             throw e
+        } catch (e: LinkResolveException) {
+            result = Result.failure(e)
         } catch (e: IOException) {
-            Log.i(TAG, "Google News link not resolved: ${e.message}")
+            result = Result.failure(LinkResolveException(e.message ?: "Google News not reachable", null, e))
         } catch (e: Exception) {
-            // A changed page or answer format must never break the reader: fall back to the link.
-            Log.w(TAG, "Google News link not resolved", e)
+            // A changed page or answer format must never break the reader: it is a failure to resolve, nothing more.
+            Log.w(TAG, "Google News answer not understood", e)
+            result = Result.failure(LinkResolveException("Google News answer not understood", null, e))
         } finally {
             synchronized(inFlight) { inFlight.remove(id) }
-            deferred.complete(found)
+            // Cancelled (no result, or a read that failed because the call was cancelled): the
+            // waiters must not take that for "Google did not tell".
+            val outcome = result
+            if (outcome == null || !currentCoroutineContext().isActive) deferred.cancel() else deferred.complete(outcome)
         }
-        found?.let { remember(id, it) }
-        return found ?: url
+        val found = result!!.getOrThrow()
+        remember(id, found)
+        return found
     }
 
     /** The publisher URL [url] resolved to before, without any I/O; null when not known (yet). */
@@ -155,7 +205,7 @@ class GoogleNewsDecoder(
     }
 
     /** Step 1 (article page → signature + timestamp) and step 2 (batchexecute → URL). */
-    private suspend fun decodeOnline(id: String, original: String): String? {
+    private suspend fun decodeOnline(id: String, original: String): String {
         val edition = original.toHttpUrlOrNull()
         val page = baseUrl.newBuilder()
             .addPathSegments("rss/articles").addPathSegment(id)
@@ -175,10 +225,10 @@ class GoogleNewsDecoder(
             // Some links still redirect straight to the publisher.
             val landed = r.request.url
             if (landed.host != baseUrl.host && isPublisherUrl(landed.toString())) return landed.toString()
-            if (!r.isSuccessful) throw IOException("article page HTTP ${r.code}")
+            if (!r.isSuccessful) throw LinkResolveException("article page HTTP ${r.code}", r.code)
             withContext(Dispatchers.IO) { r.body.string() }
         }
-        val params = signatureOf(html) ?: throw IOException("article page without signature")
+        val params = signatureOf(html) ?: throw LinkResolveException("article page without signature", null)
         val body = "f.req=" + URLEncoder.encode(batchRequest(id, params.timestamp, params.signature), "UTF-8")
         val post = Request.Builder().url(baseUrl.newBuilder().addPathSegments("_/DotsSplashUi/data/batchexecute").build())
             .header("User-Agent", BROWSER_USER_AGENT)
@@ -186,10 +236,10 @@ class GoogleNewsDecoder(
             .post(body.toRequestBody(FORM))
             .build()
         val answer = client.newCall(post).await().use { r ->
-            if (!r.isSuccessful) throw IOException("batchexecute HTTP ${r.code}")
+            if (!r.isSuccessful) throw LinkResolveException("batchexecute HTTP ${r.code}", r.code)
             withContext(Dispatchers.IO) { r.body.string() }
         }
-        return parseBatchResponse(answer) ?: throw IOException("batchexecute without URL")
+        return parseBatchResponse(answer) ?: throw LinkResolveException("batchexecute without URL", null)
     }
 
     @Serializable

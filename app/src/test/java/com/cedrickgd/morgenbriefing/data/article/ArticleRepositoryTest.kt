@@ -133,6 +133,83 @@ class ArticleRepositoryTest {
     }
 
     @Test
+    fun `a Google link that cannot be resolved now is a network failure, worth another try`() = runBlocking {
+        val google = item("https://news.google.com/rss/articles/AU_yqLxyz?oc=5", id = "g3", aggregator = "google")
+        val rateLimited = object : LinkResolver {
+            override suspend fun resolve(url: String) = url
+            override suspend fun resolveOrThrow(url: String): String = throw LinkResolveException("batchexecute HTTP 429", 429)
+        }
+        val limited = failure { repository(rateLimited).load(google) }
+        assertEquals(ReadOutcome.NETWORK, limited.outcome)
+        assertEquals(429, limited.httpCode)
+        assertEquals("Google News", limited.via)
+        assertEquals("Testzeitung", limited.site)
+
+        val offline = object : LinkResolver {
+            override suspend fun resolve(url: String) = url
+            override suspend fun resolveOrThrow(url: String): String = throw java.net.UnknownHostException("news.google.com")
+        }
+        val down = failure { repository(offline).load(google) }
+        assertEquals(ReadOutcome.NETWORK, down.outcome)
+        assertNull(down.httpCode)
+        assertEquals("Google News", down.via)
+        // Nothing was learned about any site.
+        assertTrue(store.snapshot().isEmpty())
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `the same article failing again counts once for its site`() = runBlocking {
+        val url = server.url("/gone").toString()
+        repeat(2) { server.enqueue(MockResponse().setResponseCode(404)) }
+        repeat(2) { assertEquals(ReadOutcome.NOT_ARTICLE, failure { repository().load(item(url)) }.outcome) }
+        assertEquals(2, server.requestCount)
+        assertEquals(1, store.statsFor(server.hostName)?.failed)
+    }
+
+    @Test
+    fun `an article cached by an older extractor is shown when the fresh read fails, and kept until one succeeds`() = runBlocking {
+        val url = server.url("/stale").toString()
+        val folder = File(dir, "articles").apply { mkdirs() }
+        val file = File(folder, "a1.json")
+        val old = ArticleContent(
+            url = url, title = "Alt", fetchedAt = now.toString(), format = ArticleContent.FORMAT - 1,
+            blocks = (1..3).map { com.cedrickgd.morgenbriefing.data.model.ArticleBlock.paragraph("Der alte Absatz $it erzählt, was im Rathaus beschlossen wurde und was das für die Stadt bedeutet.") },
+        )
+        file.writeText(AppJson.encodeToString(ArticleContent.serializer(), old))
+        val repo = repository()
+        assertNull("an older copy is not current", repo.cachedOrNull(item(url)))
+        assertTrue(file.exists())
+
+        server.enqueue(MockResponse().setResponseCode(503))
+        assertEquals("Alt", repo.load(item(url)).title)
+        assertTrue("kept for the next try", file.exists())
+
+        server.enqueue(html(article))
+        val fresh = repo.load(item(url))
+        assertEquals(ArticleContent.FORMAT, fresh.format)
+        assertEquals(fresh, repo.cachedOrNull(item(url)))
+    }
+
+    @Test
+    fun `a stored consent page is deleted, never shown as the fallback`() = runBlocking {
+        val url = server.url("/wall").toString()
+        val folder = File(dir, "articles").apply { mkdirs() }
+        val file = File(folder, "a1.json")
+        val wall = ArticleContent(
+            url = url, title = "Cookies zustimmen", fetchedAt = now.toString(), format = ArticleContent.FORMAT - 1,
+            blocks = listOf(
+                com.cedrickgd.morgenbriefing.data.model.ArticleBlock.paragraph("Besuchen Sie uns wie gewohnt mit Werbung und Tracking, indem Sie der Nutzung aller Cookies zustimmen."),
+                com.cedrickgd.morgenbriefing.data.model.ArticleBlock.paragraph("Oder lesen Sie ohne Werbung und Tracking mit dem Pur-Abo für wenige Euro im Monat."),
+            ),
+        )
+        file.writeText(AppJson.encodeToString(ArticleContent.serializer(), wall))
+        server.enqueue(MockResponse().setResponseCode(503))
+        assertEquals(ReadOutcome.NETWORK, failure { repository().load(item(url)) }.outcome)
+        assertTrue(!file.exists())
+    }
+
+    @Test
     fun `Accept-Language follows the site's country, else the item's language`() = runBlocking {
         server.enqueue(html(article))
         repository().load(item(server.url("/x").toString()), language = "fr")
