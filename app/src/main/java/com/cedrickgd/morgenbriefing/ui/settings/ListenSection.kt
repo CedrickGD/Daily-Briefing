@@ -220,12 +220,15 @@ internal fun ListenCard(settings: AppSettings, actions: ListenCardActions, modif
                 modifier = Modifier.padding(bottom = 8.dp),
             )
         }
-        GlassPillButton(
-            text = strings.installMoreVoices,
-            onClick = { controller.openVoiceInstaller(context, language) },
-            icon = Icons.Rounded.Download,
-            style = PillStyle.Quiet,
-        )
+        // Without any voice for the language, the note above already offers the installer.
+        if (!panel.noVoice) {
+            GlassPillButton(
+                text = strings.installMoreVoices,
+                onClick = { controller.openVoiceInstaller(context, language) },
+                icon = Icons.Rounded.Download,
+                style = PillStyle.Quiet,
+            )
+        }
     }
 }
 
