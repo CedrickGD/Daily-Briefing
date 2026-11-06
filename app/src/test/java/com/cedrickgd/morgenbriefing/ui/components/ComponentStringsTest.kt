@@ -17,7 +17,6 @@ class ComponentStringsTest {
         assertEquals("VOR DER TÜR · BAD DÜBEN", de.outsideAt("Bad Düben").uppercase(locale))
         assertEquals("LEIPZIG · 10–18 UHR", de.dayCurveTitle("Leipzig", 10, 18, tomorrow = false).uppercase(locale))
         assertEquals("MORGEN · LEIPZIG · 10–18 UHR", de.dayCurveTitle("Leipzig", 10, 18, tomorrow = true).uppercase(locale))
-        assertEquals("AKTUELL · STAND 07:12", de.latestAsOf("07:12").uppercase(locale))
         assertEquals("ANZIEHEN", de.clothingTitle.uppercase(locale))
     }
 
@@ -50,7 +49,7 @@ class ComponentStringsTest {
         for (lang in AppLanguage.entries) {
             val s = ComponentStrings.of(lang)
             val texts = listOf(
-                s.noHourlyValues, s.now, s.clothingTitle, s.yourNews, s.latest, s.farewell, s.loadingBriefing,
+                s.noHourlyValues, s.now, s.clothingTitle, s.farewell, s.loadingBriefing,
                 s.details, s.showDetails, s.hideDetails, s.expanded, s.collapsed, s.errorDetailsClip, s.detailsCopied,
                 s.copy, s.linkCannotOpen, s.shareChooser, s.shareUnavailable, s.noBrowser,
             )

@@ -26,10 +26,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
@@ -201,6 +206,71 @@ fun Modifier.glass(
         )
     }
     if (edge) withSheen.border(1.dp, edgeBrush, shape) else withSheen
+}
+
+/** Corner radius of the feed's story cards (docs/DESIGN.md §7). */
+val StoryCardRadius: Dp = 26.dp
+
+/**
+ * One piece of a glass card that spans several lazy-list items (a "Für dich" topic, the endless
+ * lists): the same frosted surface as [glass], cut into pieces that join without a seam. Only the
+ * [top] piece has the rounded top corners and the sheen, only the [bottom] piece the rounded
+ * bottom; the 1 dp rim runs down the sides and closes around the rounded ends. A single item is
+ * both. Without real blur (Android < 12, light effects) it is the same milky tint as [glass].
+ */
+fun Modifier.glassCardPart(
+    top: Boolean,
+    bottom: Boolean,
+    radius: Dp = StoryCardRadius,
+    level: GlassLevel = GlassLevel.Regular,
+): Modifier = composed {
+    val state = LocalGlassState.current
+    val dark = isGlassDark()
+    val shape = RoundedCornerShape(
+        topStart = if (top) radius else 0.dp,
+        topEnd = if (top) radius else 0.dp,
+        bottomStart = if (bottom) radius else 0.dp,
+        bottomEnd = if (bottom) radius else 0.dp,
+    )
+    val sheen = Color.White.copy(alpha = if (dark) 0.10f else 0.16f)
+    // One even rim for every piece: a gradient per piece would restart at every seam.
+    val rim = Color.White.copy(alpha = if (dark) 0.12f else 0.34f)
+    val surface = clip(shape).then(
+        if (state != null && glassBlurEnabled()) {
+            Modifier.hazeEffect(state = state, style = glassStyle(level)) { inputScale = GlassInputScale }
+        } else {
+            val alpha = fallbackAlpha(if (dark) level.tintDark else level.tintLight, floating = false)
+            Modifier.background(glassTint().copy(alpha = alpha))
+        },
+    )
+    surface.drawBehind {
+        if (top) {
+            drawRect(
+                Brush.verticalGradient(
+                    0f to sheen,
+                    (18.dp.toPx() / size.height).coerceIn(0.01f, 1f) to Color.Transparent,
+                ),
+            )
+        }
+    }.drawWithContent {
+        drawContent()
+        val stroke = 1.dp.toPx()
+        val corner = radius.toPx()
+        // The outline of the whole card, reaching past this piece where the card goes on: clipped
+        // to the piece, only its sides (and its rounded end, if it has one) remain.
+        val reach = corner * 2f
+        val upper = if (top) stroke / 2f else -reach
+        val lower = if (bottom) size.height - stroke / 2f else size.height + reach
+        clipRect {
+            drawRoundRect(
+                color = rim,
+                topLeft = Offset(stroke / 2f, upper),
+                size = Size(size.width - stroke, lower - upper),
+                cornerRadius = CornerRadius(corner),
+                style = Stroke(width = stroke),
+            )
+        }
+    }
 }
 
 /**

@@ -95,6 +95,9 @@ class ShellNavigator internal constructor(
      */
     fun openDiscover(categoryId: String? = null) = open(DiscoverRoute(categoryId))
 
+    /** Opens "Themen entdecken" with its place search open, to follow a place's local news. */
+    fun openPlaceSearch() = open(DiscoverRoute(addPlace = true))
+
     /** Opens the news search over the pager, running [query] at once when given (see [NavPlan]). */
     fun openSearch(query: String? = null) = open(SearchRoute(query?.trim()?.ifEmpty { null }))
 

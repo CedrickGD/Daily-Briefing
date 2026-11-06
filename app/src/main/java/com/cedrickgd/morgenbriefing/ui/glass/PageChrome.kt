@@ -88,13 +88,14 @@ fun PageTitle(
  * lower edge. [onTap] (e.g. "scroll to the top") makes the bar itself tappable; [onTapLabel] is
  * what TalkBack announces for that tap (default: scroll to the top).
  *
- * [bottom] adds a second row inside the same glass surface (the feed's chip row once it
+ * [bottom] adds a second row inside the same glass surface (the feed bar of "Heute" once it
  * sticks): it appears in place at once while the glass grows down behind it with a spring, so
- * the bar seems to take the row in — one surface, one edge.
+ * the bar seems to take the row in — one surface, one edge. Without a [title] the bar has no
+ * title row: a frosted strip behind the status bar that grows to carry [bottom].
  */
 @Composable
 fun BoxScope.TopGlassBar(
-    title: String,
+    title: String?,
     visible: Boolean,
     onTap: (() -> Unit)? = null,
     onTapLabel: String = componentStrings().scrollToTop,
@@ -182,24 +183,26 @@ fun BoxScope.TopGlassBar(
                     )
                     .padding(top = statusTop),
             ) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .padding(start = 20.dp, end = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge.copy(fontFamily = MaterialTheme.typography.displaySmall.fontFamily),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .weight(1f)
-                            .semantics { heading() },
-                    )
-                    actions()
+                if (title != null) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .padding(start = 20.dp, end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge.copy(fontFamily = MaterialTheme.typography.displaySmall.fontFamily),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .semantics { heading() },
+                        )
+                        actions()
+                    }
                 }
                 bottom?.invoke()
             }

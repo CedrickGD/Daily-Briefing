@@ -1,9 +1,6 @@
 package com.cedrickgd.morgenbriefing.ui.news
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,40 +11,29 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.ui.components.GlassPillButton
-import com.cedrickgd.morgenbriefing.ui.components.entrance
-import com.cedrickgd.morgenbriefing.ui.components.pressScale
-import com.cedrickgd.morgenbriefing.ui.components.rememberEntrance
 import com.cedrickgd.morgenbriefing.ui.glass.GlassLevel
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
 import com.cedrickgd.morgenbriefing.ui.glass.glass
@@ -56,139 +42,6 @@ import java.time.ZonedDateTime
 
 /** Side margin of feed content (docs/DESIGN.md §5: 16 dp). */
 internal val FeedGutter: Dp = 16.dp
-
-/** Extra space below a feed entry on top of the list spacing (16 + 14 = 30 dp between entries). */
-private val EntryGap = 14.dp
-
-/**
- * Opens a topic in the feed like a newspaper section: a hairline, then the topic's icon on its
- * gradient tile, the title in the topic's color with a one-line description below, and the
- * article count with a chevron on the right — straight on the sky. Tapping it opens the topic's
- * own endless list ([onOpen]; null while the topic has nothing to show).
- */
-@Composable
-fun FeedSectionHeader(
-    topic: Topic,
-    count: Int,
-    modifier: Modifier = Modifier,
-    subtitle: String = "",
-    onOpen: (() -> Unit)? = null,
-) {
-    val colors = MaterialTheme.colorScheme
-    val strings = feedStrings()
-    val language = LocalAppLanguage.current
-    val topicColors = rememberTopicColors(topic)
-    val tint = if (isDarkTheme()) topicColors.onContainer else topicColors.strong
-    val interaction = remember { MutableInteractionSource() }
-    Column(modifier.fillMaxWidth()) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(colors.onSurface.copy(alpha = 0.10f)),
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 64.dp)
-                .then(
-                    if (onOpen != null) {
-                        Modifier
-                            .pressScale(interaction, pressedScale = 0.98f)
-                            .clickable(
-                                interactionSource = interaction,
-                                indication = null,
-                                role = Role.Button,
-                                onClickLabel = strings.openTopic(topic.title),
-                                onClick = onOpen,
-                            )
-                    } else {
-                        Modifier
-                    },
-                )
-                .semantics(mergeDescendants = true) { heading() }
-                .padding(horizontal = 4.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TopicTile(topic, diameter = 40.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = topic.title.uppercase(language.locale),
-                    style = MaterialTheme.typography.labelLarge.copy(letterSpacing = OverlineLetterSpacing, fontWeight = FontWeight.SemiBold),
-                    color = tint,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (subtitle.isNotBlank()) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = strings.articleCount(count),
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.onSurfaceVariant,
-                maxLines = 1,
-            )
-            if (onOpen != null) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-    }
-}
-
-/** Glass pill "Alle 37 Meldungen zu KI & Tech →" that opens the topic's own, endless view. */
-@Composable
-fun AllArticlesButton(section: SectionUi, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val topicColors = rememberTopicColors(section.topic)
-    val labelColor = if (isDarkTheme()) topicColors.onContainer else topicColors.strong
-    val interaction = remember { MutableInteractionSource() }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 52.dp)
-            .pressScale(interaction, pressedScale = 0.98f)
-            .glass(shape = GlassShapes.pill, level = GlassLevel.Thin)
-            .clickable(
-                interactionSource = interaction,
-                indication = ripple(),
-                role = Role.Button,
-                onClick = onClick,
-            )
-            .padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = feedStrings().allArticles(section.count, section.topic.title),
-            style = MaterialTheme.typography.labelLarge,
-            color = labelColor,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        Spacer(Modifier.width(6.dp))
-        Icon(
-            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-            contentDescription = null,
-            tint = labelColor,
-            modifier = Modifier.size(20.dp),
-        )
-    }
-}
 
 /**
  * A small overline + serif title introducing a feed view ("Neueste", a topic), with an optional
@@ -337,15 +190,17 @@ fun LoadOlderRow(onLoadOlder: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 /**
- * "Für dich": every followed topic with its header, its first articles as editorial entries
- * and the "Alle … Meldungen" pill that opens the topic's own chip.
+ * "Für dich": one glass card per followed topic – its header (icon tile, name, "Alle →"), the
+ * first story large, the next ones as compact rows (as many as the section size, [SectionUi.top]).
+ * Each row is its own lazy item, drawn as a piece of the card ([sectionRows]).
  *
- * With "nur vollständige Artikel" a section shows its verified articles only; while candidates
- * for it are still being checked a quiet "Weitere Artikel werden geprüft …" row follows them
- * ([verifyOffline]: offline, only articles checked before), and a section whose candidates all
- * turned out incomplete says so.
+ * With "nur vollständige Artikel" a card shows its verified articles only; while candidates for
+ * it are still being checked a quiet "Weitere Artikel werden geprüft …" row closes it
+ * ([verifyOffline]: offline, only articles checked before, the note above the feed says so), and
+ * a topic whose candidates all turned out incomplete says so.
  *
- * @param loadingTopics topics whose refresh is running (empty sections say "lade …").
+ * @param loadingTopics topics whose refresh is running (empty cards say "lade …").
+ * @param onShowAll "Alle →": the topic's own tab.
  * @param keyPrefix keeps keys unique when several feeds share a list.
  */
 internal fun LazyListScope.forYouItems(
@@ -362,76 +217,75 @@ internal fun LazyListScope.forYouItems(
 ) {
     sections.forEach { section ->
         val sectionKey = "$keyPrefix-s${section.index}-${section.id}"
-        item(key = "$sectionKey-header", contentType = "feed-section-header") {
-            FeedSectionHeader(
-                topic = section.topic,
-                count = section.count,
-                subtitle = section.subtitle,
-                onOpen = if (section.isEmpty && section.waiting.isEmpty()) null else ({ onShowAll(section) }),
-                modifier = Modifier
-                    .animateItem()
-                    .padding(horizontal = FeedGutter)
-                    .padding(top = 12.dp),
-            )
-        }
-        if (section.isEmpty) {
-            item(key = "$sectionKey-empty", contentType = "feed-empty") {
-                val strings = feedStrings()
-                val loading = section.id in loadingTopics
-                val checking = section.checking || section.waiting.isNotEmpty()
-                EmptySectionNote(
-                    text = when {
-                        loading -> strings.loadingArticles
-                        checking && verifyOffline -> strings.verifyOffline
-                        checking -> strings.verifying
-                        section.noneComplete -> strings.noneComplete
-                        section.failedSources.isNotEmpty() -> strings.unreachable(section.failedSources.joinToString(", "))
-                        section.fetchedAt == null -> strings.nothingLoadedYet
-                        else -> strings.nothingNewToday
-                    },
-                    loading = loading || (checking && !verifyOffline),
-                    modifier = Modifier.animateItem().padding(horizontal = FeedGutter),
-                )
-            }
-            return@forEach
-        }
-        section.top.forEachIndexed { index, item ->
-            item(key = entryKey(sectionKey, index, item.key), contentType = "feed-entry") {
-                val article = remember(item, section.topic) { FeedArticle(item, section.topic) }
-                AnimatedFeedEntry(article, now, listening.reading(item.key), listening.pausedOn(item.key), actions, hints, showImages)
-            }
-        }
-        // Offline the note above the feed says it once; here only while the check runs.
-        if (section.checking && !verifyOffline) {
-            item(key = "$sectionKey-checking", contentType = "feed-empty") {
-                EmptySectionNote(
-                    text = feedStrings().verifying,
-                    loading = true,
-                    modifier = Modifier.animateItem().padding(horizontal = FeedGutter).padding(bottom = EntryGap),
-                )
-            }
-        }
-        if (section.hasMore) {
-            item(key = "$sectionKey-more", contentType = "feed-more") {
-                AllArticlesButton(
-                    section = section,
-                    onClick = { onShowAll(section) },
-                    modifier = Modifier
-                        .animateItem()
-                        .padding(horizontal = FeedGutter)
-                        .padding(bottom = EntryGap),
-                )
+        for (row in sectionRows(section, verifyOffline)) {
+            when (row.kind) {
+                SectionRowKind.HEADER -> item(key = "$sectionKey-header", contentType = "card-header") {
+                    CardPiece(row.part, Modifier.animateItem().padding(horizontal = FeedGutter)) {
+                        SectionCardHeader(
+                            section = section,
+                            onShowAll = if (canShowAll(section)) ({ onShowAll(section) }) else null,
+                        )
+                    }
+                }
+
+                SectionRowKind.STORY -> {
+                    val story = row.item ?: continue
+                    item(key = entryKey(sectionKey, row.storyIndex, story.key), contentType = "story-${row.style}") {
+                        val article = remember(story, section.topic) { FeedArticle(story, section.topic) }
+                        CardPiece(row.part, Modifier.animateItem().padding(horizontal = FeedGutter)) {
+                            StoryCardItem(
+                                article = article,
+                                style = row.style,
+                                now = now,
+                                listening = listening.reading(story.key),
+                                paused = listening.pausedOn(story.key),
+                                actions = actions,
+                                hints = hints,
+                                showImage = showImages,
+                                showTopic = false,
+                                divider = row.divider,
+                            )
+                        }
+                    }
+                }
+
+                SectionRowKind.CHECKING -> item(key = "$sectionKey-checking", contentType = "card-note") {
+                    CardPiece(row.part, Modifier.animateItem().padding(horizontal = FeedGutter)) {
+                        EmptySectionNote(text = feedStrings().verifying, loading = true)
+                    }
+                }
+
+                SectionRowKind.EMPTY -> item(key = "$sectionKey-empty", contentType = "card-note") {
+                    val strings = feedStrings()
+                    val loading = section.id in loadingTopics
+                    val checking = section.checking || section.waiting.isNotEmpty()
+                    CardPiece(row.part, Modifier.animateItem().padding(horizontal = FeedGutter)) {
+                        EmptySectionNote(
+                            text = when {
+                                loading -> strings.loadingArticles
+                                checking && verifyOffline -> strings.verifyOffline
+                                checking -> strings.verifying
+                                section.noneComplete -> strings.noneComplete
+                                section.failedSources.isNotEmpty() -> strings.unreachable(section.failedSources.joinToString(", "))
+                                section.fetchedAt == null -> strings.nothingLoadedYet
+                                else -> strings.nothingNewToday
+                            },
+                            loading = loading || (checking && !verifyOffline),
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 /**
- * A plain list of editorial entries ("Neueste", a topic).
+ * An endless list as one glass card ("Neueste", a topic's tab): every story a piece of the card,
+ * the first one large when [leadFirst] (a topic), else compact rows only.
  *
- * @param showTopic topic overline above each headline (mixed views).
+ * @param showTopic a small colored topic label above each headline (mixed views).
  */
-internal fun LazyListScope.articleItems(
+internal fun LazyListScope.storyListItems(
     articles: List<FeedArticle>,
     now: ZonedDateTime,
     listening: NowListening?,
@@ -440,40 +294,35 @@ internal fun LazyListScope.articleItems(
     showImages: Boolean,
     keyPrefix: String,
     showTopic: Boolean,
+    leadFirst: Boolean,
 ) {
+    val count = articles.size
     articles.forEachIndexed { index, article ->
-        item(key = entryKey(keyPrefix, index, article.feedKey), contentType = "feed-entry") {
-            AnimatedFeedEntry(article, now, listening.reading(article.item.key), listening.pausedOn(article.item.key), actions, hints, showImages, showTopic)
+        val style = listStoryStyle(index, leadFirst)
+        item(key = entryKey(keyPrefix, index, article.feedKey), contentType = "story-$style") {
+            CardPiece(cardPart(index, count), Modifier.animateItem().padding(horizontal = FeedGutter)) {
+                StoryCardItem(
+                    article = article,
+                    style = style,
+                    now = now,
+                    listening = listening.reading(article.item.key),
+                    paused = listening.pausedOn(article.item.key),
+                    actions = actions,
+                    hints = hints,
+                    showImage = showImages,
+                    showTopic = showTopic,
+                    divider = index < count - 1,
+                )
+            }
         }
     }
 }
 
-/** A [FeedEntry] that rises in once when it first scrolls into view. */
-@Composable
-private fun LazyItemScope.AnimatedFeedEntry(
-    article: FeedArticle,
-    now: ZonedDateTime,
-    listening: Boolean,
-    paused: Boolean,
-    actions: FeedActions,
-    hints: FeedHints,
-    showImage: Boolean,
-    showTopic: Boolean = false,
-) {
-    val entrance = rememberEntrance(durationMillis = 460)
-    FeedEntry(
-        article = article,
-        now = now,
-        listening = listening,
-        paused = paused,
-        actions = actions,
-        hints = hints,
-        showTopic = showTopic,
-        showImage = showImage,
-        modifier = Modifier
-            .animateItem()
-            .padding(horizontal = FeedGutter)
-            .padding(bottom = EntryGap)
-            .entrance(entrance, distance = 18.dp),
-    )
+/** A short note in a card of its own (an empty list that is loading or waiting for its check). */
+internal fun LazyListScope.noteCardItem(key: String, text: String, loading: Boolean) {
+    item(key = key, contentType = "card-note") {
+        CardPiece(CardPart.WHOLE, Modifier.animateItem().padding(horizontal = FeedGutter)) {
+            EmptySectionNote(text = text, loading = loading)
+        }
+    }
 }

@@ -98,7 +98,7 @@ Artikel öffnen / vorladen
 | `listen` | „Zuhören“: Text-to-Speech (Stimme in der Sprache der Nachrichten), Mini-Player, Audio-Fokus |
 | `ui/shell` | Wischbarer Pager Heute → Einstellungen, Glas-Seitenindikator, Chrome-Steuerung, `ShellNavigator` |
 | `ui/glass` | Morgenglas: `Modifier.glass`, `GlassCard`, durchgehender Himmel (`AmbientSky`), Seitentitel/-leiste |
-| `ui/today`, `ui/news` | Heute-Seite, News-Feed (Chips, Sektionen mit Themen-Icons, endlose Listen, Themen-Sheet, Vorladen) |
+| `ui/today`, `ui/news` | Heute-Seite: kompakte Wetterkarte (`TodayWeather`), Feed-Leiste mit Suche und Tabs (`FeedChips`, pinnt oben), Glaskarten je Thema aus Listen-Stücken (`FeedCards` = reine Logik, `StoryCards`, `FeedSections`), endlose Listen, „Deine Themen“-Sheet, Vorladen |
 | `ui/discover` | „Themen entdecken“: Kategorie-Kacheln, Kategorie mit Unterthemen und Vorschau, lokale Orte, gefolgte Suchen |
 | `ui/search` | Suche: Feld, letzte Suchen, „Gerade wichtig“, endlose Ergebnisse (Relevanz/Neueste, Alle Sprachen/Nur Ausgabe, „EN“-Marke, mit „nur lesbar“ nur geprüfte: `SearchView`), „Diesem Thema folgen“ |
 | `ui/settings` | Einstellungen: Status, Sprache & Region, lokale Nachrichten, Wecker, Deine Themen (sortieren, eigene), Quellen, Feed & Lesen, Darstellung, Orte, Wetterblöcke, App/Updates |
@@ -152,6 +152,6 @@ erreicht, Vorlesen über `context.listen`. ViewModels über `viewModelFactory { 
 ## Design
 
 Siehe [DESIGN.md](DESIGN.md): Morgenglas – ein durchgehender, wetterabhängiger Himmel hinter
-allen Seiten, Glasflächen darüber, Serif-Überschriften, redaktioneller Feed (großes Bild, große
-Serif-Headline, Lead, Meta-Zeile mit Zuhören/Teilen), ruhige Bewegung, Barrierefreiheit
+allen Seiten, Glasflächen darüber, Serif-Überschriften, News als Glaskarten (erste Meldung groß,
+dann kompakte Zeilen, alles Weitere im ⋮-Menü), ruhige Bewegung, Barrierefreiheit
 (Content-Descriptions, Touch-Ziele ≥ 48 dp, Kontrast ≥ 4.5:1, „Animationen entfernen“).

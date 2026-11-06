@@ -4,32 +4,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 
 /**
- * Texts of the news feed ("Heute": chips, sections, entries, the ⋮ menu, the topic sheet, the
- * hints above the feed and the endless lists). Pattern: [CommonStrings].
+ * Texts of the news feed ("Heute": the weather card, the feed bar with search and tabs, the
+ * story cards and their ⋮ menu, "Deine Themen", the hints above the feed and the endless
+ * lists). Pattern: [CommonStrings].
  */
 interface FeedStrings {
-    // Chip row
+    // Feed tabs
     val forYou: String
     val latest: String
     val filterRow: String
-    val chooseTopics: String
 
-    // Header
-    fun barTitle(date: String): String
-    val search: String
+    // Search and discover
     val searchDescription: String
-    val discover: String
     val discoverDescription: String
 
     // Counts and labels
     fun articleCount(count: Int): String
     fun allArticles(count: Int, topic: String): String
-    fun openTopic(topic: String): String
     fun stand(clock: String): String
 
-    // Views
-    val latestOverline: String
-    val latestTitle: String
+    // A topic's own list
     fun subTopicsOf(topic: String): String
 
     // Loading, empty and end states
@@ -93,13 +87,7 @@ interface FeedStrings {
     val browserOnly: String
     val browserOnlyDescription: String
 
-    // Topic sheet
-    val sheetOverline: String
-    val sheetTitle: String
-    val sheetHint: String
-    val sourcesAndOwnTopics: String
-    val discoverMoreTopics: String
-    val oneTopicStays: String
+    // "Deine Themen" rows
     val noArticlesRightNow: String
     fun moveUp(topic: String): String
     fun moveDown(topic: String): String
@@ -131,10 +119,26 @@ interface FeedStrings {
     val weatherCreditOffline: String
 
     // Weather part of the page
-    val headlineLoading: String
-    val headlineFallback: String
     val weatherUnavailableTitle: String
     val weatherUnavailableText: String
+
+    // Feed bar (search field, tabs, "＋") and the "Für dich" cards
+    val manageTopics: String
+    val searchPlaceholder: String
+    val showAll: String
+    val continueListening: String
+
+    // "Deine Themen" sheet
+    val yourTopicsTitle: String
+    val yourTopicsHint: String
+    val addPlace: String
+
+    // Compact weather card
+    val dry: String
+    val weatherExpand: String
+    val weatherCollapse: String
+    val weatherExpandedState: String
+    val weatherCollapsedState: String
 
     companion object {
         fun of(lang: AppLanguage): FeedStrings = when (lang) {
@@ -150,21 +154,14 @@ interface FeedStrings {
         override val forYou = "Für dich"
         override val latest = "Neueste"
         override val filterRow = "Nachrichten filtern"
-        override val chooseTopics = "Themen auswählen"
 
-        override fun barTitle(date: String) = "Heute · $date"
-        override val search = "Suchen"
         override val searchDescription = "Nachrichten durchsuchen"
-        override val discover = "Themen"
         override val discoverDescription = "Themen entdecken"
 
         override fun articleCount(count: Int) = if (count == 1) "1 Meldung" else "$count Meldungen"
         override fun allArticles(count: Int, topic: String) = if (count == 1) "Die Meldung zu $topic" else "Alle $count Meldungen zu $topic"
-        override fun openTopic(topic: String) = "Alle Meldungen zu $topic"
         override fun stand(clock: String) = "Stand $clock"
 
-        override val latestOverline = "Alle Themen"
-        override val latestTitle = "Das Neueste zuerst"
         override fun subTopicsOf(topic: String) = "Unterthemen von $topic"
 
         override val loadingNews = "Hole die News …"
@@ -221,12 +218,6 @@ interface FeedStrings {
         override val browserOnly = "Nur im Browser"
         override val browserOnlyDescription = "Diese Seite lässt sich nur im Browser lesen"
 
-        override val sheetOverline = "Dein Feed"
-        override val sheetTitle = "Welche Themen willst du sehen?"
-        override val sheetHint = "Antippen blendet ein oder aus · am Griff ziehen sortiert"
-        override val sourcesAndOwnTopics = "Quellen & eigene Themen"
-        override val discoverMoreTopics = "Weitere Themen entdecken"
-        override val oneTopicStays = "Ein Thema bleibt immer an"
         override val noArticlesRightNow = "Gerade keine Meldungen"
         override fun moveUp(topic: String) = "$topic nach oben"
         override fun moveDown(topic: String) = "$topic nach unten"
@@ -254,31 +245,35 @@ interface FeedStrings {
         override val weatherCredit = "Wetter: Open-Meteo"
         override val weatherCreditOffline = "Wetter: Open-Meteo (offline)"
 
-        override val headlineLoading = "Einen Moment – ich schau kurz nach draußen."
-        override val headlineFallback = "Schön, dass du da bist."
         override val weatherUnavailableTitle = "Wetter gerade nicht erreichbar"
         override val weatherUnavailableText = "Check kurz deine Verbindung – dann hol ich das Wetter nochmal."
+
+        override val manageTopics = "Deine Themen verwalten"
+        override val searchPlaceholder = "Suchen – z. B. SLV-ETF, Midterms"
+        override val showAll = "Alle"
+        override val continueListening = "Weiter zuhören"
+        override val yourTopicsTitle = "Deine Themen"
+        override val yourTopicsHint = "Ziehen zum Sortieren · ✕ entfernt ein Thema"
+        override val addPlace = "Ort hinzufügen"
+        override val dry = "trocken"
+        override val weatherExpand = "Wetter aufklappen"
+        override val weatherCollapse = "Wetter zuklappen"
+        override val weatherExpandedState = "aufgeklappt"
+        override val weatherCollapsedState = "zugeklappt"
     }
 
     private object En : FeedStrings {
         override val forYou = "For you"
         override val latest = "Latest"
         override val filterRow = "Filter the news"
-        override val chooseTopics = "Choose topics"
 
-        override fun barTitle(date: String) = "Today · $date"
-        override val search = "Search"
         override val searchDescription = "Search the news"
-        override val discover = "Topics"
         override val discoverDescription = "Discover topics"
 
         override fun articleCount(count: Int) = if (count == 1) "1 story" else "$count stories"
         override fun allArticles(count: Int, topic: String) = if (count == 1) "The story on $topic" else "All $count stories on $topic"
-        override fun openTopic(topic: String) = "All stories on $topic"
         override fun stand(clock: String) = "Updated $clock"
 
-        override val latestOverline = "All topics"
-        override val latestTitle = "Newest first"
         override fun subTopicsOf(topic: String) = "More within $topic"
 
         override val loadingNews = "Fetching the news …"
@@ -335,12 +330,6 @@ interface FeedStrings {
         override val browserOnly = "Browser only"
         override val browserOnlyDescription = "This site can only be read in the browser"
 
-        override val sheetOverline = "Your feed"
-        override val sheetTitle = "Which topics do you want to see?"
-        override val sheetHint = "Tap to show or hide · drag the handle to reorder"
-        override val sourcesAndOwnTopics = "Sources & your own topics"
-        override val discoverMoreTopics = "Discover more topics"
-        override val oneTopicStays = "One topic always stays on"
         override val noArticlesRightNow = "No stories right now"
         override fun moveUp(topic: String) = "Move $topic up"
         override fun moveDown(topic: String) = "Move $topic down"
@@ -368,31 +357,35 @@ interface FeedStrings {
         override val weatherCredit = "Weather: Open-Meteo"
         override val weatherCreditOffline = "Weather: Open-Meteo (offline)"
 
-        override val headlineLoading = "One moment – just taking a look outside."
-        override val headlineFallback = "Good to see you."
         override val weatherUnavailableTitle = "Weather can't be reached right now"
         override val weatherUnavailableText = "Check your connection quickly – then I'll fetch the weather again."
+
+        override val manageTopics = "Manage your topics"
+        override val searchPlaceholder = "Search – e.g. SLV ETF, midterms"
+        override val showAll = "See all"
+        override val continueListening = "Keep listening"
+        override val yourTopicsTitle = "Your topics"
+        override val yourTopicsHint = "Drag to reorder · ✕ removes a topic"
+        override val addPlace = "Add a place"
+        override val dry = "dry"
+        override val weatherExpand = "Show more weather"
+        override val weatherCollapse = "Show less weather"
+        override val weatherExpandedState = "expanded"
+        override val weatherCollapsedState = "collapsed"
     }
 
     private object Fr : FeedStrings {
         override val forYou = "Pour toi"
         override val latest = "À la une"
         override val filterRow = "Filtrer les actualités"
-        override val chooseTopics = "Choisir les thèmes"
 
-        override fun barTitle(date: String) = "Aujourd'hui · $date"
-        override val search = "Rechercher"
         override val searchDescription = "Rechercher dans l'actualité"
-        override val discover = "Thèmes"
         override val discoverDescription = "Découvrir des thèmes"
 
         override fun articleCount(count: Int) = if (count <= 1) "$count article" else "$count articles"
         override fun allArticles(count: Int, topic: String) = if (count == 1) "L'article sur $topic" else "Les $count articles sur $topic"
-        override fun openTopic(topic: String) = "Tous les articles sur $topic"
         override fun stand(clock: String) = "Mis à jour à $clock"
 
-        override val latestOverline = "Tous les thèmes"
-        override val latestTitle = "Les plus récents d'abord"
         override fun subTopicsOf(topic: String) = "Sous-thèmes de $topic"
 
         override val loadingNews = "Chargement de l'actualité …"
@@ -449,12 +442,6 @@ interface FeedStrings {
         override val browserOnly = "Navigateur"
         override val browserOnlyDescription = "Ce site ne se lit que dans le navigateur"
 
-        override val sheetOverline = "Ton fil"
-        override val sheetTitle = "Quels thèmes veux-tu voir ?"
-        override val sheetHint = "Touche pour afficher ou masquer · fais glisser la poignée pour trier"
-        override val sourcesAndOwnTopics = "Sources et thèmes perso"
-        override val discoverMoreTopics = "Découvrir d'autres thèmes"
-        override val oneTopicStays = "Un thème reste toujours actif"
         override val noArticlesRightNow = "Aucun article pour le moment"
         override fun moveUp(topic: String) = "Monter $topic"
         override fun moveDown(topic: String) = "Descendre $topic"
@@ -482,31 +469,35 @@ interface FeedStrings {
         override val weatherCredit = "Météo : Open-Meteo"
         override val weatherCreditOffline = "Météo : Open-Meteo (hors ligne)"
 
-        override val headlineLoading = "Un instant – je jette un œil dehors."
-        override val headlineFallback = "Ravi de te voir."
         override val weatherUnavailableTitle = "Météo injoignable pour le moment"
         override val weatherUnavailableText = "Vérifie ta connexion – je récupère ensuite la météo."
+
+        override val manageTopics = "Gérer tes thèmes"
+        override val searchPlaceholder = "Rechercher – p. ex. ETF SLV, midterms"
+        override val showAll = "Tout voir"
+        override val continueListening = "Reprendre l'écoute"
+        override val yourTopicsTitle = "Tes thèmes"
+        override val yourTopicsHint = "Fais glisser pour trier · ✕ retire un thème"
+        override val addPlace = "Ajouter un lieu"
+        override val dry = "sec"
+        override val weatherExpand = "Déplier la météo"
+        override val weatherCollapse = "Replier la météo"
+        override val weatherExpandedState = "déplié"
+        override val weatherCollapsedState = "replié"
     }
 
     private object Es : FeedStrings {
         override val forYou = "Para ti"
         override val latest = "Lo último"
         override val filterRow = "Filtrar noticias"
-        override val chooseTopics = "Elegir temas"
 
-        override fun barTitle(date: String) = "Hoy · $date"
-        override val search = "Buscar"
         override val searchDescription = "Buscar noticias"
-        override val discover = "Temas"
         override val discoverDescription = "Descubrir temas"
 
         override fun articleCount(count: Int) = if (count == 1) "1 noticia" else "$count noticias"
         override fun allArticles(count: Int, topic: String) = if (count == 1) "La noticia sobre $topic" else "Las $count noticias sobre $topic"
-        override fun openTopic(topic: String) = "Todas las noticias sobre $topic"
         override fun stand(clock: String) = "Actualizado a las $clock"
 
-        override val latestOverline = "Todos los temas"
-        override val latestTitle = "Lo más reciente primero"
         override fun subTopicsOf(topic: String) = "Subtemas de $topic"
 
         override val loadingNews = "Cargando las noticias …"
@@ -563,12 +554,6 @@ interface FeedStrings {
         override val browserOnly = "Solo navegador"
         override val browserOnlyDescription = "Esta web solo se puede leer en el navegador"
 
-        override val sheetOverline = "Tu feed"
-        override val sheetTitle = "¿Qué temas quieres ver?"
-        override val sheetHint = "Toca para mostrar u ocultar · arrastra el asa para ordenar"
-        override val sourcesAndOwnTopics = "Fuentes y temas propios"
-        override val discoverMoreTopics = "Descubrir más temas"
-        override val oneTopicStays = "Siempre queda un tema activo"
         override val noArticlesRightNow = "Ahora mismo no hay noticias"
         override fun moveUp(topic: String) = "Subir $topic"
         override fun moveDown(topic: String) = "Bajar $topic"
@@ -596,31 +581,35 @@ interface FeedStrings {
         override val weatherCredit = "Tiempo: Open-Meteo"
         override val weatherCreditOffline = "Tiempo: Open-Meteo (sin conexión)"
 
-        override val headlineLoading = "Un momento, echo un vistazo afuera."
-        override val headlineFallback = "Qué bien que estés aquí."
         override val weatherUnavailableTitle = "El tiempo no está disponible ahora mismo"
         override val weatherUnavailableText = "Revisa tu conexión y vuelvo a consultar el tiempo."
+
+        override val manageTopics = "Gestionar tus temas"
+        override val searchPlaceholder = "Buscar – p. ej. ETF SLV, elecciones"
+        override val showAll = "Ver todas"
+        override val continueListening = "Seguir escuchando"
+        override val yourTopicsTitle = "Tus temas"
+        override val yourTopicsHint = "Arrastra para ordenar · ✕ quita un tema"
+        override val addPlace = "Añadir un lugar"
+        override val dry = "seco"
+        override val weatherExpand = "Mostrar más del tiempo"
+        override val weatherCollapse = "Mostrar menos del tiempo"
+        override val weatherExpandedState = "desplegado"
+        override val weatherCollapsedState = "plegado"
     }
 
     private object It : FeedStrings {
         override val forYou = "Per te"
         override val latest = "Ultime"
         override val filterRow = "Filtra le notizie"
-        override val chooseTopics = "Scegli i temi"
 
-        override fun barTitle(date: String) = "Oggi · $date"
-        override val search = "Cerca"
         override val searchDescription = "Cerca tra le notizie"
-        override val discover = "Temi"
         override val discoverDescription = "Scopri i temi"
 
         override fun articleCount(count: Int) = if (count == 1) "1 notizia" else "$count notizie"
         override fun allArticles(count: Int, topic: String) = if (count == 1) "La notizia su $topic" else "Tutte le $count notizie su $topic"
-        override fun openTopic(topic: String) = "Tutte le notizie su $topic"
         override fun stand(clock: String) = "Aggiornato alle $clock"
 
-        override val latestOverline = "Tutti i temi"
-        override val latestTitle = "Prima le più recenti"
         override fun subTopicsOf(topic: String) = "Sottotemi di $topic"
 
         override val loadingNews = "Carico le notizie …"
@@ -677,12 +666,6 @@ interface FeedStrings {
         override val browserOnly = "Solo browser"
         override val browserOnlyDescription = "Questo sito si legge solo nel browser"
 
-        override val sheetOverline = "Il tuo feed"
-        override val sheetTitle = "Quali temi vuoi vedere?"
-        override val sheetHint = "Tocca per mostrare o nascondere · trascina la maniglia per ordinare"
-        override val sourcesAndOwnTopics = "Fonti e temi personali"
-        override val discoverMoreTopics = "Scopri altri temi"
-        override val oneTopicStays = "Un tema resta sempre attivo"
         override val noArticlesRightNow = "Al momento nessuna notizia"
         override fun moveUp(topic: String) = "Sposta su $topic"
         override fun moveDown(topic: String) = "Sposta giù $topic"
@@ -710,10 +693,21 @@ interface FeedStrings {
         override val weatherCredit = "Meteo: Open-Meteo"
         override val weatherCreditOffline = "Meteo: Open-Meteo (offline)"
 
-        override val headlineLoading = "Un attimo, do un'occhiata fuori."
-        override val headlineFallback = "Che bello vederti."
         override val weatherUnavailableTitle = "Meteo non raggiungibile al momento"
         override val weatherUnavailableText = "Controlla la connessione, poi riprovo a caricare il meteo."
+
+        override val manageTopics = "Gestisci i tuoi temi"
+        override val searchPlaceholder = "Cerca – ad es. ETF SLV, midterm"
+        override val showAll = "Vedi tutte"
+        override val continueListening = "Continua ad ascoltare"
+        override val yourTopicsTitle = "I tuoi temi"
+        override val yourTopicsHint = "Trascina per ordinare · ✕ rimuove un tema"
+        override val addPlace = "Aggiungi un luogo"
+        override val dry = "asciutto"
+        override val weatherExpand = "Mostra più meteo"
+        override val weatherCollapse = "Mostra meno meteo"
+        override val weatherExpandedState = "espanso"
+        override val weatherCollapsedState = "compresso"
     }
 }
 

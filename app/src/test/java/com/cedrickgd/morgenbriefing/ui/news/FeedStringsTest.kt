@@ -12,12 +12,11 @@ class FeedStringsTest {
     /** Every text of [strings], the ones with values filled in. */
     private fun texts(strings: FeedStrings): Map<String, String> = with(strings) {
         mapOf(
-            "forYou" to forYou, "latest" to latest, "filterRow" to filterRow, "chooseTopics" to chooseTopics,
-            "barTitle" to barTitle("Do., 5. Nov."), "search" to search, "searchDescription" to searchDescription,
-            "discover" to discover, "discoverDescription" to discoverDescription,
+            "forYou" to forYou, "latest" to latest, "filterRow" to filterRow,
+            "searchDescription" to searchDescription, "discoverDescription" to discoverDescription,
             "articleCount1" to articleCount(1), "articleCount5" to articleCount(5),
-            "allArticles1" to allArticles(1, "X"), "allArticles5" to allArticles(5, "X"), "openTopic" to openTopic("X"),
-            "stand" to stand("07:12"), "latestOverline" to latestOverline, "latestTitle" to latestTitle,
+            "allArticles1" to allArticles(1, "X"), "allArticles5" to allArticles(5, "X"),
+            "stand" to stand("07:12"),
             "subTopicsOf" to subTopicsOf("X"), "loadingNews" to loadingNews, "loadingArticles" to loadingArticles,
             "moreComing" to moreComing, "loadingOlder" to loadingOlder, "nothingOlderFound" to nothingOlderFound,
             "searchFurtherBack" to searchFurtherBack, "listEnd" to listEnd(3), "noArticlesYet" to noArticlesYet,
@@ -31,9 +30,8 @@ class FeedStringsTest {
             "readArticle" to readArticle, "hideSource" to hideSource("X"), "followTopic" to followTopic("X"),
             "unfollowTopic" to unfollowTopic("X"), "fullText" to fullText, "fullTextDescription" to fullTextDescription,
             "paywall" to paywall, "paywallDescription" to paywallDescription, "browserOnly" to browserOnly,
-            "browserOnlyDescription" to browserOnlyDescription, "sheetOverline" to sheetOverline, "sheetTitle" to sheetTitle,
-            "sheetHint" to sheetHint, "sourcesAndOwnTopics" to sourcesAndOwnTopics, "discoverMoreTopics" to discoverMoreTopics,
-            "oneTopicStays" to oneTopicStays, "noArticlesRightNow" to noArticlesRightNow, "moveUp" to moveUp("X"),
+            "browserOnlyDescription" to browserOnlyDescription,
+            "noArticlesRightNow" to noArticlesRightNow, "moveUp" to moveUp("X"),
             "moveDown" to moveDown("X"), "ctaOverline" to ctaOverline, "ctaTitle" to ctaTitle, "ctaText" to ctaText,
             "suggestionsOverline" to suggestionsOverline, "suggestionsTitle" to suggestionsTitle, "allTopics" to allTopics,
             "allTopicsText" to allTopicsText, "noTopicsTitle" to noTopicsTitle, "noTopicsText" to noTopicsText,
@@ -41,12 +39,16 @@ class FeedStringsTest {
             "offlineCachedTitle" to offlineCachedTitle, "offlineCachedText" to offlineCachedText,
             "noArticlesTitle" to noArticlesTitle, "sourcesSilent" to sourcesSilent, "sourcesSwitchedOff" to sourcesSwitchedOff,
             "checkSources" to checkSources, "sourcesFailing" to sourcesFailing(3), "weatherCredit" to weatherCredit,
-            "weatherCreditOffline" to weatherCreditOffline, "headlineLoading" to headlineLoading,
-            "headlineFallback" to headlineFallback, "weatherUnavailableTitle" to weatherUnavailableTitle,
+            "weatherCreditOffline" to weatherCreditOffline, "weatherUnavailableTitle" to weatherUnavailableTitle,
             "weatherUnavailableText" to weatherUnavailableText,
             "verifying" to verifying, "verifyOffline" to verifyOffline, "noneComplete" to noneComplete,
             "noCompleteTitle" to noCompleteTitle, "noCompleteText" to noCompleteText,
             "verifyOfflineTitle" to verifyOfflineTitle, "verifyOfflineText" to verifyOfflineText,
+            "manageTopics" to manageTopics, "searchPlaceholder" to searchPlaceholder, "showAll" to showAll,
+            "continueListening" to continueListening, "yourTopicsTitle" to yourTopicsTitle,
+            "yourTopicsHint" to yourTopicsHint, "addPlace" to addPlace, "dry" to dry,
+            "weatherExpand" to weatherExpand, "weatherCollapse" to weatherCollapse,
+            "weatherExpandedState" to weatherExpandedState, "weatherCollapsedState" to weatherCollapsedState,
         )
     }
 
@@ -65,6 +67,8 @@ class FeedStringsTest {
             assertTrue(s.unfollowed("Krypto").contains("Krypto"))
             assertTrue(s.sourcesFailing(4).contains("4"))
             assertTrue(s.listEnd(12).contains("12"))
+            // The hint names the ✕ the rows show.
+            assertTrue(s.yourTopicsHint.contains("✕"))
         }
     }
 

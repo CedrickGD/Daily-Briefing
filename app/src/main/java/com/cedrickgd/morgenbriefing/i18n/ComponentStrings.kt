@@ -34,9 +34,6 @@ interface ComponentStrings {
     val clothingTitle: String
 
     // News section header and page footer
-    val yourNews: String
-    val latest: String
-    fun latestAsOf(clock: String): String
     val farewell: String
 
     // Loading skeleton
@@ -90,9 +87,6 @@ interface ComponentStrings {
         override fun chartPoint(hour: Int, temp: String, rainPercent: Int?) =
             "$hour Uhr $temp" + (rainPercent?.let { ", Regen $it Prozent" } ?: "")
         override val clothingTitle = "Anziehen"
-        override val yourNews = "Deine Nachrichten"
-        override val latest = "Aktuell"
-        override fun latestAsOf(clock: String) = "Aktuell · Stand $clock"
         override val farewell = "Bis später"
         override val loadingBriefing = "Dein Briefing wird geladen"
         override val details = "Details"
@@ -129,9 +123,6 @@ interface ComponentStrings {
         override fun chartPoint(hour: Int, temp: String, rainPercent: Int?) =
             "${at(hour)} $temp" + (rainPercent?.let { ", rain $it percent" } ?: "")
         override val clothingTitle = "What to wear"
-        override val yourNews = "Your news"
-        override val latest = "Latest"
-        override fun latestAsOf(clock: String) = "Latest · as of $clock"
         override val farewell = "See you later"
         override val loadingBriefing = "Loading your briefing"
         override val details = "Details"
@@ -167,9 +158,6 @@ interface ComponentStrings {
         override fun chartPoint(hour: Int, temp: String, rainPercent: Int?) =
             "$hour h $temp" + (rainPercent?.let { ", pluie $it pour cent" } ?: "")
         override val clothingTitle = "Quoi porter"
-        override val yourNews = "Tes infos"
-        override val latest = "À la une"
-        override fun latestAsOf(clock: String) = "À la une · mis à jour à $clock"
         override val farewell = "À plus tard"
         override val loadingBriefing = "Chargement de ton briefing"
         override val details = "Détails"
@@ -205,9 +193,6 @@ interface ComponentStrings {
         override fun chartPoint(hour: Int, temp: String, rainPercent: Int?) =
             "$hour h $temp" + (rainPercent?.let { ", lluvia $it por ciento" } ?: "")
         override val clothingTitle = "Qué ponerse"
-        override val yourNews = "Tus noticias"
-        override val latest = "Lo último"
-        override fun latestAsOf(clock: String) = "Lo último · a las $clock"
         override val farewell = "Hasta luego"
         override val loadingBriefing = "Cargando tu briefing"
         override val details = "Detalles"
@@ -243,9 +228,6 @@ interface ComponentStrings {
         override fun chartPoint(hour: Int, temp: String, rainPercent: Int?) =
             "ore $hour $temp" + (rainPercent?.let { ", pioggia $it per cento" } ?: "")
         override val clothingTitle = "Cosa mettere"
-        override val yourNews = "Le tue notizie"
-        override val latest = "In primo piano"
-        override fun latestAsOf(clock: String) = "In primo piano · alle $clock"
         override val farewell = "A più tardi"
         override val loadingBriefing = "Caricamento del tuo briefing"
         override val details = "Dettagli"

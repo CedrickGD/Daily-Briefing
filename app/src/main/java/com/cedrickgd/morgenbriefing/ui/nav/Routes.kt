@@ -20,10 +20,11 @@ data class ArticleRoute(val url: String, val itemId: String? = null, val topicId
 /**
  * "Themen entdecken", pushed over the pager: the category grid, or straight the category
  * [categoryId] (a built-in category id such as `wirtschaft`). The screen switches between grid
- * and category itself; the route only says where it opens.
+ * and category itself; the route only says where it opens. [addPlace] opens it with the place
+ * search of its "Lokal" part ("Ort hinzufügen" in "Deine Themen").
  */
 @Serializable
-data class DiscoverRoute(val categoryId: String? = null)
+data class DiscoverRoute(val categoryId: String? = null, val addPlace: Boolean = false)
 
 /** The news search, pushed over the pager; [query] runs at once (a followed search, a link). */
 @Serializable

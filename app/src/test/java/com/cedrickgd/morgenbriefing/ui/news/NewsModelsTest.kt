@@ -64,14 +64,16 @@ class NewsModelsTest {
     }
 
     @Test
-    fun `chips list for you, latest and every visible topic`() {
+    fun `tabs list for you, latest, every visible topic and the plus`() {
         val feed = buildNewsFeed(emptyMap(), FeedPrefs(AppSettings()), now)
-        val chips = feedChips(feed, FeedStrings.of(AppLanguage.DE))
-        assertEquals("Für dich", chips[0].label)
-        assertEquals(FeedFilter.ForYou, chips[0].filter)
-        assertEquals(FeedFilter.Latest, chips[1].filter)
-        assertEquals(Topics.DEFAULT_ORDER, chips.drop(2).map { (it.filter as FeedFilter.OneTopic).topicId })
-        assertEquals(FeedFilter.ForYou, resolveFilter(FeedFilter.OneTopic("weg"), chips))
+        val tabs = feedTabs(feed, FeedStrings.of(AppLanguage.DE))
+        assertEquals("Für dich", tabs[0].label)
+        assertEquals(FeedFilter.ForYou, tabs[0].filter)
+        assertEquals(FeedFilter.Latest, tabs[1].filter)
+        assertEquals(Topics.DEFAULT_ORDER, tabs.drop(2).dropLast(1).map { (it.filter as FeedFilter.OneTopic).topicId })
+        assertEquals(TabKind.ADD, tabs.last().kind)
+        assertEquals(null, tabs.last().filter)
+        assertEquals(FeedFilter.ForYou, resolveFilter(FeedFilter.OneTopic("weg"), tabs))
         assertEquals(FeedFilter.OneTopic("ki"), FeedFilter.fromKey("topic:ki"))
         assertEquals(FeedFilter.Latest, FeedFilter.fromKey("latest"))
         assertEquals(FeedFilter.ForYou, FeedFilter.fromKey(null))

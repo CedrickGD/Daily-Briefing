@@ -30,6 +30,26 @@ object Reading {
         serif(18.sp * scale, 27.sp * scale, FontWeight.Normal, language)
             .copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
 
+    /** The first, large story of a feed card (docs/DESIGN.md §7: serif, 19 sp). */
+    @Composable
+    @ReadOnlyComposable
+    fun storyLead(language: String? = null): TextStyle =
+        serif(19.sp, 24.sp, FontWeight.SemiBold, language)
+
+    /** A compact story row of a feed card (serif, 16 sp, up to three lines). */
+    @Composable
+    @ReadOnlyComposable
+    fun storyRow(language: String? = null): TextStyle =
+        serif(16.sp, 21.sp, FontWeight.SemiBold, language)
+
+    /** The meta line of a story card ("Quelle · vor 3 Std."): sans, small, quiet. */
+    @Composable
+    @ReadOnlyComposable
+    fun storyMeta(): TextStyle = MaterialTheme.typography.labelMedium.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        letterSpacing = 0.1.sp,
+    )
+
     @Composable
     @ReadOnlyComposable
     fun articleHeadline(scale: Float = 1f, language: String? = null): TextStyle =

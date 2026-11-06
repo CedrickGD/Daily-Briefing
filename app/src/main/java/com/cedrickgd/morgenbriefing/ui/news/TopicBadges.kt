@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -83,21 +84,45 @@ fun TopicChip(topic: Topic, modifier: Modifier = Modifier, compact: Boolean = fa
     }
 }
 
-/** The topic's icon (or, for old custom topics, emoji) in a circle tinted with the topic color. */
+/**
+ * The topic's icon (or, for old custom topics, emoji) on a tile tinted with the topic color: a
+ * circle by default, a rounded square with [shape] (the header of a feed card).
+ */
 @Composable
 internal fun TopicBadge(
     topic: Topic,
     modifier: Modifier = Modifier,
     size: TextUnit = 20.sp,
     diameter: Dp = 40.dp,
+    shape: Shape = CircleShape,
 ) {
     val colors = rememberTopicColors(topic)
     Box(
         modifier = modifier
             .size(diameter)
-            .background(colors.container, CircleShape),
+            .background(colors.container, shape),
         contentAlignment = Alignment.Center,
     ) {
         TopicGlyph(topic, tint = colors.onContainer, size = (size.value * 1.1f).dp)
+    }
+}
+
+/**
+ * The picture slot of a story without a picture: a small tile in the topic's own gradient with
+ * its icon in white – color in the list, never a big generated cover. Decorative.
+ */
+@Composable
+internal fun TopicThumbnail(topic: Topic, modifier: Modifier = Modifier, size: Dp = 80.dp, corner: Dp = 14.dp) {
+    val colors = rememberTopicColors(topic)
+    val shape = RoundedCornerShape(corner)
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(colors.coverStart, colors.coverEnd)))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        TopicGlyph(topic, tint = Color.White.copy(alpha = 0.92f), size = size * 0.4f)
     }
 }

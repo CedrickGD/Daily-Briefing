@@ -24,46 +24,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.cedrickgd.morgenbriefing.i18n.ComponentStrings
-import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.componentStrings
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
-import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
-
-/**
- * Opens the news part of a page: overline ("DEINE NACHRICHTEN · STAND 07:12") and a serif
- * title, straight on the sky.
- *
- * @param stand "07:12" of the last fetch, or empty.
- */
-@Composable
-fun NewsSectionTitle(stand: String, modifier: Modifier = Modifier, title: String = componentStrings().yourNews) {
-    val colors = MaterialTheme.colorScheme
-    val language = LocalAppLanguage.current
-    val strings = ComponentStrings.of(language)
-    Column(modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-        Text(
-            text = (if (stand.isBlank()) strings.latest else strings.latestAsOf(stand)).uppercase(language.locale),
-            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
-            color = headerOverlineColor(colors.onSurfaceVariant, colors.onSurface),
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium,
-            color = colors.onSurface,
-            modifier = Modifier.semantics { heading() },
-        )
-    }
-}
 
 /**
  * A slim tinted banner for a hint about the news (offline, sources down): emoji, one bold

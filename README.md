@@ -18,7 +18,7 @@ Android-App (Kotlin, Jetpack Compose, Material 3), ab **Android 7.0** (API 24). 
 
 | | |
 |---|---|
-| **Heute** | Oben ein animierter Himmel passend zu Wetter und Tageszeit, darunter „Vor der Tür“, die Tageskurve für dein Zeitfenster, Warnungen und was du anziehen solltest. Dann deine Nachrichten: **„Für dich“** zeigt pro Thema die neuesten Meldungen, **„Neueste“** alles chronologisch, und jedes Thema hat einen Chip mit einer **endlosen Liste** – am Ende lädt die App ältere Meldungen nach, so weit du willst. |
+| **Heute** | Oben ein animierter Himmel passend zu Wetter und Tageszeit, darunter das Wetter als **eine kompakte Karte** – Temperatur, Ort, Zustand und eine Zeile „5° – 10° · trocken · Jacke“; antippen klappt Tageskurve, „Vor der Tür“ und was du anziehen solltest auf, Warnungen stehen immer darunter. Dann eine Leiste mit **Suche** und den Tabs **„Für dich“** (je Thema eine Karte: die erste Meldung groß, dann kompakte Zeilen, „Alle →“ öffnet das Thema), **„Neueste“** (alles chronologisch) und einem Tab pro Thema mit einer **endlosen Liste** – am Ende lädt die App ältere Meldungen nach, so weit du willst. Die Leiste bleibt oben stehen; „＋“ öffnet **„Deine Themen“** (sortieren, entfernen, entdecken, Ort hinzufügen). Zuhören, Teilen und mehr stecken im ⋮ jeder Meldung (oder lange drücken). |
 | **Themen entdecken** | **12 Kategorien mit 47 Unterthemen**, jede mit eigenem Icon und eigener Farbe: Schlagzeilen · Politik (Inland, Wahlen, EU, USA, Sicherheit) · Welt (Europa, Amerika, Asien, Nahost, Afrika) · Wirtschaft & Finanzen (Börse & Märkte, Trading & Anlegen, Krypto, Konjunktur & Zinsen, Unternehmen, Verbraucher & Finanzen, Immobilien, Start-ups) · Tech & KI · Wissenschaft · Gesundheit · Klima & Energie · Sport · Kultur & Unterhaltung · Auto & Mobilität · Region. Du folgst einer ganzen Kategorie oder nur den Unterthemen, die dich interessieren; jede Kategorie zeigt vorab die neuesten Schlagzeilen. |
 | **Suche** | Beliebige Begriffe – „Midterms“, „Rheinmetall Aktie“, „Champions League“, Ticker wie „SLV ETF“ (exakt) – in deiner Ausgabe und auf Englisch (US, UK), **nach Relevanz** sortiert (oder neueste zuerst), Kurs- und Forenseiten raus, mit endlos nachladenden Ergebnissen, letzten Suchen und „Gerade wichtig“. **„Diesem Thema folgen“** macht aus einer Suche ein eigenes Thema im Feed. |
 | **Sprache & Region** | **App-Sprache** (wie das Handy, Deutsch, English, Français, Español, Italiano) und **Nachrichten-Ausgabe** (23 Länder, z. B. Deutschland, Österreich, Schweiz, USA, Großbritannien, Frankreich, Spanien, Italien …) sind getrennt einstellbar. **Lokale Nachrichten** gibt es für jeden Ort der Welt: in Deutschland wohnen und Washington, D.C. folgen bringt die Lokalnachrichten aus den USA, auf Englisch. In deutschen Ausgaben kommt das Thema „Region“ zusätzlich von den Sendern deines Bundeslandes. |
@@ -67,10 +67,12 @@ Einstellungen bleiben erhalten.
 
 ### 2. Themen und Quellen anpassen
 
-- **Themen entdecken** (Kompass oben auf „Heute“ oder Einstellungen → Deine Themen): Kategorie
+- **Deine Themen** („＋“ am Ende der Tabs auf „Heute“): sortieren per Ziehen, ✕ entfernt ein
+  Thema, „Themen entdecken“ und „Ort hinzufügen“ führen weiter.
+- **Themen entdecken** (über „Deine Themen“ oder Einstellungen → Deine Themen): Kategorie
   antippen, der ganzen Kategorie oder einzelnen Unterthemen folgen. In den Einstellungen
-  sortierst du deine Themen per Ziehen und legst **eigene Themen** an.
-- **Suche** (Lupe oben auf „Heute“): Begriff eingeben, „Diesem Thema folgen“.
+  legst du außerdem **eigene Themen** an.
+- **Suche** (Suchfeld über den Tabs auf „Heute“): Begriff eingeben, „Diesem Thema folgen“.
 - **Einstellungen → Sprache & Region:** App-Sprache, Nachrichten-Ausgabe, Bundesland, lokale Orte.
 - **Einstellungen → Quellen:** je Thema alle Feeds mit Schalter; **„Eigene Quelle“** nimmt eine
   Feed-Adresse oder die Website einer Redaktion und sucht den Feed selbst.
