@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -53,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
@@ -110,9 +112,9 @@ fun ListenState.showsMiniPlayer(): Boolean = speaking || paused || issue != null
 
 /**
  * Floating glass mini player for "Zuhören": headphones badge (with a gently moving equalizer
- * while it reads), the title as a one-line marquee, a thin progress line, pause/resume and
- * close. When reading is impossible it explains why and offers to install a voice. Slides up
- * and fades in only while there is something to show; otherwise it takes no space.
+ * while it reads), the title as a one-line marquee, a thin progress line, the speed chip,
+ * pause/resume and close. When reading is impossible it explains why and offers to install a
+ * voice. Slides up and fades in only while there is something to show; otherwise it takes no space.
  *
  * Fills the width it gets (max 560 dp, centred) with 16 dp side margins; the shell positions
  * it above the page indicator, on pushed screens above the navigation bar.
@@ -132,6 +134,7 @@ fun ListenMiniPlayer(modifier: Modifier = Modifier, onOpenArticle: ((url: String
         onClose = controller::stop,
         onFix = { controller.installVoiceData(context) },
         modifier = modifier,
+        onSpeed = controller::cycleRate,
         onOpen = onOpenArticle?.let { open ->
             {
                 val current = controller.state.value
@@ -151,6 +154,7 @@ internal fun ListenMiniPlayerContent(
     onFix: () -> Unit,
     modifier: Modifier = Modifier,
     onOpen: (() -> Unit)? = null,
+    onSpeed: (() -> Unit)? = null,
 ) {
     val visible = state.showsMiniPlayer()
     // The controller resets its state when reading ends; keep showing the last visible one
@@ -212,7 +216,7 @@ internal fun ListenMiniPlayerContent(
                     if (issue != null) {
                         IssueContent(issue = issue, voice = shown.voiceLanguage, onFix = onFix, onClose = onClose)
                     } else {
-                        PlayerContent(state = shown, onToggle = onToggle, onClose = onClose, onFix = onFix)
+                        PlayerContent(state = shown, onToggle = onToggle, onClose = onClose, onFix = onFix, onSpeed = onSpeed)
                     }
                 }
             }
@@ -224,7 +228,7 @@ internal fun ListenMiniPlayerContent(
 private class LastVisible(var value: ListenState)
 
 @Composable
-private fun RowScope.PlayerContent(state: ListenState, onToggle: () -> Unit, onClose: () -> Unit, onFix: () -> Unit) {
+private fun RowScope.PlayerContent(state: ListenState, onToggle: () -> Unit, onClose: () -> Unit, onFix: () -> Unit, onSpeed: (() -> Unit)?) {
     val strings = listenStrings()
     val reduceMotion = rememberReduceMotion()
     val progress = animateFloatAsState(
@@ -281,6 +285,7 @@ private fun RowScope.PlayerContent(state: ListenState, onToggle: () -> Unit, onC
             )
         }
     }
+    if (onSpeed != null) SpeedChip(rate = state.rate, onClick = onSpeed)
     ToggleButton(paused = state.paused, onToggle = onToggle)
     IconButton(onClick = onClose) {
         Icon(
@@ -332,7 +337,9 @@ internal fun statusLine(state: ListenState, strings: ListenStrings): String {
         state.onlineVoiceOnly -> "${strings.statusReading} · ${strings.statusOnlineVoice}"
         else -> strings.statusReading
     }
-    val remaining = remainingMinutes(state.estimatedSeconds, state.progress)
+    // The estimate is for normal speed: at 1,5× the rest takes two thirds of the time.
+    val seconds = (state.estimatedSeconds / state.rate.coerceIn(0.25f, 4f)).roundToInt()
+    val remaining = remainingMinutes(seconds, state.progress)
     return if (remaining != null && !state.preparing) "$status · ${strings.remaining(remaining)}" else status
 }
 
@@ -428,6 +435,40 @@ private fun ProgressLine(progress: State<Float>) {
     )
 }
 
+/**
+ * The speed as a compact chip ("1,25×"); a tap moves on to the next speed
+ * (1× → 1,25× → 1,5× → 2× → 0,75×), applied to the reading at once.
+ */
+@Composable
+private fun SpeedChip(rate: Float, onClick: () -> Unit) {
+    val strings = listenStrings()
+    val label = strings.rateLabel(rate)
+    Box(
+        modifier = Modifier
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClickLabel = strings.speedChipAction, onClick = onClick)
+            .semantics { contentDescription = strings.speedChip(label) },
+        contentAlignment = Alignment.Center,
+    ) {
+        AnimatedContent(
+            targetState = label,
+            transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(100)) },
+            label = "listenSpeed",
+        ) { text ->
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                modifier = Modifier
+                    .clearAndSetSemantics { }
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), CircleShape)
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun ToggleButton(paused: Boolean, onToggle: () -> Unit) {
     val strings = listenStrings()
@@ -516,10 +557,12 @@ private fun ListenMiniPlayerPreview() {
                     articleKey = "ki",
                     progress = 0.35f,
                     estimatedSeconds = 260,
+                    rate = 1.25f,
                 ),
                 onToggle = {},
                 onClose = {},
                 onFix = {},
+                onSpeed = {},
             )
             ListenMiniPlayerContent(
                 state = ListenState(paused = true, title = "Euro fällt auf 17-Monats-Tief", progress = 0.7f, estimatedSeconds = 180),

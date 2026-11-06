@@ -7,12 +7,14 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.cedrickgd.morgenbriefing.data.model.AccentId
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.FeedSource
+import com.cedrickgd.morgenbriefing.data.model.ListenSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsAge
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import java.io.IOException
 import java.util.Locale
@@ -172,7 +175,36 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
                 .distinctBy { it.lowercase(Locale.ROOT) }
                 .take(SettingsOps.MAX_RECENT_SEARCHES),
             effects = enumOrDefault(this[Keys.EFFECTS], defaults.effects),
+            listen = listenSettings(defaults.listen),
         )
+    }
+
+    /** "Vorlesen"; installs up to 3.2 have none of these keys and read the defaults (as before). */
+    private fun Preferences.listenSettings(defaults: ListenSettings): ListenSettings = ListenSettings(
+        engine = this[Keys.LISTEN_ENGINE]?.trim()?.takeIf { it.isNotEmpty() },
+        voices = decodeVoices(this[Keys.LISTEN_VOICES]),
+        voicePreference = enumOrDefault(this[Keys.LISTEN_VOICE_PREFERENCE], defaults.voicePreference),
+        rate = this[Keys.LISTEN_RATE]?.let(ListenSettings::snapRate) ?: defaults.rate,
+        pitch = this[Keys.LISTEN_PITCH]?.let(ListenSettings::snapPitch) ?: defaults.pitch,
+        language = ListenSettings.cleanLanguage(this[Keys.LISTEN_LANGUAGE]),
+    )
+
+    /** Language → voice name; unreadable JSON or malformed entries are dropped (automatic voice). */
+    private fun decodeVoices(raw: String?): Map<String, String> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        val decoded = try {
+            AppJson.decodeFromString(VOICES_SERIALIZER, raw)
+        } catch (_: SerializationException) {
+            return emptyMap()
+        } catch (_: IllegalArgumentException) {
+            return emptyMap()
+        }
+        return decoded.entries
+            .mapNotNull { (language, voice) ->
+                val key = ListenSettings.cleanLanguage(language) ?: return@mapNotNull null
+                voice.trim().takeIf { it.isNotEmpty() }?.let { key to it }
+            }
+            .toMap()
     }
 
     /** Stored order first; catalogue topics added in a newer app version are appended. */
@@ -218,6 +250,18 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
         this[Keys.PREFETCH] = s.prefetch.name
         this[Keys.RECENT_SEARCHES] = AppJson.encodeToString(ListSerializer(String.serializer()), s.recentSearches.take(SettingsOps.MAX_RECENT_SEARCHES))
         this[Keys.EFFECTS] = s.effects.name
+        writeListen(s.listen)
+    }
+
+    private fun MutablePreferences.writeListen(l: ListenSettings) {
+        val engine = l.engine?.trim()
+        if (engine.isNullOrEmpty()) remove(Keys.LISTEN_ENGINE) else this[Keys.LISTEN_ENGINE] = engine
+        this[Keys.LISTEN_VOICES] = AppJson.encodeToString(VOICES_SERIALIZER, l.voices.toSortedMap())
+        this[Keys.LISTEN_VOICE_PREFERENCE] = l.voicePreference.name
+        this[Keys.LISTEN_RATE] = ListenSettings.snapRate(l.rate)
+        this[Keys.LISTEN_PITCH] = ListenSettings.snapPitch(l.pitch)
+        val language = ListenSettings.cleanLanguage(l.language)
+        if (language == null) remove(Keys.LISTEN_LANGUAGE) else this[Keys.LISTEN_LANGUAGE] = language
     }
 
     private inline fun <reified E : Enum<E>> enumOrDefault(name: String?, default: E): E =
@@ -285,5 +329,22 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
 
         /** [com.cedrickgd.morgenbriefing.data.model.EffectsMode] by name; missing (installs up to 3.1) = automatic. */
         val EFFECTS = stringPreferencesKey("effects")
+
+        // "Vorlesen" (since 3.3); missing = as before: default engine, automatic voice, normal speed.
+        /** Engine package; missing = the phone's default engine. */
+        val LISTEN_ENGINE = stringPreferencesKey("listen_engine")
+
+        /** JSON object language → voice name. */
+        val LISTEN_VOICES = stringPreferencesKey("listen_voices")
+        val LISTEN_VOICE_PREFERENCE = stringPreferencesKey("listen_voice_preference")
+        val LISTEN_RATE = floatPreferencesKey("listen_rate")
+        val LISTEN_PITCH = floatPreferencesKey("listen_pitch")
+
+        /** Fixed reading language (ISO 639-1); missing = each article in its own language. */
+        val LISTEN_LANGUAGE = stringPreferencesKey("listen_language")
+    }
+
+    private companion object {
+        val VOICES_SERIALIZER = MapSerializer(String.serializer(), String.serializer())
     }
 }

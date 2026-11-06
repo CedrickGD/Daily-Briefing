@@ -85,6 +85,80 @@ enum class PrefetchMode { OFF, WIFI_ONLY, ALWAYS }
  */
 enum class EffectsMode { AUTO, FULL, LIGHT }
 
+/**
+ * "Vorlesen": the kind of voice to read with while no voice is chosen for a language. It only
+ * counts where a voice says what it is (`listen/VoiceGenders`); everywhere else the engine's best
+ * offline voice reads, exactly as with [ANY]. Stored by enum name, never rename one.
+ */
+enum class VoicePreference { ANY, FEMALE, MALE }
+
+/**
+ * How "Zuhören" sounds (Einstellungen → Vorlesen). The defaults read exactly as the app did before
+ * these settings existed: the system's engine, the article's language, the engine's best offline
+ * voice, normal speed and pitch.
+ */
+data class ListenSettings(
+    /** Package of the text-to-speech engine ("com.samsung.SMT"); null = the phone's default engine. */
+    val engine: String? = null,
+    /** The chosen voice per language (ISO 639-1 → the engine's voice name); missing = automatic. */
+    val voices: Map<String, String> = emptyMap(),
+    val voicePreference: VoicePreference = VoicePreference.ANY,
+    /** Speech rate, one of [RATES]; 1 = the phone's normal speed. */
+    val rate: Float = DEFAULT_RATE,
+    /** Pitch, one of [PITCHES]; 1 = the voice's own pitch. */
+    val pitch: Float = DEFAULT_PITCH,
+    /** Null = every article in its own language (automatic); else always this language (ISO 639-1). */
+    val language: String? = null,
+) {
+    /** The voice chosen for [language], or null for automatic. */
+    fun voiceFor(language: String): String? = voices[language.lowercase()]
+
+    /** These settings with [name] chosen for [language] (null = back to automatic). */
+    fun withVoice(language: String, name: String?): ListenSettings {
+        val key = cleanLanguage(language) ?: return this
+        val voice = name?.trim()?.takeIf { it.isNotEmpty() }
+        return copy(voices = if (voice == null) voices - key else voices + (key to voice))
+    }
+
+    companion object {
+        const val DEFAULT_RATE = 1f
+        const val DEFAULT_PITCH = 1f
+
+        /** The speeds on offer (slider steps). */
+        val RATES: List<Float> = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+
+        /** The pitches on offer (slider steps). */
+        val PITCHES: List<Float> = listOf(0.8f, 0.9f, 1f, 1.1f, 1.2f)
+
+        /** The mini player's speed chip: 1× → 1,25× → 1,5× → 2× → 0,75× → 1×. */
+        val CHIP_RATES: List<Float> = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
+
+        /** The offered speed closest to [value] (stored or dragged); nonsense reads as normal speed. */
+        fun snapRate(value: Float): Float = nearest(RATES, value, DEFAULT_RATE)
+
+        /** The offered pitch closest to [value]. */
+        fun snapPitch(value: Float): Float = nearest(PITCHES, value, DEFAULT_PITCH)
+
+        /**
+         * The speed after one tap on the chip: the next one in [CHIP_RATES]; from a speed the chip
+         * does not show (0,5× or 1,75× from the settings) the next faster chip speed, after the
+         * fastest the slowest.
+         */
+        fun nextChipRate(current: Float): Float {
+            val index = CHIP_RATES.indexOfFirst { kotlin.math.abs(it - current) < 0.01f }
+            if (index >= 0) return CHIP_RATES[(index + 1) % CHIP_RATES.size]
+            return CHIP_RATES.filter { it > current }.minOrNull() ?: CHIP_RATES.min()
+        }
+
+        /** A stored language code made safe ("DE " → "de"); null for blank or malformed input. */
+        fun cleanLanguage(code: String?): String? =
+            code?.trim()?.lowercase()?.takeIf { it.length in 2..3 && it.all { c -> c in 'a'..'z' } }
+
+        private fun nearest(options: List<Float>, value: Float, default: Float): Float =
+            if (value.isNaN()) default else options.minBy { kotlin.math.abs(it - value) }
+    }
+}
+
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val accent: AccentId = AccentId.DYNAMIC,
@@ -141,6 +215,8 @@ data class AppSettings(
     val recentSearches: List<String> = emptyList(),
     /** Visual effects: automatic (by the phone), full or light. */
     val effects: EffectsMode = EffectsMode.AUTO,
+    /** "Vorlesen": engine, voices, speed, pitch and language of "Zuhören". */
+    val listen: ListenSettings = ListenSettings(),
 ) {
     /** The interface language to use now. */
     val language: AppLanguage get() = AppLanguage.resolve(uiLanguage)

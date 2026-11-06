@@ -5,9 +5,12 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.cedrickgd.morgenbriefing.data.model.EffectsMode
+import com.cedrickgd.morgenbriefing.data.model.ListenSettings
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
+import com.cedrickgd.morgenbriefing.data.model.VoicePreference
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -80,5 +83,78 @@ class SettingsPersistenceTest {
     fun `an unknown stored value falls back to automatic`() = runBlocking {
         store.edit { it[stringPreferencesKey("effects")] = "ULTRA" }
         assertEquals(EffectsMode.AUTO, repository.current().effects)
+    }
+
+    // ---- "Vorlesen" ----
+
+    @Test
+    fun `a fresh install and an install from before 3_3 read aloud as before`() = runBlocking {
+        assertEquals(ListenSettings(), repository.current().listen)
+        // Version 3.2 stored no listen keys at all.
+        store.edit { prefs -> prefs[stringPreferencesKey("theme_mode")] = ThemeMode.DARK.name }
+        val read = repository.current().listen
+        assertEquals(null, read.engine)
+        assertEquals(emptyMap<String, String>(), read.voices)
+        assertEquals(VoicePreference.ANY, read.voicePreference)
+        assertEquals(1f, read.rate)
+        assertEquals(1f, read.pitch)
+        assertEquals(null, read.language)
+        // The next write stores the defaults, leaving "default engine" and "automatic language" unset.
+        repository.update { it.copy(sectionSize = 5) }
+        val prefs = store.data.first()
+        assertEquals(1f, prefs[floatPreferencesKey("listen_rate")])
+        assertEquals("ANY", prefs[stringPreferencesKey("listen_voice_preference")])
+        assertEquals(null, prefs[stringPreferencesKey("listen_engine")])
+        assertEquals(null, prefs[stringPreferencesKey("listen_language")])
+        assertEquals(ListenSettings(), repository.current().listen)
+    }
+
+    @Test
+    fun `every listen setting is stored and read back`() = runBlocking {
+        val listen = ListenSettings(
+            engine = "com.google.android.tts",
+            voices = mapOf("de" to "de-de-x-deb-local", "en" to "en-US-SMTf00"),
+            voicePreference = VoicePreference.FEMALE,
+            rate = 1.5f,
+            pitch = 0.9f,
+            language = "en",
+        )
+        repository.update { it.copy(listen = listen) }
+        assertEquals(listen, repository.current().listen)
+        // Back to the defaults: engine and language keys go away again.
+        repository.update { it.copy(listen = ListenSettings()) }
+        assertEquals(ListenSettings(), repository.current().listen)
+        assertEquals(null, store.data.first()[stringPreferencesKey("listen_engine")])
+        assertEquals(null, store.data.first()[stringPreferencesKey("listen_language")])
+    }
+
+    @Test
+    fun `changing a listen setting leaves every other setting alone`() = runBlocking {
+        repository.update { it.copy(themeMode = ThemeMode.LIGHT, sectionSize = 6, effects = EffectsMode.LIGHT) }
+        val before = repository.current()
+        repository.update { it.copy(listen = it.listen.copy(rate = 1.25f)) }
+        assertEquals(before.copy(listen = before.listen.copy(rate = 1.25f)), repository.current())
+    }
+
+    @Test
+    fun `broken listen values fall back to safe ones`() = runBlocking {
+        store.edit { prefs ->
+            prefs[floatPreferencesKey("listen_rate")] = 7.3f
+            prefs[floatPreferencesKey("listen_pitch")] = Float.NaN
+            prefs[stringPreferencesKey("listen_voices")] = "not json"
+            prefs[stringPreferencesKey("listen_voice_preference")] = "ROBOT"
+            prefs[stringPreferencesKey("listen_language")] = "English"
+            prefs[stringPreferencesKey("listen_engine")] = "   "
+        }
+        val read = repository.current().listen
+        assertEquals(2f, read.rate)
+        assertEquals(1f, read.pitch)
+        assertEquals(emptyMap<String, String>(), read.voices)
+        assertEquals(VoicePreference.ANY, read.voicePreference)
+        assertEquals(null, read.language)
+        assertEquals(null, read.engine)
+        // Malformed entries inside a readable map are dropped one by one.
+        store.edit { it[stringPreferencesKey("listen_voices")] = """{"DE":"de-DE-SMTm00","x1":"a","en":" "}""" }
+        assertEquals(mapOf("de" to "de-DE-SMTm00"), repository.current().listen.voices)
     }
 }

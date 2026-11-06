@@ -37,6 +37,37 @@ internal object ListenLanguages {
         if (language == main.language) return main
         return ItemEdition.googleNewsEdition(item.sourceId) ?: NewsEdition.ALL.firstOrNull { it.language == language } ?: main
     }
+
+    /**
+     * The edition whose voice reads an article of [article]: its own (automatic, [fixed] = null),
+     * else the fixed language – in the article's or the [main] edition's country when they speak
+     * it ("en" for a UK article stays en-GB), else in the first edition of that language.
+     */
+    fun voiceEdition(article: NewsEdition, fixed: String?, main: NewsEdition): NewsEdition {
+        val language = fixed ?: return article
+        if (article.language == language) return article
+        if (main.language == language) return main
+        return NewsEdition.ALL.firstOrNull { it.language == language } ?: NewsEdition("", language)
+    }
+
+    /** The country whose voices come first for [language]: the main edition's, else the first edition's. */
+    fun preferredCountry(language: String, main: NewsEdition): String =
+        voiceEdition(main, language, main).country
+
+    /** The languages "Immer auf …" offers: the main edition's, then the app's own five (and a stored one). */
+    fun fixedChoices(main: NewsEdition, stored: String?): List<String> =
+        (listOf(main.language) + AppLanguage.entries.map { it.code } + listOfNotNull(stored)).distinct()
+
+    /**
+     * The languages whose voice the settings let you choose: the fixed one alone, else the main
+     * edition's, English (searches also bring English results), the languages of followed places
+     * abroad and those a voice was chosen for before.
+     */
+    fun voiceLanguages(settings: AppSettings): List<String> {
+        settings.listen.language?.let { return listOf(it) }
+        val places = settings.localPlaces.mapNotNull { NewsEdition.forCountry(it.countryCode)?.language }
+        return (listOf(settings.edition.language, AppLanguage.EN.code) + places + settings.listen.voices.keys.sorted()).distinct()
+    }
 }
 
 /**
@@ -291,14 +322,43 @@ private fun hardSplit(sentence: String, hard: Int): List<String> {
     return pieces
 }
 
+/**
+ * Where to pick up [text] again when the voice changes mid-way (new speed, voice or pitch): at
+ * the start of the sentence the voice is in at [charOffset] (from `onRangeStart`), so that
+ * sentence is heard whole in the new voice. 0 when the offset is unknown or in the first sentence.
+ */
+internal fun sentenceStartBefore(text: String, charOffset: Int): Int {
+    if (charOffset <= 0 || text.isEmpty()) return 0
+    var start = 0
+    var from = 0
+    for (sentence in splitSentences(text)) {
+        val at = text.indexOf(sentence, from)
+        if (at < 0 || at > charOffset) break
+        start = at
+        from = at + sentence.length
+    }
+    return start
+}
+
 /** Utterance ids carry the playback session, so callbacks of a replaced reading are ignored. */
 internal object UtteranceIds {
     private const val SPEECH = "u"
     private const val SILENCE = "p"
+    private const val PREVIEW = "s"
 
     fun speech(session: Int, index: Int): String = "$SPEECH:$session:$index"
 
     fun silence(session: Int, index: Int): String = "$SILENCE:$session:$index"
+
+    /** The sample sentence of "Probehören" number [count]; never mistaken for a part of a reading. */
+    fun preview(count: Int): String = "$PREVIEW:$count"
+
+    /** The count of a [preview] id, null for every other id. */
+    fun previewCount(id: String?): Int? {
+        val parts = id?.split(':') ?: return null
+        if (parts.size != 2 || parts[0] != PREVIEW) return null
+        return parts[1].toIntOrNull()
+    }
 
     /** (session, index, isSilence) or null for foreign ids. */
     fun parse(id: String?): Triple<Int, Int, Boolean>? {

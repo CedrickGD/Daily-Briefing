@@ -125,8 +125,8 @@ für Android.
   (Thema ausblenden, Quellen anzeigen, Link kopieren). 24–32 dp Abstand zwischen Einträgen,
   dezente Trennlinie optional. Antippen (Bild/Schlagzeile/Text) → Artikel-Leser.
 * **Zuhören**: Android TextToSpeech (in der Sprache der Nachrichten) liest Schlagzeile + Teaser vor; ein schwebender
-  Glas-Mini-Player (über dem Seitenindikator) zeigt Titel, Pause/Weiter, Stopp; Antippen öffnet
-  den Artikel.
+  Glas-Mini-Player (über dem Seitenindikator) zeigt Titel, Tempo-Chip („1,25×“, Antippen wechselt
+  1× → 1,25× → 1,5× → 2× → 0,75×, sofort hörbar), Pause/Weiter, Stopp; Antippen öffnet den Artikel.
 * Unten ein ruhiger Ausklang (Stand, Anzahl Meldungen, kleines „Bis später ☀️“).
 
 **Themen entdecken** – über die Seite geschoben (wie der Reader): 12 große Kategorie-Kacheln im
@@ -154,16 +154,23 @@ dieselben Feed-Einträge, endlos; „Diesem Thema folgen“ als gefüllte Pill.
    findet den Feed und zeigt Titel + Anzahl vor dem Speichern), bei eigenen Themen Bearbeiten/Löschen.
 6. **Feed & Lesen**: Meldungen pro Thema als große Zahl mit ruhigem Slider, Zeitraum als
    Auswahl-Pills, „Bilder anzeigen“; „In der App lesen“, „Nur lesbare Artikel“, „Vorladen“.
-7. **Darstellung**: drei Vorschau-Kacheln (Mini-Handy mit Himmel + Glaskarte) für
+7. **Vorlesen**: Sprachausgabe als Pills (nur bei mehreren Engines, z. B. Samsung · Google),
+   Sprache (Automatisch · feste Sprache), „Stimme für …“ (Sprach-Chips, wenn mehrere zählen),
+   „Am liebsten“ Egal · Weiblich · Männlich (nur Geschlechter, die eine Stimme verrät), Stimmen als
+   Radio-Zeilen („Stimme 1 · weiblich · offline“, Region · Qualität) mit rundem Probehören-Knopf
+   (Equalizer, während die Probe läuft), „Automatisch“ zuerst; Tempo als große Zahl („1,25×“) und
+   Tonhöhe in Worten, je mit ruhigem Slider und Hörprobe beim Loslassen; ehrliche Hinweise (keine
+   Stimme, nur online, gewählte Stimme fehlt) als Lamina-Zeile; „Weitere Stimmen installieren“.
+8. **Darstellung**: drei Vorschau-Kacheln (Mini-Handy mit Himmel + Glaskarte) für
    System/Hell/Dunkel; Akzentfarben als große Farbperlen mit gleitendem Auswahlring + Name;
    **Effekte** als drei Pills mit Symbol (Automatisch · Volle Effekte · Sparsam) und darunter
    eine Zeile, was „Automatisch“ für dieses Handy wählt und warum („Für dieses Handy: sparsam –
    flüssiger auf einfacher Hardware“).
-8. **Orte & Zeitfenster**: zwei Ortskarten mit Live-Mini-Wetter; Zeitfenster-Slider mit
+9. **Orte & Zeitfenster**: zwei Ortskarten mit Live-Mini-Wetter; Zeitfenster-Slider mit
    Sonnensymbolen. Der Ort-Picker ist ein Glas-Sheet: Suchfeld mit Live-Ergebnissen (Flagge, Name,
    Region), „Mein Standort“ als Akzent-Pill, Schnellauswahl großer Städte, der aktuelle Ort als
    Chip. Darunter die Wetterblöcke von „Heute“ als Schalter.
-9. **App**: Version, Update-Karte, Links (Open-Meteo, Quellen, Quellcode).
+10. **App**: Version, Update-Karte, Links (Open-Meteo, Quellen, Quellcode).
 
 ## 8. Qualitätsregeln
 

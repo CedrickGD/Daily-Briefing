@@ -17,12 +17,14 @@ import com.cedrickgd.morgenbriefing.data.model.AccentId
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.EffectsMode
 import com.cedrickgd.morgenbriefing.data.model.FeedSource
+import com.cedrickgd.morgenbriefing.data.model.ListenSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsAge
 import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.PrefetchMode
 import com.cedrickgd.morgenbriefing.data.model.SourceStatus
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
+import com.cedrickgd.morgenbriefing.data.model.VoicePreference
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.model.WeatherSnapshot
@@ -337,6 +339,27 @@ class SettingsViewModel(
     fun setWeatherCard(card: WeatherCard, shown: Boolean) = edit {
         it.copy(weatherCards = if (shown) it.weatherCards + card else it.weatherCards - card)
     }
+
+    // "Vorlesen": the listen controller watches the settings and applies every change at once.
+
+    /** The text-to-speech engine (package); null follows the phone's default engine. */
+    fun setListenEngine(engine: String?) = editListen { it.copy(engine = engine?.takeIf { e -> e.isNotBlank() }) }
+
+    /** A fixed reading language (ISO 639-1); null reads every article in its own language. */
+    fun setListenLanguage(language: String?) = editListen { it.copy(language = ListenSettings.cleanLanguage(language)) }
+
+    /** The preferred kind of voice; the voice chosen for [language] goes back to automatic, so the preference is heard. */
+    fun setVoicePreference(preference: VoicePreference, language: String) =
+        editListen { it.copy(voicePreference = preference).withVoice(language, null) }
+
+    /** The voice for [language] (an engine voice name); null = automatic. */
+    fun setVoice(language: String, name: String?) = editListen { it.withVoice(language, name) }
+
+    fun setListenRate(rate: Float) = editListen { it.copy(rate = ListenSettings.snapRate(rate)) }
+
+    fun setListenPitch(pitch: Float) = editListen { it.copy(pitch = ListenSettings.snapPitch(pitch)) }
+
+    private fun editListen(transform: (ListenSettings) -> ListenSettings) = edit { it.copy(listen = transform(it.listen)) }
 
     /**
      * "Quelle hinzufügen": looks the feed up behind [input] (a feed URL or a website) and reports

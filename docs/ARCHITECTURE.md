@@ -95,13 +95,13 @@ Artikel öffnen / vorladen
 | `notify` | `AlarmScheduler`, `MorningAlarmReceiver`, `SystemEventsReceiver`, `MorningWorker`, `Notifications` |
 | `update` | In-App-Updater: `UpdateChecker`, `ApkDownloader`, `ApkVerifier`, `ApkInstaller`, `UpdateWorker` |
 | `perf` | Geräteklasse und Effekte: `DeviceTiers` (LOW/FULL, rein, getestet), `DeviceProbe` (Speicher, Low-RAM, schnellster Kern aus sysfs, Energiesparmodus), `Effects` (FULL/LIGHT aus Einstellung × Klasse), `Performance` (prozessweit im `AppContainer`), `BackgroundWork` (2 Parse-Threads niedriger Priorität) |
-| `listen` | „Zuhören“: Text-to-Speech (Stimme in der Sprache der Nachrichten), Mini-Player, Audio-Fokus |
+| `listen` | „Zuhören“: Text-to-Speech (Stimme in der Sprache der Nachrichten), Mini-Player mit Tempo-Chip, Audio-Fokus. „Vorlesen“ (`AppSettings.listen`: Engine, feste Sprache, Stimme je Sprache, Vorliebe weiblich/männlich, Tempo, Tonhöhe): `VoiceCatalog` (rein, getestet) macht aus `getVoices()` Listeneinträge („Stimme 1 · weiblich · offline“, lokal/online einmal, nicht installierte gezählt), `VoiceGenders` nennt ein Geschlecht nur, wenn die Stimme es verrät (Wort „female“/„male“, Samsung `SMTf…`/`SMTm…`, Tabelle der Google-Codes), `VoiceChoice` wählt: gewählt → Vorliebe → beste Offline-Stimme (wie früher) → Engine-Standard. Der `ListenController` setzt Stimme, Tempo und Tonhöhe vor jedem Vorlesen; Änderungen mitten im Artikel setzen am Satzanfang neu an. Tempo/Tonhöhe sind Faktoren auf die System-Einstellung der Sprachausgabe (1× = wie das Handy) |
 | `ui/shell` | Wischbarer Pager Heute → Einstellungen, Glas-Seitenindikator, Chrome-Steuerung, `ShellNavigator` |
 | `ui/glass` | Morgenglas: `Modifier.glass`, `GlassCard`, durchgehender Himmel (`AmbientSky`), Seitentitel/-leiste |
 | `ui/today`, `ui/news` | Heute-Seite, News-Feed (Chips, Sektionen mit Themen-Icons, endlose Listen, Themen-Sheet, Vorladen) |
 | `ui/discover` | „Themen entdecken“: Kategorie-Kacheln, Kategorie mit Unterthemen und Vorschau, lokale Orte, gefolgte Suchen |
 | `ui/search` | Suche: Feld, letzte Suchen, „Gerade wichtig“, endlose Ergebnisse (Relevanz/Neueste, Alle Sprachen/Nur Ausgabe, „EN“-Marke, mit „nur lesbar“ nur geprüfte: `SearchView`), „Diesem Thema folgen“ |
-| `ui/settings` | Einstellungen: Status, Sprache & Region, lokale Nachrichten, Wecker, Deine Themen (sortieren, eigene), Quellen, Feed & Lesen, Darstellung, Orte, Wetterblöcke, App/Updates |
+| `ui/settings` | Einstellungen: Status, Sprache & Region, lokale Nachrichten, Wecker, Deine Themen (sortieren, eigene), Quellen, Feed & Lesen, Vorlesen (`ListenSection`), Darstellung, Orte, Wetterblöcke, App/Updates |
 | `ui/onboarding` | Erster Start: Sprache, Ausgabe, Benachrichtigungen, Ort |
 | `ui/theme` | Theme, Akzent-Schemata, Typografie, `Reading` (Serif-Lesestile) |
 | `ui/nav` | `MainRoute` (der Pager), `ArticleRoute`, `DiscoverRoute`, `SearchRoute` (darüber geschoben) |

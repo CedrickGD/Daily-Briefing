@@ -44,6 +44,7 @@ import com.cedrickgd.morgenbriefing.perf.TierAssessment
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.SettingsStrings
+import com.cedrickgd.morgenbriefing.i18n.listenStrings
 import com.cedrickgd.morgenbriefing.i18n.settingsStrings
 import com.cedrickgd.morgenbriefing.notify.MorningWorker
 import com.cedrickgd.morgenbriefing.ui.glass.PageTitle
@@ -86,6 +87,8 @@ private object Block {
     const val SOURCES = "sources"
     const val H_FEED = "h-feed"
     const val FEED = "feed"
+    const val H_LISTEN = "h-listen"
+    const val LISTEN = "listen"
     const val H_LOOK = "h-look"
     const val LOOK = "look"
     const val H_PLACES = "h-places"
@@ -99,7 +102,7 @@ private object Block {
 
     val ALL = listOf(
         TITLE, HERO, H_LANGUAGE, LANGUAGE, LOCAL, H_BRIEFING, BRIEFING, H_TOPICS, TOPICS, H_SOURCES, SOURCES,
-        H_FEED, FEED, H_LOOK, LOOK, H_PLACES, PLACES, WEATHER_CARDS, H_APP, APP, UPDATE, LINKS, FOOTER,
+        H_FEED, FEED, H_LISTEN, LISTEN, H_LOOK, LOOK, H_PLACES, PLACES, WEATHER_CARDS, H_APP, APP, UPDATE, LINKS, FOOTER,
     )
 }
 
@@ -107,7 +110,7 @@ private object Block {
  * Page "Einstellungen" (docs/DESIGN.md §4, §7): transparent over the sky, page title under the
  * status bar and a frosted top bar once it scrolled away. Sections: status hero, Sprache &
  * Region (app language, news edition, Bundesland, local news), Morgenbriefing, Deine Themen,
- * Quellen, Feed, Darstellung, Orte & Zeitfenster (with the weather blocks), App. Every change is
+ * Quellen, Feed, Vorlesen, Darstellung, Orte & Zeitfenster (with the weather blocks), App. Every change is
  * saved immediately; every text follows the interface language.
  *
  * @param onOpenDiscover opens the "Themen entdecken" screen (categories, sub-topics, places).
@@ -300,6 +303,15 @@ fun SettingsScreen(
         onPrefetch = viewModel::setPrefetch,
     )
 
+    val listenActions = ListenCardActions(
+        onEngine = viewModel::setListenEngine,
+        onLanguage = viewModel::setListenLanguage,
+        onPreference = viewModel::setVoicePreference,
+        onVoice = viewModel::setVoice,
+        onRate = viewModel::setListenRate,
+        onPitch = viewModel::setListenPitch,
+    )
+
     val current = settings
     val keys = if (current == null) listOf(Block.TITLE, Block.LOADING) else Block.ALL
 
@@ -376,6 +388,7 @@ fun SettingsScreen(
                         sources = sourcesActions,
                         onToggleSourcesExpanded = { id -> expandedSources = if (id in expandedSources) expandedSources - id else expandedSources + id },
                         feed = feedActions,
+                        listen = listenActions,
                         onWeatherCard = viewModel::setWeatherCard,
                         onEditPlace = ::openPlacePicker,
                         onDayWindow = viewModel::setDayWindow,
@@ -552,6 +565,7 @@ private class BlockCallbacks(
     val sources: SourcesActions,
     val onToggleSourcesExpanded: (String) -> Unit,
     val feed: FeedCardActions,
+    val listen: ListenCardActions,
     val onWeatherCard: (WeatherCard, Boolean) -> Unit,
     val onEditPlace: (PlaceTarget) -> Unit,
     val onDayWindow: (Int, Int) -> Unit,
@@ -641,6 +655,8 @@ private fun SettingsBlock(
         )
         Block.H_FEED -> Heading(strings, key, modifier)
         Block.FEED -> FeedCard(settings = settings, actions = callbacks.feed, modifier = modifier)
+        Block.H_LISTEN -> Heading(strings, key, modifier)
+        Block.LISTEN -> ListenCard(settings = settings, actions = callbacks.listen, modifier = modifier)
         Block.H_LOOK -> Heading(strings, key, modifier)
         Block.LOOK -> AppearanceCard(
             themeMode = settings.themeMode,
@@ -688,7 +704,9 @@ private fun SettingsBlock(
 /** The overline + title of the section that starts at [key]. */
 @Composable
 private fun Heading(strings: SettingsStrings, key: String, modifier: Modifier) {
+    val listen = listenStrings()
     val (overline, title) = when (key) {
+        Block.H_LISTEN -> listen.settingsOverline to listen.settingsTitle
         Block.H_LANGUAGE -> strings.languageOverline to strings.languageTitle
         Block.H_BRIEFING -> strings.briefingOverline to strings.briefingTitle
         Block.H_TOPICS -> strings.topicsOverline to strings.topicsTitle
