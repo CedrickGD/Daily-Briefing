@@ -26,6 +26,9 @@ interface FeedStrings {
     // A topic's own list
     fun subTopicsOf(topic: String): String
 
+    /** Short label of the same button where the tab already names the topic. */
+    val subTopicsShort: String
+
     // Loading, empty and end states
     val loadingNews: String
     val loadingArticles: String
@@ -163,6 +166,7 @@ interface FeedStrings {
         override fun stand(clock: String) = "Stand $clock"
 
         override fun subTopicsOf(topic: String) = "Unterthemen von $topic"
+        override val subTopicsShort = "Unterthemen"
 
         override val loadingNews = "Hole die News …"
         override val loadingArticles = "Hole die Meldungen …"
@@ -275,6 +279,7 @@ interface FeedStrings {
         override fun stand(clock: String) = "Updated $clock"
 
         override fun subTopicsOf(topic: String) = "More within $topic"
+        override val subTopicsShort = "Sub-topics"
 
         override val loadingNews = "Fetching the news …"
         override val loadingArticles = "Fetching the stories …"
@@ -387,6 +392,7 @@ interface FeedStrings {
         override fun stand(clock: String) = "Mis à jour à $clock"
 
         override fun subTopicsOf(topic: String) = "Sous-thèmes de $topic"
+        override val subTopicsShort = "Sous-thèmes"
 
         override val loadingNews = "Chargement de l'actualité …"
         override val loadingArticles = "Chargement des articles …"
@@ -499,6 +505,7 @@ interface FeedStrings {
         override fun stand(clock: String) = "Actualizado a las $clock"
 
         override fun subTopicsOf(topic: String) = "Subtemas de $topic"
+        override val subTopicsShort = "Subtemas"
 
         override val loadingNews = "Cargando las noticias …"
         override val loadingArticles = "Cargando las noticias …"
@@ -611,6 +618,7 @@ interface FeedStrings {
         override fun stand(clock: String) = "Aggiornato alle $clock"
 
         override fun subTopicsOf(topic: String) = "Sottotemi di $topic"
+        override val subTopicsShort = "Sottotemi"
 
         override val loadingNews = "Carico le notizie …"
         override val loadingArticles = "Carico le notizie …"

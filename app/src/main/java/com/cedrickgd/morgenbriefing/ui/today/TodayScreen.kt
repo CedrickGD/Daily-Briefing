@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -825,11 +826,13 @@ private fun TopicListIntro(
             modifier = Modifier.weight(1f),
         )
         if (browseId != null && browseTitle != null) {
+            // The tab above already names the topic: a short label, the full one for TalkBack.
+            val fullLabel = strings.subTopicsOf(browseTitle)
             GlassPillButton(
-                text = strings.subTopicsOf(browseTitle),
+                text = strings.subTopicsShort,
                 onClick = { onOpenDiscover(browseId) },
                 icon = Icons.Rounded.Explore,
-                modifier = Modifier.weight(1f, fill = false),
+                modifier = Modifier.semantics { contentDescription = fullLabel },
             )
         }
     }
