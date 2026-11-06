@@ -6,15 +6,23 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
@@ -87,6 +95,45 @@ fun LoadingSkeleton(modifier: Modifier = Modifier) {
                 Bone(shimmer, widthFraction = 0.64f, height = 12.dp, shape = shapes.extraSmall)
                 Spacer(Modifier.height(16.dp))
                 Bone(shimmer, widthFraction = 0.36f, height = 10.dp, shape = shapes.extraSmall)
+            }
+        }
+    }
+}
+
+/**
+ * The compact weather card of "Heute" while the first weather loads: one shimmering glass card
+ * shaped like it (icon, big temperature, two lines) – the news below are not held up by it.
+ */
+@Composable
+fun WeatherCardSkeleton(modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val dark = colors.background.luminance() < 0.5f
+    val shimmer = Shimmer(
+        base = colors.onSurface.copy(alpha = if (dark) 0.08f else 0.07f),
+        highlight = colors.onSurface.copy(alpha = if (dark) 0.16f else 0.13f),
+        progress = rememberShimmerProgress(),
+    )
+    val shapes = MaterialTheme.shapes
+    val loading = componentStrings().loadingBriefing
+    GlassCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics {
+                contentDescription = loading
+                progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+            },
+        shape = RoundedCornerShape(26.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(36.dp)) { Bone(shimmer, widthFraction = 1f, height = 36.dp, shape = CircleShape) }
+            Spacer(Modifier.width(14.dp))
+            Box(Modifier.width(64.dp)) { Bone(shimmer, widthFraction = 1f, height = 36.dp, shape = shapes.medium) }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Bone(shimmer, widthFraction = 0.7f, height = 14.dp, shape = shapes.extraSmall)
+                Spacer(Modifier.height(8.dp))
+                Bone(shimmer, widthFraction = 0.9f, height = 11.dp, shape = shapes.extraSmall)
             }
         }
     }

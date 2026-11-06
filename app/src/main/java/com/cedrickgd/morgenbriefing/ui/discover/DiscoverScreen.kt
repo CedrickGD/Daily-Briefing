@@ -160,7 +160,8 @@ fun DiscoverScreen(
     val strings = discoverStrings()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    var placeSheetOpen by rememberSaveable { mutableStateOf(false) }
+    // "Ort hinzufügen" on "Heute" opens the screen with the place search.
+    var placeSheetOpen by rememberSaveable { mutableStateOf(route.addPlace) }
     val now = rememberNow()
 
     val latestStrings by rememberUpdatedState(strings)

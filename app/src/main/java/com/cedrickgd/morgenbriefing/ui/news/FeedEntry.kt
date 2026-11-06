@@ -127,6 +127,8 @@ class FeedActions(
     val onFollowTopic: ((Topic) -> Unit)? = null,
     /** The topic the ⋮ menu offers to follow for an article (its sub-topic), if any. */
     val followSuggestion: (FeedArticle) -> Topic? = { null },
+    /** False for the last followed topic: the story menus do not offer to unfollow it. */
+    val canUnfollowTopic: (Topic) -> Boolean = { true },
 )
 
 /**

@@ -16,7 +16,6 @@ import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.Place
-import com.cedrickgd.morgenbriefing.data.SettingsOps
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.model.WeatherCard
 import com.cedrickgd.morgenbriefing.data.news.TopicSources
@@ -48,6 +47,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -95,6 +95,8 @@ data class TodayUiState(
     val stalled: Set<String> = emptySet(),
     /** "Nur vollständige Artikel" wants to check articles, but the phone is offline: only verified ones show. */
     val verifyOffline: Boolean = false,
+    /** The compact weather card is expanded (remembered across launches). */
+    val weatherExpanded: Boolean = false,
 ) {
     val today: LocalDate get() = now.toLocalDate()
     val newsLoading: Boolean get() = loadingTopics.isNotEmpty()
@@ -142,6 +144,7 @@ class TodayViewModel(
     private var newsJob: Job? = null
     private var lastWeatherAttempt: Instant? = null
     private var lastNewsAttempt: Instant? = null
+    private var weatherToggled = false
     private val loadMoreJobs = HashMap<String, Job>()
 
     /** What the screen asked the prefetcher to warm (cancelled when it is left, renewed when it is back). */
@@ -158,6 +161,23 @@ class TodayViewModel(
         }
         observeInputs()
         observeLanguage()
+        viewModelScope.launch {
+            val stored = attempt { container.settings.weatherExpanded.first() }
+                .onFailure { Log.w(TAG, "Weather card state unavailable", it) }
+                .getOrNull() ?: return@launch
+            // A tap that came first wins over the stored state.
+            if (!weatherToggled) _state.update { it.copy(weatherExpanded = stored) }
+        }
+    }
+
+    /** Expands or collapses the weather card; remembered for the next launch. */
+    fun setWeatherExpanded(expanded: Boolean) {
+        weatherToggled = true
+        _state.update { it.copy(weatherExpanded = expanded) }
+        viewModelScope.launch {
+            attempt { container.settings.setWeatherExpanded(expanded) }
+                .onFailure { Log.w(TAG, "Could not store the weather card state", it) }
+        }
     }
 
     /** Pull-to-refresh: weather and news in parallel; joins refreshes that are already running. */
@@ -215,16 +235,7 @@ class TodayViewModel(
         }
     }
 
-    /** Shows or hides a topic in the feed (the "Themen" sheet; same setting as the discover screen). */
-    fun setTopicVisible(topicId: String, visible: Boolean) {
-        viewModelScope.launch {
-            attempt {
-                container.settings.update { settings -> SettingsOps.setFollowed(settings, topicId, visible) }
-            }.onFailure { Log.w(TAG, "Could not store topic visibility", it) }
-        }
-    }
-
-    /** Stores a new topic order (the "Themen" sheet). */
+    /** Stores a new topic order ("Deine Themen"). */
     fun setTopicOrder(order: List<String>) {
         viewModelScope.launch {
             attempt { container.settings.reorderFollowed(order) }

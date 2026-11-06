@@ -10,14 +10,11 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,15 +24,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cedrickgd.morgenbriefing.data.model.CurrentConditions
@@ -50,7 +43,6 @@ import com.cedrickgd.morgenbriefing.i18n.ComponentStrings
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.WeatherStrings
 import com.cedrickgd.morgenbriefing.ui.glass.decorativeMotion
-import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -64,13 +56,13 @@ private const val GUST_NOTE_KMH = 40.0
 private const val LOW_VISIBILITY_M = 5_000.0
 
 /**
- * "Vor der Tür · Bad Düben": big serif temperature, feels-like, condition, chips, home note.
- *
- * A frosted glass card over the sky (docs/DESIGN.md §7) — the tint keeps text contrast
- * independent of the sky behind it, with real blur on Android 12+ and a denser frost below.
+ * What "Vor der Tür" adds beyond the compact weather card (docs/DESIGN.md §7): "Vor der Tür ·
+ * Bad Düben · 07:12", the felt temperature with the condition, the chips (rain, wind, sun,
+ * visibility) and the note for leaving the house. Plain content: the card around it is the
+ * caller's.
  */
 @Composable
-fun HomeWeatherHero(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
+fun WeatherNowDetails(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
     val home = snapshot.home
     val current = home.current
     val condition = Condition.fromCode(current.code)
@@ -79,77 +71,54 @@ fun HomeWeatherHero(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
     val language = LocalAppLanguage.current
     val strings = ComponentStrings.of(language)
 
-    GlassCard(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 20.dp),
-    ) {
-        Column {
-            // At large font sizes only the place shortens ("…"); the time of the reading stays.
-            val overline = typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing)
-            val time = Fmt.clock(home.current.time)
-            Row {
-                Text(
-                    text = strings.outsideAt(home.place.name).uppercase(language.locale),
-                    style = overline,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (time.isNotBlank()) {
-                    Text(text = " · $time", style = overline, color = colors.onSurfaceVariant, maxLines = 1, softWrap = false)
-                }
+    Column(modifier.fillMaxWidth()) {
+        // At large font sizes only the place shortens ("…"); the time of the reading stays.
+        val overline = typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing)
+        val time = Fmt.clock(home.current.time)
+        Row {
+            Text(
+                text = strings.outsideAt(home.place.name).uppercase(language.locale),
+                style = overline,
+                color = colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (time.isNotBlank()) {
+                Text(text = " · $time", style = overline, color = colors.onSurfaceVariant, maxLines = 1, softWrap = false)
             }
-
-            val summary = heroDescription(home, condition, language)
-            Column(Modifier.clearAndSetSemantics { contentDescription = summary }) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CountUpTemperature(
-                        target = current.temp,
-                        style = TextStyle(
-                            fontFamily = FontFamily.Serif,
-                            fontSize = 72.sp,
-                            lineHeight = 80.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = (-1.5).sp,
-                        ),
-                        modifier = Modifier.weight(1f),
-                    )
-                    FloatingEmoji(condition.emoji(current.isDay))
-                }
-                Text(
-                    text = "${WeatherStrings.of(language).feelsLike(Fmt.temp(current.feels))} · ${condition.labelFor(current.isDay, language)}",
-                    style = typography.bodyLarge,
-                    color = colors.onSurfaceVariant,
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "${WeatherStrings.of(language).feelsLike(Fmt.temp(current.feels))} · ${condition.labelFor(current.isDay, language)}",
+            style = typography.bodyMedium,
+            color = colors.onSurface,
+        )
+        Spacer(Modifier.height(10.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (chip in heroChips(home, language)) {
+                Pill(
+                    text = chip.text,
+                    emoji = chip.emoji,
+                    container = colors.onSurface.copy(alpha = 0.07f),
                 )
             }
+        }
 
-            Spacer(Modifier.height(16.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                for (chip in heroChips(home, language)) {
-                    Pill(
-                        text = chip.text,
-                        emoji = chip.emoji,
-                        container = colors.onSurface.copy(alpha = 0.07f),
-                    )
-                }
-            }
-
-            val note = WeatherInsights.homeNote(snapshot, language)
-            if (note.isNotBlank()) {
-                Spacer(Modifier.height(14.dp))
-                Text(text = note, style = typography.bodyMedium, color = colors.onSurface)
-            }
+        val note = WeatherInsights.homeNote(snapshot, language)
+        if (note.isNotBlank()) {
+            Spacer(Modifier.height(12.dp))
+            Text(text = note, style = typography.bodyMedium, color = colors.onSurface)
         }
     }
 }
 
 /** Temperature that counts up from 0° on first appearance and glides to new values on refresh. */
 @Composable
-private fun CountUpTemperature(target: Double, style: TextStyle, modifier: Modifier = Modifier) {
+internal fun CountUpTemperature(target: Double, style: TextStyle, modifier: Modifier = Modifier) {
     val skip = motionDisabled()
     var played by rememberSaveable { mutableStateOf(false) }
     val value = remember { Animatable(if (played || skip) target.toFloat() else 0f) }
@@ -173,9 +142,9 @@ private fun CountUpTemperature(target: Double, style: TextStyle, modifier: Modif
     )
 }
 
-/** The big condition emoji, bobbing gently (static with reduced motion and with light effects). */
+/** The condition emoji, bobbing gently (static with reduced motion and with light effects). */
 @Composable
-private fun FloatingEmoji(emoji: String) {
+internal fun FloatingEmoji(emoji: String, modifier: Modifier = Modifier, size: TextUnit = 56.sp) {
     val skip = motionDisabled() || !decorativeMotion()
     val bob = if (skip) {
         null
@@ -189,9 +158,8 @@ private fun FloatingEmoji(emoji: String) {
     }
     Emoji(
         emoji = emoji,
-        size = 56.sp,
-        modifier = Modifier
-            .padding(start = 12.dp)
+        size = size,
+        modifier = modifier
             .graphicsLayer {
                 val b = bob?.value ?: 0f
                 // Smooth ease in/out of the linear ping-pong value.
@@ -249,7 +217,8 @@ internal fun sunChip(home: HomeWeather, strings: ComponentStrings): HeroChip? {
     }
 }
 
-private fun heroDescription(home: HomeWeather, condition: Condition, lang: AppLanguage): String {
+/** "Vor der Tür in Berlin: 10°, gefühlt 8°, sonnig" for TalkBack. */
+internal fun heroDescription(home: HomeWeather, condition: Condition, lang: AppLanguage): String {
     val current: CurrentConditions = home.current
     return ComponentStrings.of(lang).outsideDescription(
         place = home.place.name,

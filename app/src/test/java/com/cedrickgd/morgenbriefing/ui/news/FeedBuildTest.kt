@@ -64,10 +64,15 @@ class FeedBuildTest {
         assertTrue(feed.sections[1].browsable)
         assertFalse(feed.sections[0].browsable)
         assertFalse(feed.sections[2].browsable)
-        // Chips: "Für dich", "Neueste", then the followed topics with their icons.
-        val chips = feedChips(feed, FeedStrings.of(AppLanguage.DE))
-        assertEquals(listOf("Für dich", "Neueste", strings.title("wirtschaft/boerse"), strings.title("politik"), "Washington", "Midterms"), chips.map { it.label })
-        assertEquals(TopicIcon.LOCATION.name, chips[4].topic?.icon)
+        // Tabs: "Für dich", "Neueste", the followed topics with their icons, then "＋".
+        val feedStrings = FeedStrings.of(AppLanguage.DE)
+        val tabs = feedTabs(feed, feedStrings)
+        assertEquals(
+            listOf("Für dich", "Neueste", strings.title("wirtschaft/boerse"), strings.title("politik"), "Washington", "Midterms", feedStrings.manageTopics),
+            tabs.map { it.label },
+        )
+        assertEquals(TopicIcon.LOCATION.name, tabs[4].topic?.icon)
+        assertEquals(TabKind.ADD, tabs.last().kind)
     }
 
     @Test

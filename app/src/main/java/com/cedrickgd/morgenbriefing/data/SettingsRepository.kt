@@ -115,6 +115,20 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
     suspend fun clearRecentSearches() = update { SettingsOps.clearRecentSearches(it) }
 
     // ---------------------------------------------------------------------------------------
+    // Page state that outlives a launch (not a setting: no AppSettings field, nothing rebuilds)
+    // ---------------------------------------------------------------------------------------
+
+    /** The weather card on "Heute" is expanded (default: collapsed). */
+    val weatherExpanded: Flow<Boolean> = store.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { it[Keys.WEATHER_EXPANDED] ?: false }
+        .distinctUntilChanged()
+
+    suspend fun setWeatherExpanded(expanded: Boolean) {
+        store.edit { it[Keys.WEATHER_EXPANDED] = expanded }
+    }
+
+    // ---------------------------------------------------------------------------------------
     // Mapping
     // ---------------------------------------------------------------------------------------
 
@@ -319,6 +333,9 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
         val READ_IN_APP = booleanPreferencesKey("read_in_app")
         val NEWS_AGE = stringPreferencesKey("news_age")
         val WEATHER_CARDS = stringPreferencesKey("weather_cards")
+
+        /** The compact weather card of "Heute" is expanded; read and written on its own ([weatherExpanded]). */
+        val WEATHER_EXPANDED = booleanPreferencesKey("today_weather_expanded")
         val UI_LANGUAGE = stringPreferencesKey("ui_language")
         val NEWS_EDITION = stringPreferencesKey("news_edition")
         val FOLLOWED = stringPreferencesKey("followed_topics")

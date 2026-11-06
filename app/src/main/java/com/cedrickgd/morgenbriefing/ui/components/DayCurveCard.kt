@@ -3,7 +3,6 @@ package com.cedrickgd.morgenbriefing.ui.components
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -61,7 +60,6 @@ import com.cedrickgd.morgenbriefing.domain.WeatherInsights
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.ComponentStrings
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
-import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
 import kotlinx.coroutines.delay
 import java.time.LocalDate
@@ -80,14 +78,15 @@ private const val POP_LABEL_FROM = 30
 private const val MIN_TEMP_RANGE = 6.0
 
 /**
- * "Leipzig · 10–18 Uhr" (in the interface language): hand-drawn temperature curve + rain bars + day summary, on a glass card.
+ * "Leipzig · 10–18 Uhr" (in the interface language): hand-drawn temperature curve + rain bars +
+ * day summary – the day part of the expanded weather card on "Heute" (the card is the caller's).
  *
  * The chart is one Canvas: a smooth, non-overshooting temperature line with a soft fill, hour
  * dots with labels, condition emojis, rain-probability bars and a dashed "jetzt" marker while
  * the window is running. The line draws itself in once (skipped with reduced motion).
  */
 @Composable
-fun DayCurveCard(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
+fun DayCurveSection(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
     val day = snapshot.day
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -95,15 +94,9 @@ fun DayCurveCard(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
     val language = LocalAppLanguage.current
     val strings = ComponentStrings.of(language)
 
-    GlassCard(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(top = 20.dp, bottom = 20.dp),
-    ) {
+    Column(modifier.fillMaxWidth()) {
         Column {
-            Row(
-                modifier = Modifier.padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = strings.dayCurveTitle(day.place.name, day.startHour, day.endHour, day.isTomorrow).uppercase(language.locale),
                     style = typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
@@ -128,16 +121,14 @@ fun DayCurveCard(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
                 DayCurveChart(
                     day = day,
                     hours = hours,
-                    modifier = Modifier
-                        .padding(horizontal = 6.dp)
-                        .fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                 )
             } else {
                 Text(
                     text = strings.noHourlyValues,
                     style = typography.bodyMedium,
                     color = colors.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(vertical = 8.dp),
                 )
             }
 
@@ -148,7 +139,6 @@ fun DayCurveCard(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
                     text = summary,
                     style = typography.bodyMedium,
                     color = colors.onSurface,
-                    modifier = Modifier.padding(horizontal = 20.dp),
                 )
             }
         }

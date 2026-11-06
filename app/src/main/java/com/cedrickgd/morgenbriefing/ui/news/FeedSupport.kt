@@ -73,6 +73,7 @@ internal fun rememberListeningKey(listen: ListenController?): State<NowListening
  *
  * @param onMessage shows a short message (snackbar), e.g. "Link kopiert".
  * @param followSuggestion the topic the ⋮ menu offers to follow for an article (always the newest lambda is used).
+ * @param canUnfollowTopic false for a topic the menus must not offer to unfollow (the last one).
  */
 @Composable
 internal fun rememberFeedActions(
@@ -82,6 +83,7 @@ internal fun rememberFeedActions(
     onUnfollowTopic: ((Topic) -> Unit)? = null,
     onFollowTopic: ((Topic) -> Unit)? = null,
     followSuggestion: (FeedArticle) -> Topic? = { null },
+    canUnfollowTopic: (Topic) -> Boolean = { true },
 ): FeedActions {
     val context = LocalContext.current
     val links = rememberLinkActions()
@@ -94,6 +96,7 @@ internal fun rememberFeedActions(
     val unfollow by rememberUpdatedState(onUnfollowTopic)
     val follow by rememberUpdatedState(onFollowTopic)
     val suggestion by rememberUpdatedState(followSuggestion)
+    val mayUnfollow by rememberUpdatedState(canUnfollowTopic)
     val canHideSource = onHideSource != null
     val readsInApp = onOpenArticle != null
     val canUnfollow = onUnfollowTopic != null
@@ -131,6 +134,7 @@ internal fun rememberFeedActions(
             onUnfollowTopic = if (canUnfollow) { topic -> unfollow?.invoke(topic) } else null,
             onFollowTopic = if (canFollow) { topic -> follow?.invoke(topic) } else null,
             followSuggestion = { article -> suggestion(article) },
+            canUnfollowTopic = { topic -> mayUnfollow(topic) },
         )
     }
 }

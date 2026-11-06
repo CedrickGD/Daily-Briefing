@@ -1,7 +1,6 @@
 package com.cedrickgd.morgenbriefing.ui.news
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
@@ -12,21 +11,20 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AddLocationAlt
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.Explore
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,42 +44,40 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.cedrickgd.morgenbriefing.data.model.Topic
-import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.ui.components.GlassPillButton
 import com.cedrickgd.morgenbriefing.ui.components.GlassSheet
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
-import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
 
 /**
- * "Themen": glass sheet to show, hide and sort the topics of the feed (docs/DESIGN.md §7). Every
- * topic in the user's order, tinted with its color, with today's article count and a switch;
- * the handle (or a long press on the row) drags it to a new place. The order is stored when
- * the finger lifts. "Weitere Themen entdecken" opens the discover screen, "Quellen & eigene
- * Themen" the settings.
+ * "Deine Themen" (docs/DESIGN.md §7), opened by the "＋" at the end of the feed tabs: the one
+ * place on "Heute" to manage the topics. Every followed topic in the feed's order with its icon
+ * tile and today's article count; the handle (or a long press on the row) drags it to a new
+ * place, the order is stored when the finger lifts; ✕ stops following it (the last topic stays).
+ * Below: "Themen entdecken" (the discover screen) and "Ort hinzufügen" (its place search).
  *
  * @param counts articles per topic id on screen.
- * @param onSetVisible shows/hides a topic; the last visible one cannot be switched off here.
  * @param onSetOrder stores a new order of topic ids.
+ * @param onUnfollow stops following a topic (the screen offers to undo it).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TopicsSheet(
-    prefs: FeedPrefs,
+fun YourTopicsSheet(
+    topics: List<Topic>,
     counts: Map<String, Int>,
-    onSetVisible: (topicId: String, visible: Boolean) -> Unit,
     onSetOrder: (List<String>) -> Unit,
-    onOpenSettings: () -> Unit,
+    onUnfollow: (Topic) -> Unit,
+    onOpenDiscover: () -> Unit,
+    onAddPlace: () -> Unit,
     onDismiss: () -> Unit,
-    onOpenDiscover: (() -> Unit)? = null,
 ) {
     val strings = feedStrings()
     val haptics = LocalHapticFeedback.current
@@ -90,10 +86,9 @@ fun TopicsSheet(
     val gapPx = with(density) { TopicRowGap.toPx() }
     // Measured heights: a wrapped title or a large font makes a row taller than the minimum.
     val rowHeights = remember { mutableStateMapOf<String, Int>() }
-    var order by remember(prefs.catalogue) { mutableStateOf(prefs.catalogue) }
+    var order by remember(topics) { mutableStateOf(topics) }
     var dragging by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    val visibleCount = order.count { it.id !in prefs.hidden }
 
     fun moveBy(id: String, delta: Int) {
         val from = order.indexOfFirst { it.id == id }
@@ -130,39 +125,45 @@ fun TopicsSheet(
         onEnd = {
             dragging = null
             dragOffset = 0f
-            if (order.map { it.id } != prefs.catalogue.map { it.id }) onSetOrder(order.map { it.id })
+            if (order.map { it.id } != topics.map { it.id }) onSetOrder(order.map { it.id })
         },
     )
 
     GlassSheet(onDismissRequest = onDismiss) {
-        SheetTitle(overline = strings.sheetOverline, title = strings.sheetTitle)
-        Text(
-            text = strings.sheetHint,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
-        )
+        Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 10.dp)) {
+            Text(
+                text = strings.yourTopicsTitle,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() },
+            )
+            Spacer(Modifier.size(4.dp))
+            Text(
+                text = strings.yourTopicsHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Column(
             Modifier
                 .weight(1f, fill = false)
                 .verticalScroll(rememberScrollState(), enabled = dragging == null)
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(TopicRowGap),
         ) {
+            val last = order.size <= 1
             order.forEachIndexed { index, topic ->
                 key(topic.id) {
-                    val visible = topic.id !in prefs.hidden
                     val lifted = dragging == topic.id
-                    TopicToggleRow(
+                    FollowedTopicRow(
                         topic = topic,
                         count = counts[topic.id] ?: 0,
-                        visible = visible,
-                        enabled = !(visible && visibleCount <= 1),
+                        removable = !last,
                         lifted = lifted,
                         offset = { if (lifted) dragOffset else 0f },
                         canMoveUp = index > 0,
                         canMoveDown = index < order.lastIndex,
-                        onToggle = { onSetVisible(topic.id, !visible) },
+                        onRemove = { onUnfollow(topic) },
                         onMoveBy = { delta ->
                             moveBy(topic.id, delta)
                             onSetOrder(order.map { it.id })
@@ -174,22 +175,23 @@ fun TopicsSheet(
             }
         }
         FlowRow(
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, top = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (onOpenDiscover != null) {
-                GlassPillButton(
-                    text = strings.discoverMoreTopics,
-                    onClick = onOpenDiscover,
-                    icon = Icons.Rounded.Explore,
-                    filled = true,
-                )
-            }
             GlassPillButton(
-                text = strings.sourcesAndOwnTopics,
-                onClick = onOpenSettings,
-                icon = Icons.Rounded.Tune,
+                text = strings.discoverDescription,
+                onClick = onOpenDiscover,
+                icon = Icons.Rounded.Explore,
+                filled = true,
+                modifier = Modifier.weight(1f),
+            )
+            GlassPillButton(
+                text = strings.addPlace,
+                onClick = onAddPlace,
+                icon = Icons.Rounded.AddLocationAlt,
             )
         }
     }
@@ -202,20 +204,25 @@ private class DragCallbacks(
     val onEnd: () -> Unit,
 )
 
-private val TopicRowHeight = 64.dp
-private val TopicRowGap = 6.dp
+private val TopicRowHeight = 60.dp
+private val TopicRowGap = 4.dp
 
+/**
+ * A followed topic: drag handle, icon tile, title and article count, ✕. A long press anywhere on
+ * the row also lifts it; TalkBack moves it with the "nach oben / nach unten" actions.
+ *
+ * @param removable false for the last followed topic: ✕ is off and the row says why.
+ */
 @Composable
-private fun TopicToggleRow(
+private fun FollowedTopicRow(
     topic: Topic,
     count: Int,
-    visible: Boolean,
-    enabled: Boolean,
+    removable: Boolean,
     lifted: Boolean,
     offset: () -> Float,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
-    onToggle: () -> Unit,
+    onRemove: () -> Unit,
     onMoveBy: (Int) -> Unit,
     drag: DragCallbacks,
     /** Reports the row's measured height, so dragging knows how far the neighbours really are. */
@@ -223,9 +230,6 @@ private fun TopicToggleRow(
 ) {
     val colors = MaterialTheme.colorScheme
     val strings = feedStrings()
-    val topicColors = rememberTopicColors(topic)
-    val dark = isDarkTheme()
-    val tint = topicColors.strong.copy(alpha = if (dark) 0.16f else 0.08f)
     // The gesture coroutines outlive recompositions: always talk to the newest callbacks.
     val currentDrag by rememberUpdatedState(drag)
     val dragGesture = Modifier.pointerInput(topic.id) {
@@ -266,35 +270,16 @@ private fun TopicToggleRow(
             }
             .heightIn(min = TopicRowHeight)
             .background(if (lifted) colors.surfaceContainerHigh else colors.surface.copy(alpha = 0f))
-            .background(if (visible) tint else tint.copy(alpha = tint.alpha * 0.4f))
             .then(longPressDrag)
-            .toggleable(value = visible, enabled = enabled, role = Role.Switch, onValueChange = { onToggle() })
-            .semantics {
+            .semantics(mergeDescendants = true) {
                 customActions = buildList {
                     if (canMoveUp) add(CustomAccessibilityAction(strings.moveUp(topic.title)) { onMoveBy(-1); true })
                     if (canMoveDown) add(CustomAccessibilityAction(strings.moveDown(topic.title)) { onMoveBy(1); true })
                 }
             }
-            .padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            .padding(end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TopicTile(topic, diameter = 40.dp)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(text = topic.title, style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
-            Text(
-                text = when {
-                    !enabled -> strings.oneTopicStays
-                    count > 0 -> strings.articleCount(count)
-                    else -> strings.noArticlesRightNow
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        // The whole row toggles; the switch only shows the state.
-        Switch(checked = visible, onCheckedChange = null, enabled = enabled)
         Box(
             modifier = Modifier
                 .size(48.dp)
@@ -302,29 +287,32 @@ private fun TopicToggleRow(
                 .clearAndSetSemantics { },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.Rounded.DragIndicator,
-                contentDescription = null,
-                tint = colors.onSurfaceVariant,
+            Icon(Icons.Rounded.DragIndicator, contentDescription = null, tint = colors.onSurfaceVariant)
+        }
+        TopicTile(topic, diameter = 34.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+            Text(
+                text = topic.title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.onSurface,
+            )
+            Text(
+                text = when {
+                    !removable -> strings.lastTopicStays
+                    count > 0 -> strings.articleCount(count)
+                    else -> strings.noArticlesRightNow
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
             )
         }
-    }
-}
-
-@Composable
-private fun SheetTitle(overline: String, title: String) {
-    Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 16.dp)) {
-        Text(
-            text = overline.uppercase(LocalAppLanguage.current.locale),
-            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.semantics { heading() },
-        )
+        IconButton(onClick = onRemove, enabled = removable) {
+            Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = strings.unfollowTopic(topic.title),
+                tint = if (removable) colors.onSurfaceVariant else colors.onSurfaceVariant.copy(alpha = 0.35f),
+            )
+        }
     }
 }

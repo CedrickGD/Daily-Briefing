@@ -124,6 +124,7 @@ internal fun MainPager(
                         onOpenArticle = { navigator.openArticle(entry, it.item) },
                         onOpenSearch = { navigator.openSearch() },
                         onOpenDiscover = { categoryId -> navigator.openDiscover(categoryId) },
+                        onAddPlace = { navigator.openPlaceSearch() },
                         viewModel = todayViewModel,
                     )
 

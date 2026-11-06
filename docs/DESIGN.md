@@ -66,10 +66,11 @@ für Android.
   ein – er soll sich nie wie eine Leiste anfühlen. Während eine Liste scrollt, hält die Aurora
   still. Mit 3-Tasten-Navigation hebt ein weicher Verlauf die Systemtasten vom Inhalt ab.
 * Haptik: leichter Tick beim Seitenwechsel.
-* Artikel öffnen im Reader der App (§7: Bild unter der Statusleiste, Serif-Überschrift, Textblöcke, Glas-Controls); „Im Browser öffnen“ bleibt als Ausweg; Sheets (Themen, Ort)
+* Artikel öffnen im Reader der App (§7: Bild unter der Statusleiste, Serif-Überschrift, Textblöcke, Glas-Controls); „Im Browser öffnen“ bleibt als Ausweg; Sheets („Deine Themen“, Ort)
   liegen als Glas über der Seite.
-* Innere horizontale Scroller (Chip-Reihe, Leser-Pager) haben Vorrang vor dem Seitenwischen:
-  was die Chip-Reihe am Anfang/Ende nicht mehr nutzt, verschluckt sie (kein Seitenwechsel).
+* Innere horizontale Scroller (Tabs der Feed-Leiste, Leser-Pager) haben Vorrang vor dem
+  Seitenwischen: was die Tab-Reihe am Anfang/Ende nicht mehr nutzt, verschluckt sie (kein
+  Seitenwechsel).
 * Querverweise in die Einstellungen landen am Ziel („Ort wählen“ → Orte mit offenem Picker,
   „Quellen & eigene Themen“ → Quellen).
 
@@ -81,6 +82,8 @@ für Android.
 * Beim Scrollen erscheint oben eine schmale **Glas-Kopfleiste** (Statusleiste + 52 dp) mit dem
   Titel klein (titleLarge) – Inhalt gleitet darunter weich weg. Antippen der Leiste scrollt nach
   oben; Berührungen auf ihr erreichen nie den Inhalt darunter.
+* „Heute“ hat keine Titelzeile in der Leiste: oben liegt beim Scrollen nur ein Glasstreifen hinter
+  der Statusleiste, der die Feed-Leiste (Suche + Tabs) aufnimmt, sobald sie oben ankommt (§7).
 
 ## 5. Typografie & Rhythmus
 
@@ -100,34 +103,60 @@ für Android.
 
 ## 7. Seiten im Detail
 
-**Heute** – Kopf (Datum, Gruß, Serif-Headline) direkt auf dem Himmel; darunter Glas-Karten:
-„Vor der Tür“ (große Temperatur), Warnungen (getönte Glas-Banner), Tageskurve, Anziehen
-(Kacheln). Danach der **News-Feed** im Stil der Nutzer-Referenz
-(`.claude/design-ref/news-feed-reference.jpg`, Google-Discover-artig, editorial):
+**Heute** – eine Seite, aufgeräumt von oben nach unten (Struktur „B“ mit dem Glas-Look „A“ aus
+dem Entwurf, den der Besitzer gewählt hat):
 
-* **Themen-Chips** in einer horizontalen Reihe: „Für dich“ (alle Themen in Nutzer-Reihenfolge,
-  je Thema eine Sektion mit den ersten Meldungen und „Alle … Meldungen zu …“), „Neueste“ (alles
-  chronologisch), dann je ein Chip pro sichtbarem Thema (alle Meldungen des Themas, endlos:
-  die Liste enthüllt sich seitenweise beim Scrollen und endet mit „Das war's · n Meldungen“).
-  Glas-Pills; aktiver Chip gefüllt in Themen-/Akzentfarbe. Erreicht die Chip-Reihe die
-  Glas-Kopfleiste, nimmt die Leiste sie auf: **eine** Glasfläche (Titel + Chips) mit einer Kante.
-* Hinweise (offline, Quellen antworten nicht, alles ausgeblendet) als schmales getöntes Band über
-  dem Feed – keine Kartenstapel vor dem ersten Artikel.
-* Themen beginnen mit einer feinen Linie, der Icon-Kachel des Themas (Material Symbol auf getönter Fläche in Themenfarbe) und „TECH & KI … 37 Meldungen“ (keine Pill). Themen haben **Icons, keine Emojis** (nur alte eigene Themen behalten ihr Emoji).
-* Ohne Bild im Feed (oder mit „Bilder anzeigen“ aus) ein **typografisches Cover**: Mesh-Verlauf
-  in Themenfarbe, große Serif-Initiale als Wasserzeichen, kleines Glas-Badge mit Thema-Icon. Rechts neben den Chips ein runder Glas-Button „Themen“ (Herz-mit-Plus-Symbol) →
-  Bottom-Sheet zum Ein-/Ausblenden und Sortieren, mit Sprung zu „Quellen & eigene Themen“.
-* **Feed-Eintrag ohne Kartenrahmen**, direkt auf dem Hintergrund: Bild in voller Breite,
-  22–24 dp Radius, ~16:10 (oder generiertes Cover in Themenfarbe); darunter die **Schlagzeile
-  groß in Serif** (headlineSmall, ~26 sp, 3 Zeilen max.); darunter der Lead in **Serif**
-  (bodyLarge ~18 sp, onSurfaceVariant, 3 Zeilen) mit angehängtem „… **Mehr anzeigen**“;
-  dann die Meta-Zeile: „vor 3 Std. · Quelle“ links, rechts **„🎧 Zuhören“**, Teilen, ⋮-Menü
-  (Thema ausblenden, Quellen anzeigen, Link kopieren). 24–32 dp Abstand zwischen Einträgen,
-  dezente Trennlinie optional. Antippen (Bild/Schlagzeile/Text) → Artikel-Leser.
+* **Kopf** direkt auf dem Himmel: Datums-Overline und der Gruß in Serif (headlineSmall). Keine
+  Knöpfe mehr im Kopf – Suche und Themen sitzen in der Feed-Leiste.
+* **Wetter als eine kompakte Glaskarte** (26 dp Radius): zugeklappt Wetter-Emoji, große
+  Serif-Temperatur, „Ort · Zustand“ und **eine** Zeile „min – max · Regen 60 % / trocken ·
+  Kleidungstipp“, rechts ein Chevron. Antippen klappt sie weich auf (`animateContentSize`, Chevron
+  dreht sich): die Serif-Headline des Tages, „Vor der Tür“ (gefühlt, Chips, Hinweis fürs
+  Losgehen), die Tageskurve mit Zusammenfassung und die Anzieh-Kacheln – jeweils nur, wenn der
+  Wetterblock in den Einstellungen an ist. Auf/zu bleibt über App-Starts erhalten.
+  **Warnungen** stehen immer sichtbar unter der Karte (getönte Glas-Banner), auch zugeklappt.
+* **Feed-Leiste** unter dem Wetter: ein Suchfeld (sieht aus wie ein Feld, ist ein Knopf und
+  öffnet die Suche: „Suchen – z. B. SLV-ETF, Midterms“) und darunter die Tabs **„Für dich“ ·
+  „Neueste“ · je ein Tab pro gefolgtem Thema** (mit Icon; aktiver Tab gefüllt in Themen- bzw.
+  Akzentfarbe) und am Ende ein runder **„＋“**. Die Tabs scrollen waagerecht und laufen rechts weich
+  aus. Erreicht die Leiste den oberen Rand, **pinnt** sie dort: Die Glasfläche oben – beim
+  Scrollen zuerst nur ein Glasstreifen hinter der Statusleiste – nimmt Suchfeld und Tabs auf:
+  **eine** Glasfläche mit einer Kante, kein zweiter Balken. Ein Tab-Wechsel bei gepinnter Leiste
+  beginnt die neue Ansicht direkt darunter.
+* **„＋“ → „Deine Themen“** (Glas-Sheet): die gefolgten Themen mit Ziehgriff zum Sortieren und ✕
+  zum Entfernen (das letzte Thema bleibt; Rückgängig per Snackbar), darunter „Themen entdecken“
+  (gefüllt) und „Ort hinzufügen“ (öffnet „Themen entdecken“ mit der Ortssuche). Das ist der eine
+  Ort auf „Heute“ für Themen; Einstellungen → Deine Themen bleibt wie es ist.
+* **Für dich**: pro gefolgtem Thema **eine Glaskarte** – Kopfzeile mit Icon-Kachel (Themenfarbe),
+  Themenname in Versalien und **„Alle →“** (wählt sichtbar den Tab des Themas und springt zurück
+  an die Leiste – kein versteckter Modus); dann die erste Meldung **groß** (Bild 168 dp, 18 dp
+  Radius, Serif-Headline 19 sp, Meta „Quelle · vor 3 Std.“ mit kleinem grünem ✓ bei geprüftem
+  Volltext, ⋮) und die nächsten als **kompakte Zeilen** (Serif 16 sp, bis 3 Zeilen, Meta-Zeile
+  mit ✓ und ⋮, rechts ein 80-dp-Bild). Meldungen ohne Bild bekommen statt eines großen Covers
+  eine **kleine Kachel in Themenfarbe mit dem Themen-Icon**; eine Aufmacher-Meldung ohne Bild
+  steht dann wie eine Zeile mit größerer Headline. Wie viele Meldungen je Thema, bestimmt die
+  Einstellung „Meldungen pro Thema“. Feine Linien trennen die Meldungen einer Karte.
+* **Neueste**: **eine** Glaskarte mit kompakten Zeilen, über jeder Headline ein kleines farbiges
+  Themen-Label; jede Meldung einmal; endlos wie bisher. **Ein Thema**: oben eine schmale Zeile
+  „37 MELDUNGEN · STAND 07:12“ (bei Kategorien mit „Unterthemen von …“), darunter eine Glaskarte –
+  erste Meldung groß, dann Zeilen –, endlos mit Nachladen älterer Meldungen.
+  Lange Karten sind aus einzelnen Listen-Elementen gebaut (`glassCardPart`): nur das erste hat die
+  oberen, nur das letzte die unteren Rundungen, die Kante läuft ohne Naht durch.
+* **Keine Knopfreihe unter den Meldungen.** Das ⋮-Menü (auch per langem Druck auf die Meldung)
+  enthält: Zuhören (beim Vorlesen „Vorlesen beenden“, pausiert „Weiter zuhören“), Teilen, Link
+  kopieren, Im Browser öffnen, „… folgen“ (Unterthema einer Kategorie-Meldung), „… nicht mehr
+  folgen“ (nicht beim letzten Thema), „„Quelle“ ausblenden“ (nicht bei Google News). Antippen
+  öffnet den Leser. Wird eine Meldung vorgelesen, zeigt ihre Meta-Zeile ein kleines Kopfhörer-Symbol.
+* Hinweise (offline, Quellen antworten nicht, nichts vollständig lesbar …) als **schmales
+  getöntes Band** unter der Leiste – keine Kartenstapel vor der ersten Meldung. „Weitere Artikel
+  werden geprüft …“ schließt die Karte eines Themas als ruhige Zeile ab.
 * **Zuhören**: Android TextToSpeech (in der Sprache der Nachrichten) liest Schlagzeile + Teaser vor; ein schwebender
   Glas-Mini-Player (über dem Seitenindikator) zeigt Titel, Tempo-Chip („1,25×“, Antippen wechselt
   1× → 1,25× → 1,5× → 2× → 0,75×, sofort hörbar), Pause/Weiter, Stopp; Antippen öffnet den Artikel.
-* Unten ein ruhiger Ausklang (Stand, Anzahl Meldungen, kleines „Bis später ☀️“).
+  Stimme, Sprache, Tempo und Tonhöhe stehen in Einstellungen → Vorlesen.
+* Unten „Mehr entdecken“ (Kategorien, denen du noch nicht folgst) und ein ruhiger Ausklang
+  (Stand, Anzahl Meldungen, kleines „Bis später ☀️“). Mit sparsamen Effekten (§9) ist alles Glas
+  ein milchiger Tint statt Unschärfe.
 
 **Themen entdecken** – über die Seite geschoben (wie der Reader): 12 große Kategorie-Kacheln im
 Raster, jede ein Verlauf in Themenfarbe mit weichem Glanz, großem Icon als Wasserzeichen, Titel,
@@ -136,7 +165,9 @@ Kategorie folgen“, die drei neuesten Schlagzeilen, darunter die Unterthemen al
 Icon-Kachel und Folgen-Knopf. Darunter „Lokal“ (Orte) und „Deine Suchen“.
 
 **Suche** – Glas-Suchfeld oben, letzte Suchen als Chips, „Gerade wichtig“, Ergebnisse als
-dieselben Feed-Einträge, endlos; „Diesem Thema folgen“ als gefüllte Pill.
+große redaktionelle Einträge ohne Kartenrahmen (Bild in voller Breite, Serif-Headline, Lead mit
+„… Weiterlesen“, Meta-Zeile mit „Zuhören“, Teilen und ⋮), endlos; „Diesem Thema folgen“ als
+gefüllte Pill.
 
 **Einstellungen** – Kopf „DEIN MORGEN / Einstellungen“, dann:
 1. **Status-Karte**: großes ✓ „Alles bereit für morgen, 06:30“ oder freundliche Hinweise;
