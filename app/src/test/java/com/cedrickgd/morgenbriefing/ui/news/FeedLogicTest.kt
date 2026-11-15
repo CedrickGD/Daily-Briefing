@@ -109,6 +109,75 @@ class FeedLogicTest {
     }
 
     @Test
+    fun `the next stories are revealed and older ones asked for well before the end`() {
+        // A list of 200 items: revealing starts a screen and a half before its end …
+        assertFalse(nearEnd(EndAction.REVEAL, lastVisible = 200 - REVEAL_AHEAD - 1, count = 200))
+        assertTrue(nearEnd(EndAction.REVEAL, lastVisible = 200 - REVEAL_AHEAD, count = 200))
+        // … and older articles are asked for several screens ahead: a fling does not reach the "loading" row.
+        assertFalse(nearEnd(EndAction.LOAD_MORE, lastVisible = 200 - LOAD_AHEAD - 1, count = 200))
+        assertTrue(nearEnd(EndAction.LOAD_MORE, lastVisible = 200 - LOAD_AHEAD, count = 200))
+        assertTrue(LOAD_AHEAD > REVEAL_AHEAD && REVEAL_AHEAD >= 8)
+        // With "nur vollständige Artikel" the list keeps VERIFY_AHEAD verified stories below the screen:
+        // asking only closer to the end than that would mean asking when they are used up.
+        assertTrue(LOAD_AHEAD > VERIFY_AHEAD)
+        // The candidates run low while a screenful of checks is still to do: time to ask.
+        assertEquals(EndAction.LOAD_MORE, endAction(50, 50, canLoadMore = true, loadingMore = false, stalled = false, waiting = VERIFY_LOW_WATER - 1, candidates = 120))
+        assertEquals(EndAction.NONE, endAction(50, 50, canLoadMore = true, loadingMore = false, stalled = false, waiting = VERIFY_LOW_WATER, candidates = 120))
+        // A short list is near its end from the start; nothing to do is never near.
+        assertTrue(nearEnd(EndAction.LOAD_MORE, lastVisible = 3, count = 12))
+        assertFalse(nearEnd(EndAction.NONE, lastVisible = 199, count = 200))
+        assertFalse(nearEnd(EndAction.REVEAL, lastVisible = 0, count = 0))
+    }
+
+    @Test
+    fun `a list stops asking by itself when page after page brings nothing it can show`() {
+        val loads = BarrenLoads(limit = 100)
+        // The first load of a list always goes out.
+        assertTrue(loads.mayLoad("top", shown = 94, judged = 110))
+        // The page is checked, nothing of it is complete; the next one may still be asked for …
+        assertTrue(loads.mayLoad("top", shown = 94, judged = 190))
+        // … but after a hundred candidates without one story to show the list stops: no endless "wird geprüft".
+        assertFalse(loads.mayLoad("top", shown = 94, judged = 215))
+        assertFalse(loads.mayLoad("top", shown = 94, judged = 300))
+        // Another list counts for itself.
+        assertTrue(loads.mayLoad(TIMELINE_LIST, shown = 150, judged = 300))
+        // The user asks from "Weiter zurück suchen": that always loads, and the count starts afresh.
+        assertTrue(loads.mayLoad("top", shown = 94, judged = 300, byUser = true))
+        assertTrue(loads.mayLoad("top", shown = 94, judged = 380))
+        assertFalse(loads.mayLoad("top", shown = 94, judged = 400))
+        // A list that grows never stops: every story shown starts the count afresh.
+        val growing = BarrenLoads(limit = 100)
+        var shown = 20
+        var judged = 20
+        repeat(10) {
+            assertTrue(growing.mayLoad("politik", shown, judged))
+            shown += 1
+            judged += 99
+        }
+        // Without "nur vollständige Artikel" every article loaded is shown.
+        val plain = BarrenLoads()
+        assertTrue((1..20).all { plain.mayLoad("welt", shown = it * 100, judged = it * 100) })
+        // A refresh built the list anew (fewer judged than before), a pull-to-refresh forgets everything.
+        assertTrue(loads.mayLoad("top", shown = 60, judged = 70))
+        loads.reset()
+        assertTrue(loads.mayLoad("top", shown = 60, judged = 500))
+    }
+
+    @Test
+    fun `the checking row never stays - a list ends in loading, a retry or its end`() {
+        // Candidates are being verified: the row says so.
+        assertEquals(ListTail.VERIFYING, listTail(94, 94, canLoadMore = true, loadingMore = false, stalled = false, checking = true))
+        assertEquals(ListTail.VERIFY_OFFLINE, listTail(94, 94, canLoadMore = true, loadingMore = false, stalled = false, checking = true, offline = true))
+        // All of them judged and none complete, the list stopped asking (BarrenLoads): it offers to search on.
+        assertEquals(ListTail.STALLED, listTail(94, 94, canLoadMore = true, loadingMore = false, stalled = true, checking = false))
+        assertEquals(EndAction.NONE, endAction(94, 94, canLoadMore = true, loadingMore = false, stalled = true, waiting = 0, candidates = 400))
+        // Paging is exhausted (the end of the topic's history) and nothing is left to check: the calm end.
+        assertEquals(ListTail.END, listTail(94, 94, canLoadMore = false, loadingMore = false, stalled = false, checking = false))
+        assertEquals(ListTail.END, listTail(94, 94, canLoadMore = false, loadingMore = false, stalled = true, checking = false))
+        assertEquals(EndAction.NONE, endAction(94, 94, canLoadMore = false, loadingMore = false, stalled = false, waiting = 0, candidates = 400))
+    }
+
+    @Test
     fun `only a publisher's own feed can be hidden from the menu`() {
         assertTrue(canHideSource(item("1")))
         assertFalse(canHideSource(item("2", aggregator = "google")))

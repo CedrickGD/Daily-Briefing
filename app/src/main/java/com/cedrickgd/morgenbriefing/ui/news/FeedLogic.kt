@@ -174,6 +174,8 @@ enum class EndAction {
  * still to check and [candidates] all of them: older articles are asked for once fewer than
  * [VERIFY_LOW_WATER] candidates are left to check (the verified count runs low) – also when not
  * one candidate was complete.
+ *
+ * How close to the end each step is taken: [nearEnd].
  */
 internal fun endAction(
     revealed: Int,
@@ -187,6 +189,71 @@ internal fun endAction(
     revealed < total -> EndAction.REVEAL
     candidates > 0 && canLoadMore && !loadingMore && !stalled && waiting < VERIFY_LOW_WATER -> EndAction.LOAD_MORE
     else -> EndAction.NONE
+}
+
+/** A list reveals its next loaded stories when its end is this many list items away (about a screen and a half). */
+internal const val REVEAL_AHEAD = 12
+
+/**
+ * A list asks for older articles when its end is this many list items away: a page takes a
+ * second or two to arrive (and its articles are verified after that), and a fling passes a
+ * dozen stories – asked for only at the end, every fling stopped at the "loading" row. With
+ * "nur vollständige Artikel" this is past the verified stories kept ready below the screen
+ * ([VERIFY_AHEAD]), so the next page is asked for as soon as the candidates run low.
+ */
+internal const val LOAD_AHEAD = 40
+
+/**
+ * Whether an endless list is close enough to its end for [action]: [lastVisible] is the index
+ * of the last list item on screen, [count] the number of list items. Revealing waits for
+ * [REVEAL_AHEAD], loading older articles starts [LOAD_AHEAD] items before the end.
+ */
+internal fun nearEnd(action: EndAction, lastVisible: Int, count: Int): Boolean = when (action) {
+    EndAction.NONE -> false
+    EndAction.REVEAL -> count > 0 && lastVisible >= count - REVEAL_AHEAD
+    EndAction.LOAD_MORE -> count > 0 && lastVisible >= count - LOAD_AHEAD
+}
+
+/** Candidates a list may check in a row without one it can show before it stops asking for older articles by itself. */
+internal const val MAX_BARREN_CHECKS = 120
+
+/**
+ * Keeps an endless list from loading for ever when nothing comes of it. With "nur vollständige
+ * Artikel" a page of older articles is only candidates; when every one of them turns out to be a
+ * teaser or cannot be reached (Google News refusing to resolve its links), the list would ask
+ * for the next page, check it, ask again – "Weitere Artikel werden geprüft …" for hours, back to
+ * the end of the topic's history.
+ *
+ * Per list (a topic's id, [TIMELINE_LIST]) it remembers how many stories the list showed and
+ * how many candidates were judged when it last grew. While the list shows more than then, every
+ * load may go out. Once [limit] candidates were judged since without one more story to show,
+ * [mayLoad] says no: the caller marks the list as stalled, and it offers "Weiter zurück suchen"
+ * – that tap ([byUser]) starts the count afresh. Not thread-safe.
+ */
+internal class BarrenLoads(private val limit: Int = MAX_BARREN_CHECKS) {
+    private class Mark(val shown: Int, val judged: Int)
+
+    private val marks = HashMap<String, Mark>()
+
+    /**
+     * Whether [list] may load older articles now.
+     *
+     * @param shown the stories the list shows.
+     * @param judged its candidates that are judged (shown or rejected; without verification: all).
+     * @param byUser the user asked for it.
+     */
+    fun mayLoad(list: String, shown: Int, judged: Int, byUser: Boolean = false): Boolean {
+        val mark = marks[list]
+        // Fewer judged than at the mark: the list was built anew (a refresh).
+        if (byUser || mark == null || shown > mark.shown || judged < mark.judged) {
+            marks[list] = Mark(shown, judged)
+            return true
+        }
+        return judged - mark.judged < limit
+    }
+
+    /** Forgets every list (pull-to-refresh). */
+    fun reset() = marks.clear()
 }
 
 /** What the end of a topic's list shows. */

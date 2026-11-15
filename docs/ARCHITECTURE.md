@@ -101,17 +101,40 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
   `topicOrder`/`hiddenTopics` übernommen (`SettingsMigration`).
 * **Nachrichten** liest `RssClient` mit Androids `XmlPullParser` (kXML; in Unit-Tests dieselbe
   Implementierung über `kxml2`). `RssParser` versteht RSS 2.0, RSS 1.0 (RDF) und Atom;
-  `GoogleNews` baut die URLs und liest Herausgeber und Domain aus `<source url>`. Artikel-Ids
-  sind ein Hash des normalisierten Links.
+  `GoogleNews` baut die URLs und liest Herausgeber und Domain aus `<source url>`; aus dem Titel
+  fällt der angehängte Herausgeber, auch wenn die Seite ihn schon selbst im Titel trägt
+  („… - Politik - SZ.de - SZ.de“, „… - boerse.de - boerse.de“ → nur die Überschrift). Artikel-Ids
+  sind ein Hash des normalisierten Links. Was ein Verlags-Feed nur mitschleppt, bleibt draußen
+  (`NewsRepository.current`): Rubrik- und Themenseiten (`/thema/…`) und alles, was älter als 60
+  Tage ist (gemessen 15.11.2026: bei ZDFheute 25 von 205 Einträgen, 70 bis 2579 Tage alt) –
+  außer der Feed hat nichts Neueres. Google News und selbst hinzugefügte Feeds behalten alles.
 * **Feed-Logik** (`ui/news/FeedLogic.kt`, `NewsModels.kt`): pro gefolgtem Thema eine Sektion
   („Für dich“), „Neueste“ über alle Themen ohne Doppelte, je Thema eine endlose Liste mit
   `loadMore` am Ende. Auch „Neueste“ und das Ende von „Für dich“ sind endlos (`FeedTimeline.kt`):
   alles, was die Themen haben, neueste zuerst (die Zeitraum-Einstellung begrenzt nur die Karten
   von „Für dich“), aber – jenseits der letzten 24 Stunden – nur so weit zurück, wie jedes noch
-  blätterbare Thema gelesen ist – so hängen ältere Seiten immer nur
-  unten an; am Ende blättern die Themen mit der kürzesten Historie weiter (`loadOlder` im
-  ViewModel, höchstens 4, sparsam 2 zugleich). Listen-Einträge sind nach Artikel verschlüsselt,
-  nicht nach Position: Neues darüber verschiebt nichts. „Nur vollständige Artikel“ filtert Meldungen gesperrter Seiten und zeigt
+  blätterbare Thema gelesen ist; am Ende blättern die Themen mit der kürzesten Historie weiter
+  (`loadOlder` im ViewModel, höchstens 4, sparsam 2 zugleich). Die Liste eines Themas hält es
+  genauso (`readSoFar`): solange das Thema blättern kann, zeigt sie nur, was bis zur gelesenen
+  Tiefe reicht (immer die neuesten 20 und die letzten 24 Stunden) – der alte Schwanz eines
+  Verlags-Feeds wartet, bis das Blättern bei ihm ankommt; scheitert das Nachladen, zeigt sie
+  alles, was da ist.
+  **Ältere Seiten hängen nur unten an**: jede endlose Liste merkt sich ihre Reihenfolge
+  (`FeedOrder`, im ViewModel von Aufbau zu Aufbau gereicht) und setzt sie fort (`appendOnly`) –
+  was eine Seite bringt, steht darunter, auch wenn es dem Datum nach zwischen Gezeigtes gehörte
+  (das Fenster einer Seite beginnt am Tag, an dem die Liste endet). Erst eine Aktualisierung
+  (neues `fetchedAt`) sortiert neu. Listen-Einträge sind nach Artikel verschlüsselt, nicht nach
+  Position. **Jede Geschichte einmal**: derselbe Artikel kommt über zwei Feeds eines Verlags
+  („taz Politik“ und Google News' „taz.de“, „heise online“ und „heise IT“) mit zwei Links –
+  `StoryTwins` erkennt ihn an Verlagsfamilie (Domain), fast gleicher Überschrift und fast
+  gleicher Zeit; `NewsRepository.dedupe` faltet ihn je Thema, `storiesOnce` über die Themen
+  hinweg. Der Artikel des Verlags gewinnt und übernimmt Bild und Teaser, die nur der Zwilling
+  hat. **Früh nachladen** (`nearEnd`): aufgedeckt wird 12 Einträge vor dem Ende, Älteres
+  angefragt 40 davor; mit „nur vollständige Artikel“ liegen 30 geprüfte Meldungen unter dem
+  Bildschirm bereit, und nachgeladen wird, sobald weniger als 30 Kandidaten zu prüfen bleiben.
+  Bringen Seiten nichts Zeigbares (120 Kandidaten geprüft, keiner vollständig – `BarrenLoads`),
+  hört die Liste auf, von selbst zu fragen, und bietet „Weiter zurück suchen“ an, statt endlos
+  „wird geprüft“ zu zeigen. „Nur vollständige Artikel“ filtert Meldungen gesperrter Seiten und zeigt
   nur vom `ArticlePrefetcher` geprüfte (`VerifiedLists.kt`, `ui/today/TodayWindows.kt`: was als
   Nächstes geprüft wird); ohne die Einstellung gehen sichtbare Meldungen zum Vorladen an den
   Prefetcher (Status „Volltext“/„Bezahlinhalt“, Bild für Google-News-Karten).

@@ -12,6 +12,7 @@ import com.cedrickgd.morgenbriefing.i18n.FeedStrings
 import com.cedrickgd.morgenbriefing.ui.news.FeedFilter
 import com.cedrickgd.morgenbriefing.ui.news.FeedPrefs
 import com.cedrickgd.morgenbriefing.ui.news.LATEST_LIST
+import com.cedrickgd.morgenbriefing.ui.news.VERIFY_AHEAD
 import com.cedrickgd.morgenbriefing.ui.news.Verification
 import com.cedrickgd.morgenbriefing.ui.news.buildNewsFeed
 import com.cedrickgd.morgenbriefing.ui.news.entryKey
@@ -48,7 +49,7 @@ class VerifyWindowTest {
         // The topic's own list: w1..w5 shown, the user sees w4 and w5 – the next candidates, starting with w6.
         val keys = listOf(entryKey("topic-welt", 3, "w4"), entryKey("topic-welt", 4, "w5"))
         val window = warmWindow(FeedFilter.OneTopic("welt"), feed, revealed = 20, visibleKeys = keys, sectionSize = 2)
-        assertEquals((6..25).map { "w$it" }, window.map { it.id })
+        assertEquals((6..30).map { "w$it" }.take(VERIFY_AHEAD), window.map { it.id })
         // "Für dich": "welt" is full, "sport" needs both of its articles (+1 spare) – nothing for welt.
         val forYou = warmWindow(FeedFilter.ForYou, feed, revealed = 20, visibleKeys = listOf("foryou-s0-welt-header"), sectionSize = 2)
         assertEquals(listOf("s1", "s2", "s3"), forYou.map { it.id })

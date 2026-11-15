@@ -201,10 +201,17 @@ data class NewsFeed(
  *   through – everything, as far back as the topics have been read ([timelineOf]) – and
  *   [NewsFeed.olderNext] names the topics to page next.
  *
+ * - The endless lists only grow at their end: a topic that can still page lists its stories as
+ *   far back as it has been read ([readSoFar]; everything once a load of older ones failed,
+ *   [released]), and every list goes on from what it listed at the last build ([order],
+ *   [appendOnly]) – older pages never land above a story on screen. A refresh sorts afresh.
+ *
  * @param now reference for the age filter.
  * @param hides the readable-only snapshot of the last refresh.
  * @param verification the verdicts, and what each list showed since the last build.
  * @param open the followed topics that can still bring older articles (can page, not at their end).
+ * @param order what the endless lists listed at the last build ([BuiltFeed.order]).
+ * @param released topics whose last load of older articles failed: their lists show all they hold.
  */
 internal fun buildNewsFeed(
     news: Map<String, TopicNews>,
@@ -213,27 +220,53 @@ internal fun buildNewsFeed(
     hides: ReadabilityHides = ReadabilityHides.NONE,
     verification: Verification = Verification.OFF,
     open: Set<String> = emptySet(),
-): NewsFeed {
+    order: FeedOrder = FeedOrder.NONE,
+    released: Set<String> = emptySet(),
+): NewsFeed = buildFeed(news, prefs, now, hides, verification, open, order, released).feed
+
+/** A built feed and the order its endless lists have now – what the next build goes on from. */
+internal class BuiltFeed(val feed: NewsFeed, val order: FeedOrder)
+
+/** [buildNewsFeed] together with the order of its lists, for the next build. Pure. */
+internal fun buildFeed(
+    news: Map<String, TopicNews>,
+    prefs: FeedPrefs,
+    now: ZonedDateTime,
+    hides: ReadabilityHides = ReadabilityHides.NONE,
+    verification: Verification = Verification.OFF,
+    open: Set<String> = emptySet(),
+    order: FeedOrder = FeedOrder.NONE,
+    released: Set<String> = emptySet(),
+): BuiltFeed {
     val reference = now.toInstant()
+    val floor = reference.minus(TIMELINE_FLOOR)
     val size = prefs.sectionSize.coerceAtLeast(1)
     val verify = if (prefs.readableOnly && verification.enabled) verification else Verification.OFF
     val onTop = HashSet<String>()
     val fresh = ArrayList<Pair<Topic, List<NewsItem>>>(prefs.topics.size)
     val everything = ArrayList<Pair<Topic, List<NewsItem>>>(prefs.topics.size)
     val depths = LinkedHashMap<String, Instant>()
+    val listed = FeedOrder.Builder()
     val sections = prefs.topics.mapIndexed { index, topic ->
         val topicNews = news[topic.id]
-        val candidates = readableItems(
+        val held = readableItems(
             topicNews?.items.orEmpty().filter { it.feedSourceId !in prefs.disabledFeeds },
             hides,
             prefs.readableOnly,
         )
+        val depth = if (topic.id in open) pagedDepth(topicNews?.items.orEmpty(), reference) else null
+        if (depth != null) depths[topic.id] = depth
+        // The topic's own list: as far back as the topic has been read, in the order it had before.
+        val stamp = topicNews?.fetchedAt.orEmpty()
+        val before = order.of(topic.id, stamp)
+        val read = if (depth == null || topic.id in released) held else readSoFar(held, depth, floor, before)
+        val candidates = appendOnly(read, before, NewsItem::id)
+        listed.put(topic.id, stamp, candidates.map(NewsItem::id))
         val checked = verifiedList(candidates, topic.id, verify, NewsItem::id)
         val items = checked.shown
         val recent = filterByAge(items, prefs.newsAge, reference)
-        fresh += topic to filterByAge(candidates, prefs.newsAge, reference)
-        everything += topic to candidates
-        if (topic.id in open) pagedDepth(topicNews?.items.orEmpty(), reference)?.let { depths[topic.id] = it }
+        fresh += topic to filterByAge(held, prefs.newsAge, reference)
+        everything += topic to held
         // A section whose stories all opened earlier sections still shows them: never empty-looking.
         val top = recent.filter { it.id !in onTop }.ifEmpty { recent }.take(size)
         top.forEach { onTop += it.id }
@@ -259,9 +292,16 @@ internal fun buildNewsFeed(
     }
     val latestCandidates = latestOf(fresh)
     val latest = verifiedList(latestCandidates, LATEST_LIST, verify) { it.item.id }
-    val timelineCandidates = timelineOf(everything, horizon = depths.values.maxOrNull(), floor = reference.minus(TIMELINE_FLOOR))
+    // The timeline of all topics: every story once, in the order it had before.
+    val stamp = sections.joinToString("|") { "${it.id}@${it.fetchedAt.orEmpty()}" }
+    val before = order.of(TIMELINE_LIST, stamp)
+    val stories = timelineStories(everything, horizon = depths.values.maxOrNull(), floor = floor, shown = before)
+    val timelineCandidates = appendOnly(stories.articles, before) { it.item.id }
+    listed.put(TIMELINE_LIST, stamp, timelineCandidates.map { it.item.id })
     val timeline = verifiedList(timelineCandidates, TIMELINE_LIST, verify) { it.item.id }
-    return NewsFeed(
+    // A story on a "Für dich" card is not repeated below the cards – nor is its twin from another feed.
+    val above = onTop + onTop.mapNotNull(stories.twins::get)
+    val feed = NewsFeed(
         sections = sections,
         latest = latest.shown,
         fetchedAt = sections.mapNotNull { it.fetchedAt?.let(::parseInstantOrNull) }.maxOrNull(),
@@ -271,9 +311,10 @@ internal fun buildNewsFeed(
         timeline = timeline.shown,
         timelineWaiting = timeline.waiting.map { it.item },
         timelineCandidates = timelineCandidates.size,
-        more = timeline.shown.filter { it.item.id !in onTop },
+        more = timeline.shown.filter { it.item.id !in above },
         olderNext = nextToPage(depths),
     )
+    return BuiltFeed(feed, listed.build())
 }
 
 /** True when [item] is within [age] of [now]; undated articles count as fresh. */

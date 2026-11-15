@@ -136,6 +136,35 @@ class GoogleNewsTest {
     }
 
     @Test
+    fun `a site's own name in its page title leaves the headline too`() {
+        // Titles as Google News delivered them on 15.11.2026: the site names itself, Google appends the name once more.
+        assertEquals(
+            "Kreise: Koalition verschiebt Einführung von Zuckersteuer auf 2028",
+            GoogleNews.stripPublisher("Kreise: Koalition verschiebt Einführung von Zuckersteuer auf 2028 - boerse.de - boerse.de", "boerse.de", "boerse.de"),
+        )
+        // … with its desk in front of the name.
+        assertEquals(
+            "Steuern: Existenzminimum wird angehoben",
+            GoogleNews.stripPublisher("Steuern: Existenzminimum wird angehoben - Politik - SZ.de - SZ.de", "SZ.de", "sueddeutsche.de"),
+        )
+        assertEquals(
+            "WTA Finals in den USA - Tennisspielerin Sabalenka entschuldigt sich nach Wutanfall",
+            GoogleNews.stripPublisher("WTA Finals in den USA - Tennisspielerin Sabalenka entschuldigt sich nach Wutanfall - Sport - SZ.de - SZ.de", "SZ.de", "sueddeutsche.de"),
+        )
+        // The site as its address, Google's name for it another one.
+        assertEquals(
+            "Neun Kinder und Politik: Wie Stadträtin Alexandra Gaßmann das alles schafft",
+            GoogleNews.stripPublisher("Neun Kinder und Politik: Wie Stadträtin Alexandra Gaßmann das alles schafft | BR.de - BR", "BR", "www.br.de"),
+        )
+        // A desk's name at the end of a headline stays when the site did not name itself: it is part of the headline.
+        assertEquals("Streit in der Koalition - Politik", GoogleNews.stripPublisher("Streit in der Koalition - Politik - Spiegel", "Spiegel", "spiegel.de"))
+        assertEquals("Haushaltsstreit: Finanzprobleme der Koalition werden größer - Video", GoogleNews.stripPublisher("Haushaltsstreit: Finanzprobleme der Koalition werden größer - Video - WELT", "WELT", "welt.de"))
+        // Never down to nothing.
+        assertEquals("SZ.de", GoogleNews.stripPublisher("SZ.de - SZ.de", "SZ.de", "sueddeutsche.de"))
+        assertEquals("Politik", GoogleNews.stripPublisher("Politik - SZ.de - SZ.de", "SZ.de"))
+    }
+
+    @Test
     fun `domains and teasers`() {
         assertEquals("bbc.co.uk", GoogleNews.domainOf("https://www.bbc.co.uk/news/x"))
         assertEquals("", GoogleNews.domainOf("kein link"))
