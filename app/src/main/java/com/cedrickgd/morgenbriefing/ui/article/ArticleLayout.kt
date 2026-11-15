@@ -29,6 +29,13 @@ internal fun showsAlt(blocks: List<ArticleBlock>, index: Int): Boolean {
     return next?.type != ArticleBlock.CAPTION || ArticleCleaner.isCreditOnly(next.text)
 }
 
+/**
+ * What a screen reader says for a picture in the text: its alt text – unless the reader prints
+ * that very text under the picture ([altShown], see [showsAlt]). Then the printed line is read,
+ * once, and the picture itself stays silent instead of saying the same sentence before it.
+ */
+internal fun imageDescription(alt: String, altShown: Boolean): String? = alt.takeIf { it.isNotBlank() && !altShown }
+
 /** What a failed article offers, in order: the first is the main action of the panel. */
 internal enum class FailureAction { RETRY, OPEN_IN_BROWSER }
 

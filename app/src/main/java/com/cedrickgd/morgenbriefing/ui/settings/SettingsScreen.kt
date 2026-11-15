@@ -48,6 +48,7 @@ import com.cedrickgd.morgenbriefing.i18n.listenStrings
 import com.cedrickgd.morgenbriefing.i18n.settingsStrings
 import com.cedrickgd.morgenbriefing.notify.MorningWorker
 import com.cedrickgd.morgenbriefing.ui.glass.PageTitle
+import com.cedrickgd.morgenbriefing.ui.glass.SkyTextInset
 import com.cedrickgd.morgenbriefing.ui.glass.TopGlassBar
 import com.cedrickgd.morgenbriefing.ui.glass.glassContent
 import com.cedrickgd.morgenbriefing.ui.shell.LocalSettingsLink
@@ -344,7 +345,7 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .staggerIn(stagger, key, index)
                 if (key == Block.TITLE) {
-                    PageTitle(overline = strings.pageOverline, title = strings.pageTitle, modifier = enter.padding(horizontal = 4.dp))
+                    PageTitle(overline = strings.pageOverline, title = strings.pageTitle, modifier = enter.padding(horizontal = SkyTextInset))
                     return@items
                 }
                 if (current == null) {

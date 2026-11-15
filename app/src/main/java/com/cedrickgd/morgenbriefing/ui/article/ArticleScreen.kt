@@ -1,13 +1,20 @@
 package com.cedrickgd.morgenbriefing.ui.article
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -43,22 +50,30 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,7 +92,10 @@ import com.cedrickgd.morgenbriefing.listen.ListenMiniPlayerDefaults
 import com.cedrickgd.morgenbriefing.ui.components.GlassIconButton
 import com.cedrickgd.morgenbriefing.ui.components.GlassPillButton
 import com.cedrickgd.morgenbriefing.ui.components.LoadingSkeleton
+import com.cedrickgd.morgenbriefing.ui.glass.GlassLevel
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
+import com.cedrickgd.morgenbriefing.ui.glass.blockTouchesBehind
+import com.cedrickgd.morgenbriefing.ui.glass.glass
 import com.cedrickgd.morgenbriefing.ui.glass.glassContent
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleRoute
@@ -97,12 +115,23 @@ private val ImageGutter = 10.dp
 /** The floating controls (back, listen, share, browser) sit this far from the edge. */
 private val ControlsGutter = 10.dp
 
+/** Height of the controls' row under the status bar; the bar behind them is status bar + this. */
+private val ControlsBarHeight = 64.dp
+
+/** The bar is there this far before the text reaches it, so no line ever shows above its edge. */
+private val ControlsBarLead = 24.dp
+
+/** Corner radius of the bar's lower edge. */
+private val ControlsBarCorner = 24.dp
+
 /**
  * The article reader (docs/DESIGN.md §7): the article's own text and pictures on a calm, opaque
  * surface — no ads, no cookie banners, no navigation. The feed's picture (or the page's lead
  * picture) sits edge-to-edge under the status bar, then source and time, the headline in serif,
  * the teaser, and the extracted body. Floating glass controls: back, "Zuhören" (reads the full
- * text), share and "Im Browser öffnen" as the way out when a page cannot be read.
+ * text), share and "Im Browser öffnen" as the way out when a page cannot be read. Over the
+ * picture they float alone; once the text reaches them, a frosted bar behind them takes the
+ * status bar and the controls' row, so the text never runs under the clock or the buttons.
  */
 @Composable
 fun ArticleScreen(
@@ -134,6 +163,11 @@ fun ArticleScreen(
         val heroHeight = minOf(statusTop + maxWidth * 0.72f, maxHeight * 0.5f)
         val listState = rememberLazyListState()
         val content = state.content
+        // The picture has scrolled up to the controls: from here on, text passes beneath them.
+        val barAfterPx = with(LocalDensity.current) { (heroHeight - statusTop - ControlsBarHeight - ControlsBarLead).toPx() }
+        val textUnderControls by remember(listState, barAfterPx) {
+            derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > barAfterPx }
+        }
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -166,28 +200,113 @@ fun ArticleScreen(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .padding(top = statusTop + 8.dp, start = ControlsGutter, end = ControlsGutter),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        ReaderControls(
+            solid = textUnderControls,
+            title = state.item.source.trim().ifEmpty { content?.site.orEmpty() },
+            back = { ReaderControl(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = common.back, onClick = onBack) },
         ) {
-            GlassIconButton(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = common.back, onClick = onBack)
-            Spacer(Modifier.weight(1f))
             val speakingThis = listeningThis && listenState.speaking
-            GlassIconButton(
+            ReaderControl(
                 icon = if (speakingThis) Icons.Rounded.Pause else Icons.Rounded.Headphones,
                 contentDescription = if (speakingThis) reader.pauseListening else reader.listen,
                 onClick = {
                     if (listeningThis) listen.pauseOrResume() else listen.play(state.item, state.content?.text)
                 },
             )
-            GlassIconButton(Icons.Rounded.Share, contentDescription = common.share, onClick = { links.shareArticle(state.item) })
-            GlassIconButton(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = common.openInBrowser, onClick = openExternal)
+            ReaderControl(Icons.Rounded.Share, contentDescription = common.share, onClick = { links.shareArticle(state.item) })
+            ReaderControl(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = common.openInBrowser, onClick = openExternal)
         }
     }
+}
+
+/**
+ * The reader's controls at the top: [back], the [actions] and, once the text has reached them
+ * ([solid]), a thick frosted bar behind them, from the top of the screen down to under the
+ * buttons, with the [title] (the source) in small serif between them. The bar is floating glass:
+ * it blurs the text gliding beneath it (opaque without real blur) and takes every touch inside
+ * it. The reader's page has the colour of the bar, so a hairline along its rounded lower edge and
+ * a soft shadow set it off.
+ */
+@Composable
+private fun BoxScope.ReaderControls(
+    solid: Boolean,
+    title: String,
+    back: @Composable () -> Unit,
+    actions: @Composable RowScope.() -> Unit,
+) {
+    val statusTop = statusBarTop()
+    val barShape = RoundedCornerShape(bottomStart = ControlsBarCorner, bottomEnd = ControlsBarCorner)
+    val hairline = MaterialTheme.colorScheme.outlineVariant
+    AnimatedVisibility(
+        visible = solid,
+        modifier = Modifier.align(Alignment.TopCenter),
+        enter = fadeIn(spring(stiffness = Spring.StiffnessMediumLow)),
+        exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(statusTop + ControlsBarHeight)
+                .shadow(12.dp, barShape, ambientColor = Color.Black.copy(alpha = 0.14f), spotColor = Color.Black.copy(alpha = 0.14f))
+                .glass(shape = barShape, level = GlassLevel.Thick, floating = true)
+                .drawWithContent {
+                    drawContent()
+                    // Only the lower edge: up the sides and along the top the bar meets the screen's edge.
+                    val stroke = 1.dp.toPx()
+                    val half = stroke / 2f
+                    val corner = ControlsBarCorner.toPx()
+                    val bottom = size.height - half
+                    val edge = Path().apply {
+                        moveTo(half, bottom - corner)
+                        arcTo(Rect(half, bottom - 2 * corner, half + 2 * corner, bottom), 180f, -90f, false)
+                        lineTo(size.width - half - corner, bottom)
+                        arcTo(Rect(size.width - half - 2 * corner, bottom - 2 * corner, size.width - half, bottom), 90f, -90f, false)
+                    }
+                    drawPath(edge, hairline, style = Stroke(width = stroke))
+                }
+                .blockTouchesBehind(),
+        )
+    }
+    Row(
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .fillMaxWidth()
+            .padding(top = statusTop + 8.dp, start = ControlsGutter, end = ControlsGutter),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        back()
+        Box(Modifier.weight(1f)) {
+            this@Row.AnimatedVisibility(visible = solid && title.isNotBlank(), enter = fadeIn(), exit = fadeOut()) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = MaterialTheme.typography.displaySmall.fontFamily),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 6.dp),
+                )
+            }
+        }
+        actions()
+    }
+}
+
+/**
+ * One of the reader's round controls. The page beneath is the theme's own surface colour, on
+ * which plain glass disappears: these are tinted a step darker (light) or lighter (dark) than
+ * the page and float, so they stand out over the white page, the bar and any picture alike.
+ */
+@Composable
+private fun ReaderControl(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
+    GlassIconButton(
+        icon = icon,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        level = GlassLevel.Regular,
+        container = MaterialTheme.colorScheme.surfaceContainerHighest,
+        floating = true,
+    )
 }
 
 @Composable
@@ -318,7 +437,8 @@ private fun BlockView(block: ArticleBlock, showImages: Boolean, showAlt: Boolean
             Column(Modifier.padding(horizontal = ImageGutter, vertical = 12.dp)) {
                 AsyncImage(
                     model = block.url,
-                    contentDescription = block.alt.ifBlank { null },
+                    // Printed below as text (showAlt)? Then that line is what a screen reader reads, once.
+                    contentDescription = imageDescription(block.alt, altShown = showAlt),
                     contentScale = ContentScale.FillWidth,
                     modifier = Modifier
                         .fillMaxWidth()

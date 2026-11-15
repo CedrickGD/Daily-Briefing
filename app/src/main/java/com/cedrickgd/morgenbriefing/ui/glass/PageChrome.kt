@@ -43,6 +43,16 @@ import com.cedrickgd.morgenbriefing.i18n.componentStrings
 import com.cedrickgd.morgenbriefing.util.statusBarTop
 import kotlin.math.roundToInt
 
+/** Screen edge → cards, tiles, fields and the tab row (docs/DESIGN.md §5). */
+val PageGutter = 10.dp
+
+/**
+ * How far text that stands free on the sky (page titles, section headings, overlines, the text of
+ * frameless entries) is indented from the cards' edge: it starts on the text line of the cards
+ * (docs/DESIGN.md §5: 10 + 16 = 26 dp), one left line for everything readable on every screen.
+ */
+val SkyTextInset = 16.dp
+
 /**
  * Page title right under the status bar (docs/DESIGN.md §4): small overline + large serif title.
  * Use it as the first item of a page's scrolling content.
@@ -188,7 +198,8 @@ fun BoxScope.TopGlassBar(
                         Modifier
                             .fillMaxWidth()
                             .height(52.dp)
-                            .padding(start = 20.dp, end = 8.dp),
+                            // The small title sits on the same text line as the page title it replaces.
+                            .padding(start = PageGutter + SkyTextInset, end = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(

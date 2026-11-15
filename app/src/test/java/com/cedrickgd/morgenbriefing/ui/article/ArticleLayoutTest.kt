@@ -74,6 +74,16 @@ class ArticleLayoutTest {
     }
 
     @Test
+    fun `an alt text printed under its picture is not also the picture's content description`() {
+        // Printed as text: a screen reader reads that line, the picture stays silent.
+        assertNull(imageDescription("Dominic Johnson", altShown = true))
+        // With a caption of its own the alt text is not printed: it describes the picture to a screen reader.
+        assertEquals("Zwei Männer am Rednerpult", imageDescription("Zwei Männer am Rednerpult", altShown = false))
+        assertNull(imageDescription("", altShown = false))
+        assertNull(imageDescription("  ", altShown = false))
+    }
+
+    @Test
     fun `walls only offer the browser, network trouble offers a retry first`() {
         listOf(ReadOutcome.PAYWALL, ReadOutcome.CONSENT, ReadOutcome.BLOCKED, ReadOutcome.NOT_ARTICLE).forEach { outcome ->
             assertEquals(listOf(FailureAction.OPEN_IN_BROWSER), failureActions(ArticleFailure(outcome, "Site")))

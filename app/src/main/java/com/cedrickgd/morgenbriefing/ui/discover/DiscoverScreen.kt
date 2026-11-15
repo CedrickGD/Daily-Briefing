@@ -93,6 +93,7 @@ import com.cedrickgd.morgenbriefing.ui.components.GlassSnackbarHost
 import com.cedrickgd.morgenbriefing.ui.components.motionDisabled
 import com.cedrickgd.morgenbriefing.ui.components.pressScale
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
+import com.cedrickgd.morgenbriefing.ui.glass.SkyTextInset
 import com.cedrickgd.morgenbriefing.ui.glass.glassContent
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import com.cedrickgd.morgenbriefing.ui.nav.DiscoverRoute
@@ -394,7 +395,8 @@ private fun DiscoverHome(
 @Composable
 private fun HomeHeader(strings: DiscoverStrings, followedCount: Int, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
-    Column(modifier.padding(horizontal = 4.dp)) {
+    // Title, summary and intro stand on the text line of the cards below (docs/DESIGN.md §5).
+    Column(modifier.padding(horizontal = SkyTextInset)) {
         Spacer(Modifier.height(8.dp))
         Text(
             text = strings.overline.uppercase(LocalAppLanguage.current.locale),
@@ -787,7 +789,7 @@ private fun CategoryHero(detail: CategoryDetailUi, side: Dp) {
             Modifier
                 .fillMaxWidth()
                 .horizontalSafeDrawing()
-                .padding(start = side + 4.dp, end = side + 4.dp, top = statusBarTop() + PushedBarHeight + 16.dp, bottom = 28.dp),
+                .padding(start = side + SkyTextInset, end = side + SkyTextInset, top = statusBarTop() + PushedBarHeight + 16.dp, bottom = 28.dp),
         ) {
             Box(
                 Modifier
