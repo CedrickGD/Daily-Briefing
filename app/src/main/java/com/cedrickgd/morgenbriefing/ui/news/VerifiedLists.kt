@@ -172,6 +172,7 @@ internal fun keptAfter(kept: Map<String, Set<String>>, feed: NewsFeed): Map<Stri
     }
     feed.sections.forEach { keep(it.id, it.all.map(NewsItem::id)) }
     keep(LATEST_LIST, feed.latest.map { it.item.id })
+    keep(TIMELINE_LIST, feed.timeline.map { it.item.id })
     return out
 }
 

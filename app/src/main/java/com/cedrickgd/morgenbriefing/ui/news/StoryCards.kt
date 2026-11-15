@@ -75,17 +75,17 @@ import com.cedrickgd.morgenbriefing.ui.theme.ColorMath
 import com.cedrickgd.morgenbriefing.ui.theme.Reading
 import java.time.ZonedDateTime
 
-/** Space between two glass cards of the feed. */
-internal val CardGap: Dp = 14.dp
+/** Space between two glass cards of the feed (docs/DESIGN.md §5). */
+internal val CardGap: Dp = 12.dp
 
 /** Inner side margin of a feed card (docs/DESIGN.md §7). */
 internal val CardInset: Dp = 16.dp
 
 /** Height of the lead story's picture. */
-private val LeadPictureHeight = 168.dp
+internal val LeadPictureHeight = 168.dp
 
 /** Size of a compact row's thumbnail. */
-private val ThumbnailSize = 80.dp
+internal val ThumbnailSize = 80.dp
 
 /**
  * One piece of a glass card in a lazy list ([part]: rounded top, bottom, both or neither): the
@@ -179,10 +179,12 @@ internal fun SectionCardHeader(section: SectionUi, onShowAll: (() -> Unit)?, mod
  * full text (✓), a paywall or browser-only page, and the ⋮ menu. Tapping opens the article,
  * a long press opens the same menu. No buttons under the story.
  *
- * A story without a (permitted) picture never gets a big cover: its picture slot is a small tile
- * in the topic's color ([StoryVisual.TOPIC_TILE]) – a lead story then sits like a row with its
- * larger headline. A picture the prefetcher finds later (Google News) fades into the thumbnail;
- * the lead keeps its shape while on screen, so nothing jumps under the finger.
+ * With "Bilder anzeigen" on every story has its picture slot from the start ([storyVisual]): the
+ * generated cover in the topic's colors, and over it the article's picture – its own, or the one
+ * found for it (Google News items carry none; it is looked up ahead of the list and fades in).
+ * The slot keeps its size, so nothing jumps when a picture arrives, and a story without one
+ * keeps its cover. With the setting off the slot is a small tile in the topic's color
+ * ([StoryVisual.TOPIC_TILE]) and a lead story sits like a row with its larger headline.
  *
  * @param showTopic a small colored topic label above the headline (mixed lists: "Neueste").
  * @param divider a hairline below the story (not after the card's last one).
@@ -212,9 +214,8 @@ internal fun StoryCardItem(
     }
     val badge by remember(hints, item.id) { derivedStateOf { cardBadge(hints.status(item.id)) } }
     val visualItem = remember(item, hero) { hero?.let { item.copy(image = ArticleImage(it)) } ?: item }
-    val visual = storyVisual(showImage, storyImageUrl(item, hero))
-    // Decided once while on screen: a picture arriving later does not turn a row-like lead into a big one.
-    val leadWithPicture = remember(item.id, showImage, style) { style == StoryStyle.LEAD && visual == StoryVisual.PICTURE }
+    val visual = storyVisual(showImage)
+    val leadWithPicture = style == StoryStyle.LEAD && visual == StoryVisual.PICTURE
     val meta = remember(item, now, language) { feedMetaParts(item, now, language) }
     // Hyphenate in the article's own language (English local news under a German edition).
     val textLanguage = remember(item.sourceId) { ItemEdition.languageOf(item) }
@@ -304,7 +305,7 @@ internal fun StoryCardItem(
     }
 }
 
-/** The 80 dp picture of a row: the article's picture, or a tile in the topic's color. */
+/** The 80 dp picture of a row: the article's picture over its generated cover, or (pictures off) a tile in the topic's color. */
 @Composable
 private fun StoryThumbnail(item: NewsItem, topic: Topic, visual: StoryVisual, showImage: Boolean) {
     if (visual == StoryVisual.PICTURE) {
@@ -318,7 +319,8 @@ private fun StoryThumbnail(item: NewsItem, topic: Topic, visual: StoryVisual, sh
                 topic = topic,
                 modifier = Modifier.matchParentSize(),
                 showImage = showImage,
-                showCoverBadge = false,
+                // A cover that stands for the picture carries the topic's icon; under a picture it would only cost.
+                showCoverBadge = item.image == null,
             )
         }
     } else {

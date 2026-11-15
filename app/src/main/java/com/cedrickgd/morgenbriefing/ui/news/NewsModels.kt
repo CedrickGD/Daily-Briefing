@@ -154,6 +154,19 @@ data class NewsFeed(
     val latestWaiting: List<NewsItem> = emptyList(),
     /** "Neueste" candidates before verification. */
     val latestCandidates: Int = latest.size,
+    /**
+     * "Neueste" as an endless list ([timelineOf]): every story the followed topics hold, newest
+     * first, as far back as all topics that can still page have been read.
+     */
+    val timeline: List<FeedArticle> = latest,
+    /** [timeline] candidates still waiting for their check, in list order. */
+    val timelineWaiting: List<NewsItem> = latestWaiting,
+    /** [timeline] candidates before verification. */
+    val timelineCandidates: Int = latestCandidates,
+    /** [timeline] without the stories the "Für dich" cards show: what "Für dich" goes on with below them. */
+    val more: List<FeedArticle> = emptyList(),
+    /** The topics to ask for older articles when [timeline] ends ([nextToPage]); empty: nothing older can come. */
+    val olderNext: List<String> = emptyList(),
 ) {
     val isEmpty: Boolean get() = latest.isEmpty()
     val articleCount: Int get() = latest.size
@@ -184,9 +197,14 @@ data class NewsFeed(
  *   check is listed per topic ([SectionUi.waiting], [SectionUi.topWaiting]) and for "Neueste"
  *   ([NewsFeed.latestWaiting]).
  *
+ * - The age setting is no dead end: [NewsFeed.timeline] is what the "Neueste" tab scrolls
+ *   through – everything, as far back as the topics have been read ([timelineOf]) – and
+ *   [NewsFeed.olderNext] names the topics to page next.
+ *
  * @param now reference for the age filter.
  * @param hides the readable-only snapshot of the last refresh.
  * @param verification the verdicts, and what each list showed since the last build.
+ * @param open the followed topics that can still bring older articles (can page, not at their end).
  */
 internal fun buildNewsFeed(
     news: Map<String, TopicNews>,
@@ -194,12 +212,15 @@ internal fun buildNewsFeed(
     now: ZonedDateTime,
     hides: ReadabilityHides = ReadabilityHides.NONE,
     verification: Verification = Verification.OFF,
+    open: Set<String> = emptySet(),
 ): NewsFeed {
     val reference = now.toInstant()
     val size = prefs.sectionSize.coerceAtLeast(1)
     val verify = if (prefs.readableOnly && verification.enabled) verification else Verification.OFF
     val onTop = HashSet<String>()
     val fresh = ArrayList<Pair<Topic, List<NewsItem>>>(prefs.topics.size)
+    val everything = ArrayList<Pair<Topic, List<NewsItem>>>(prefs.topics.size)
+    val depths = LinkedHashMap<String, Instant>()
     val sections = prefs.topics.mapIndexed { index, topic ->
         val topicNews = news[topic.id]
         val candidates = readableItems(
@@ -211,6 +232,8 @@ internal fun buildNewsFeed(
         val items = checked.shown
         val recent = filterByAge(items, prefs.newsAge, reference)
         fresh += topic to filterByAge(candidates, prefs.newsAge, reference)
+        everything += topic to candidates
+        if (topic.id in open) pagedDepth(topicNews?.items.orEmpty(), reference)?.let { depths[topic.id] = it }
         // A section whose stories all opened earlier sections still shows them: never empty-looking.
         val top = recent.filter { it.id !in onTop }.ifEmpty { recent }.take(size)
         top.forEach { onTop += it.id }
@@ -236,6 +259,8 @@ internal fun buildNewsFeed(
     }
     val latestCandidates = latestOf(fresh)
     val latest = verifiedList(latestCandidates, LATEST_LIST, verify) { it.item.id }
+    val timelineCandidates = timelineOf(everything, horizon = depths.values.maxOrNull(), floor = reference.minus(TIMELINE_FLOOR))
+    val timeline = verifiedList(timelineCandidates, TIMELINE_LIST, verify) { it.item.id }
     return NewsFeed(
         sections = sections,
         latest = latest.shown,
@@ -243,6 +268,11 @@ internal fun buildNewsFeed(
         verifying = verify.enabled,
         latestWaiting = latest.waiting.map { it.item },
         latestCandidates = latestCandidates.size,
+        timeline = timeline.shown,
+        timelineWaiting = timeline.waiting.map { it.item },
+        timelineCandidates = timelineCandidates.size,
+        more = timeline.shown.filter { it.item.id !in onTop },
+        olderNext = nextToPage(depths),
     )
 }
 
@@ -269,7 +299,7 @@ internal fun latestOf(fresh: List<Pair<Topic, List<NewsItem>>>): List<FeedArticl
 }
 
 /** True when [candidate] describes [item] better than [current]. */
-private fun isMoreSpecific(candidate: Topic, current: Topic, item: NewsItem): Boolean = when {
+internal fun isMoreSpecific(candidate: Topic, current: Topic, item: NewsItem): Boolean = when {
     current.id == item.topicId -> false
     candidate.id == item.topicId -> true
     else -> candidate.parentId != null && candidate.parentId == current.id

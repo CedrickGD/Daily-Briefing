@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.cedrickgd.morgenbriefing.AppContainer
 import com.cedrickgd.morgenbriefing.MorgenbriefingApp
 import com.cedrickgd.morgenbriefing.data.BERLIN
+import com.cedrickgd.morgenbriefing.data.MoreResult
 import com.cedrickgd.morgenbriefing.data.article.KnownWalls
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
@@ -37,6 +38,9 @@ import com.cedrickgd.morgenbriefing.util.isWithin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -91,8 +95,12 @@ data class TodayUiState(
     val loadingMore: Set<String> = emptySet(),
     /** Topic ids whose endless list reached its end. */
     val endReached: Set<String> = emptySet(),
-    /** Topic ids whose last load of older articles brought nothing (the user may ask again). */
+    /** Topic ids whose last load of older articles failed (the user may ask again). */
     val stalled: Set<String> = emptySet(),
+    /** Older articles for the timeline ("Neueste", below the "Für dich" cards) are being loaded. */
+    val loadingOlder: Boolean = false,
+    /** The last load of older articles for the timeline failed (the user may ask again). */
+    val olderStalled: Boolean = false,
     /** "Nur vollständige Artikel" wants to check articles, but the phone is offline: only verified ones show. */
     val verifyOffline: Boolean = false,
     /** The compact weather card is expanded (remembered across launches). */
@@ -110,8 +118,9 @@ data class TodayUiState(
  * Weather is refreshed again on resume once it is older than 10 minutes, the news once they
  * are older than 15 minutes — and whenever the sources of a followed topic change in the
  * settings. The weather texts follow the interface language. Also drives following topics and
- * hiding sources from the feed, the endless topic lists ([loadMore]) and warming the articles on
- * screen ([prefetch]).
+ * hiding sources from the feed, the endless lists ([loadMore] for a topic, [loadOlder] for the
+ * timeline of all topics), warming the articles on screen ([prefetch]) and looking up the covers
+ * of stories without a picture ([covers]).
  */
 class TodayViewModel(
     private val container: AppContainer,
@@ -131,6 +140,9 @@ class TodayViewModel(
     /** Lead pictures the prefetcher found, by article id (for cards of articles without one). */
     val articleImages: StateFlow<Map<String, String>> get() = container.prefetcher.images
 
+    /** Cover pictures looked up ahead of the lists, by article id (kept across starts). */
+    val articleCovers: StateFlow<Map<String, String>> get() = container.covers.covers
+
     /** What the prefetcher knows about each article's readability, by article id. */
     val articleStatus: StateFlow<Map<String, ArticleStatus>> get() = container.prefetcher.status
 
@@ -146,6 +158,18 @@ class TodayViewModel(
     private var lastNewsAttempt: Instant? = null
     private var weatherToggled = false
     private val loadMoreJobs = HashMap<String, Job>()
+    private var olderJob: Job? = null
+
+    /**
+     * Topics the timeline no longer waits for: their older pages failed twice while other topics
+     * answered, and one broken search must not hold "Neueste" back for good. Until the next
+     * pull-to-refresh.
+     */
+    private val skipped = MutableStateFlow<Set<String>>(emptySet())
+    private val olderFailures = HashMap<String, Int>()
+
+    /** The stories whose covers the list asked for last; asked again after a pause. */
+    private var coverWindow: List<NewsItem> = emptyList()
 
     /** What the screen asked the prefetcher to warm (cancelled when it is left, renewed when it is back). */
     private val prefetchSession = PrefetchSession()
@@ -183,7 +207,9 @@ class TodayViewModel(
     /** Pull-to-refresh: weather and news in parallel; joins refreshes that are already running. */
     fun refresh() {
         if (_state.value.refreshing) return
-        _state.update { it.copy(refreshing = true, now = clock(), stalled = emptySet()) }
+        olderFailures.clear()
+        skipped.value = emptySet()
+        _state.update { it.copy(refreshing = true, now = clock(), stalled = emptySet(), olderStalled = false) }
         viewModelScope.launch {
             try {
                 joinAll(refreshWeather(), refreshNews(force = true))
@@ -209,6 +235,7 @@ class TodayViewModel(
         // Leaving the screen cancelled the warm-ups of the articles on screen; the list does not
         // ask again for the same articles, so the last window is sent once more.
         sendPrefetch(prefetchSession.resume())
+        sendCovers(coverWindow)
     }
 
     fun retryWeather() {
@@ -263,8 +290,10 @@ class TodayViewModel(
 
     /**
      * Loads older articles of [topicId] (its list neared its end). Runs once per topic at a time
-     * and only while the topic can page; a load that brings nothing marks the topic as stalled,
-     * so the list offers "Weiter zurück suchen" instead of asking again by itself.
+     * and only while the topic can page. Quiet days are skipped by themselves (the windows
+     * widen, [olderOf]); only a load that failed – offline, Google News not reachable – marks
+     * the topic as stalled, so the list offers "Weiter zurück suchen" instead of hammering a
+     * dead network.
      */
     fun loadMore(topicId: String) {
         if (loadMoreJobs[topicId]?.isActive == true) return
@@ -273,13 +302,71 @@ class TodayViewModel(
         loadMoreJobs[topicId] = viewModelScope.launch {
             val settings = attempt { container.settings.current() }.getOrNull() ?: return@launch
             if (!container.news.canLoadMore(topicId, settings)) return@launch
-            val grew = attempt { container.news.loadMore(topicId, settings) }
-                .onFailure { Log.w(TAG, "Loading older articles of $topicId failed", it) }
-                .getOrDefault(false)
-            if (!grew && topicId !in container.news.state.value.endReached) {
+            val result = olderOf(topicId, settings)
+            if (result == MoreResult.FAILED || result == MoreResult.EMPTY) {
                 _state.update { it.copy(stalled = it.stalled + topicId) }
             }
         }
+    }
+
+    /**
+     * Loads older articles for the timeline ("Neueste" and the list below the "Für dich" cards
+     * neared their end): the topics that reach back least far ([NewsFeed.olderNext]) read their
+     * next older days, a few at a time (two with light effects; the repository bounds the
+     * connections). The feed then shows everything up to the topic that reaches back least far
+     * now, and the list asks again when that brought nothing to its end.
+     *
+     * Only a round in which nothing worked is a failure (offline): the list then offers
+     * "Weiter zurück suchen". A topic that fails while others answer is tried once more and
+     * then left out, so one broken search never ends the timeline.
+     */
+    fun loadOlder() {
+        if (olderJob?.isActive == true) return
+        val light = container.performance.light
+        val next = _state.value.feed?.olderNext.orEmpty().let { if (light) it.take(OLDER_TOPICS_LIGHT) else it }
+        if (next.isEmpty()) return
+        _state.update { it.copy(loadingOlder = true, olderStalled = false) }
+        olderJob = viewModelScope.launch {
+            var stalled = false
+            try {
+                val settings = attempt { container.settings.current() }.getOrNull() ?: return@launch
+                val results = coroutineScope {
+                    next.map { id ->
+                        async {
+                            // The topic's own list is loading it already: wait for that instead of a second load.
+                            val running = loadMoreJobs[id]?.takeIf { it.isActive }
+                            id to if (running != null) running.join().let { MoreResult.GREW } else olderOf(id, settings)
+                        }
+                    }.awaitAll()
+                }
+                val failed = results.filter { it.second == MoreResult.FAILED || it.second == MoreResult.EMPTY }.map { it.first }
+                val worked = results.size > failed.size
+                results.filter { it.second == MoreResult.GREW }.forEach { olderFailures.remove(it.first) }
+                if (worked) {
+                    failed.forEach { olderFailures[it] = (olderFailures[it] ?: 0) + 1 }
+                    val given = failed.filter { (olderFailures[it] ?: 0) >= OLDER_GIVE_UP }
+                    if (given.isNotEmpty()) skipped.update { it + given }
+                }
+                stalled = failed.isNotEmpty() && !worked
+            } finally {
+                _state.update { it.copy(loadingOlder = false, olderStalled = stalled) }
+            }
+        }
+    }
+
+    /**
+     * Older articles of [topicId]: asks again while the days asked for were quiet (each call
+     * looks further back with wider windows), up to [MAX_EMPTY_ROUNDS] calls – a year back is
+     * reached before that, so [MoreResult.EMPTY] comes back only for a search that never ends.
+     */
+    private suspend fun olderOf(topicId: String, settings: AppSettings): MoreResult {
+        repeat(MAX_EMPTY_ROUNDS) {
+            val result = attempt { container.news.loadOlder(topicId, settings) }
+                .onFailure { Log.w(TAG, "Loading older articles of $topicId failed", it) }
+                .getOrDefault(MoreResult.FAILED)
+            if (result != MoreResult.EMPTY) return result
+        }
+        return MoreResult.EMPTY
     }
 
     /**
@@ -292,11 +379,29 @@ class TodayViewModel(
         sendPrefetch(items)
     }
 
-    /** The screen was left: stop warming what it asked for ([onResume] asks again). */
+    /**
+     * Looks up the covers of [items] (on screen and the next page; the ones whose feed carried
+     * no picture) – on any connection, whatever "Artikel vorladen" says: that setting is about
+     * the full text. Nothing with "Bilder anzeigen" off.
+     */
+    fun covers(items: List<NewsItem>) {
+        coverWindow = items
+        sendCovers(items)
+    }
+
+    /** The screen was left: stop warming and looking up what it asked for ([onResume] asks again). */
     fun stopPrefetch() {
+        attempt { container.covers.stop() }.onFailure { Log.w(TAG, "Cover stop failed", it) }
         val ids = prefetchSession.stop()
         if (ids.isEmpty()) return
         attempt { container.prefetcher.cancel(ids) }.onFailure { Log.w(TAG, "Prefetch cancel failed", it) }
+    }
+
+    private fun sendCovers(items: List<NewsItem>) {
+        val prefs = _state.value.prefs ?: return
+        if (items.isEmpty() || !prefs.showImages) return
+        attempt { container.covers.request(items, prefs.editionLanguage.ifBlank { null }) }
+            .onFailure { Log.w(TAG, "Cover lookup failed", it) }
     }
 
     private fun sendPrefetch(items: List<NewsItem>) {
@@ -426,8 +531,10 @@ class TodayViewModel(
         viewModelScope.launch {
             var kept = emptyMap<String, Set<String>>()
             var built: Triple<Any?, FeedPrefs?, ReadabilityHides?>? = null
-            combine(container.news.state, prefs, hides, verdicts, container.prefetcher.waitingForNetwork) { news, p, h, v, off ->
-                FeedInputs(news, p.first, p.second, h, v, off)
+            // The timeline waits for every topic that can still page – except the ones given up on.
+            val newsAndSkipped = container.news.state.combine(skipped) { news, skip -> news to skip }
+            combine(newsAndSkipped, prefs, hides, verdicts, container.prefetcher.waitingForNetwork) { n, p, h, v, off ->
+                FeedInputs(n.first, p.first, p.second, h, v, off, n.second)
             }.collectLatest { inputs ->
                 val news = inputs.news
                 val feedPrefs = inputs.prefs
@@ -438,7 +545,8 @@ class TodayViewModel(
                     built = build
                 }
                 val verification = Verification(feedPrefs.readableOnly, inputs.verdicts, kept)
-                val feed = withContext(Dispatchers.Default) { buildNewsFeed(news.topics, feedPrefs, clock(), inputs.hides, verification) }
+                val open = feedPrefs.pageable - news.endReached - inputs.skipped
+                val feed = withContext(Dispatchers.Default) { buildNewsFeed(news.topics, feedPrefs, clock(), inputs.hides, verification, open) }
                 if (feedPrefs.readableOnly) kept = keptAfter(kept, feed)
                 _state.update {
                     it.copy(
@@ -464,6 +572,7 @@ class TodayViewModel(
         val hides: ReadabilityHides,
         val verdicts: Map<String, ArticleStatus>,
         val offline: Boolean,
+        val skipped: Set<String>,
     )
 
     /**
@@ -525,6 +634,15 @@ class TodayViewModel(
         private val WEATHER_MAX_AGE: Duration = Duration.ofMinutes(10)
         private val NEWS_MAX_AGE: Duration = Duration.ofMinutes(15)
         private val NEWS_RETRY_AFTER: Duration = Duration.ofMinutes(3)
+
+        /** Calls in a row that may find only quiet days before a topic's search counts as stuck. */
+        private const val MAX_EMPTY_ROUNDS = 8
+
+        /** Topics paged at a time for the timeline with light effects. */
+        private const val OLDER_TOPICS_LIGHT = 2
+
+        /** Failures (while other topics answered) after which the timeline goes on without a topic. */
+        private const val OLDER_GIVE_UP = 2
 
         /**
          * What every followed topic reads (source ids and addresses): a new edition or a newly

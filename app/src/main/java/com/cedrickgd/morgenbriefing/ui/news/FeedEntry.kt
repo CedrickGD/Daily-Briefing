@@ -132,23 +132,28 @@ class FeedActions(
 )
 
 /**
- * What the prefetcher learned about the articles on screen: the lead picture of articles that
- * came without one (Google News) and whether the reader can show them. Entries read single
- * values through `derivedStateOf`, so one new status recomposes only its own card.
+ * What the app learned about the articles on screen: the picture of articles that came without
+ * one (Google News) – the lead picture the prefetcher read, else the cover looked up ahead of
+ * the list ([com.cedrickgd.morgenbriefing.data.article.CoverResolver]) – and whether the reader
+ * can show them. Entries read single values through `derivedStateOf`, so one new status
+ * recomposes only its own card.
  */
 @Stable
 class FeedHints(
     private val images: State<Map<String, String>>,
     private val statuses: State<Map<String, ArticleStatus>>,
+    private val covers: State<Map<String, String>> = NO_COVERS,
 ) {
-    /** The article's lead picture found by the prefetcher, if any. */
-    fun heroImage(itemId: String): String? = images.value[itemId]
+    /** The article's picture found by the prefetcher or the cover lookup, if any. */
+    fun heroImage(itemId: String): String? = images.value[itemId] ?: covers.value[itemId]
 
     fun status(itemId: String): ArticleStatus = statuses.value[itemId] ?: ArticleStatus.UNKNOWN
 
     companion object {
         /** Nothing known (previews, screens without a prefetcher). */
         val None = FeedHints(mutableStateOf(emptyMap()), mutableStateOf(emptyMap()))
+
+        private val NO_COVERS: State<Map<String, String>> = mutableStateOf(emptyMap())
     }
 }
 

@@ -89,7 +89,16 @@ für Android.
 
 * Serif (SemiBold) für Seitentitel, Schlagzeilen, große Zahlen (Temperatur, Uhrzeit).
 * Sans für alles andere; Fließtext 16 sp / 1.55, Lead im Feed 18 sp / 1.5.
-* Raster 4 dp; Außenabstand 16 dp, zwischen Karten 14–16 dp, in Karten 20 dp.
+* Raster 4 dp. Abstände, überall gleich (Heute, Entdecken, Suche, Leser, Einstellungen):
+  * **Bildschirmrand → Inhalt 10 dp** (Karten, Wetter, Hinweise, Suchfeld, Tab-Reihe, Kacheln) –
+    Inhalt soll groß wirken, nicht eingerückt. Dazu kommen nur die Sicherheitsabstände (Kamera-
+    Ausschnitt, 3-Tasten-Leiste im Querformat); auf breiten Fenstern bleibt die Spalte bei
+    höchstens 680 dp.
+  * **In Karten 16 dp** bis zum Text, **zwischen Karten 12 dp**.
+  * Text, der frei auf dem Himmel steht (Gruß und Datum auf „Heute“, Overlines über einer Liste),
+    beginnt auf der **Textkante der Karten** (10 + 16 = 26 dp) – eine durchgehende linke Linie
+    für alles Lesbare; Knöpfe daneben enden an der Kartenkante.
+  * Touch-Ziele bleiben ≥ 48 dp, mit Abstand zueinander; nichts wird am Rand beschnitten.
 * Jede Sektion hat eine Overline + Titel; nie zwei gleich aussehende Blöcke direkt
   untereinander ohne Hierarchie.
 
@@ -132,14 +141,26 @@ dem Entwurf, den der Besitzer gewählt hat):
   an die Leiste – kein versteckter Modus); dann die erste Meldung **groß** (Bild 168 dp, 18 dp
   Radius, Serif-Headline 19 sp, Meta „Quelle · vor 3 Std.“ mit kleinem grünem ✓ bei geprüftem
   Volltext, ⋮) und die nächsten als **kompakte Zeilen** (Serif 16 sp, bis 3 Zeilen, Meta-Zeile
-  mit ✓ und ⋮, rechts ein 80-dp-Bild). Meldungen ohne Bild bekommen statt eines großen Covers
-  eine **kleine Kachel in Themenfarbe mit dem Themen-Icon**; eine Aufmacher-Meldung ohne Bild
-  steht dann wie eine Zeile mit größerer Headline. Wie viele Meldungen je Thema, bestimmt die
-  Einstellung „Meldungen pro Thema“. Feine Linien trennen die Meldungen einer Karte.
+  mit ✓ und ⋮, rechts ein 80-dp-Bild). **Jede Meldung hat ein Bild**: Bringt der Feed keines mit
+  (Google News), sucht die App es vorab auf der Seite der Redaktion – für das, was gleich ins
+  Bild kommt, und die nächste Seite, auch mobil – und lädt die Bilder des nächsten Bildschirms
+  vor. Bis es da ist, und wenn es keines gibt oder es nicht lädt, zeigt der Bildplatz das
+  **generierte Cover** in Themenfarbe (nie eine leere Fläche oder eine bloße Farbkachel neben
+  Fotos); der Platz hat immer dieselbe Größe, nichts springt. Nur mit „Bilder anzeigen“ aus
+  steht dort eine kleine Kachel mit dem Themen-Icon, der Aufmacher dann wie eine Zeile mit
+  größerer Headline. Wie viele Meldungen je Thema, bestimmt die Einstellung „Meldungen pro
+  Thema“. Feine Linien trennen die Meldungen einer Karte. Unter den Karten und „Mehr entdecken“
+  geht die Seite **endlos weiter**: Overline „NEUESTE“, dann eine Glaskarte mit allen übrigen
+  Meldungen, neueste zuerst.
 * **Neueste**: **eine** Glaskarte mit kompakten Zeilen, über jeder Headline ein kleines farbiges
-  Themen-Label; jede Meldung einmal; endlos wie bisher. **Ein Thema**: oben eine schmale Zeile
+  Themen-Label; jede Meldung einmal; endlos – alles, was die Themen haben, neueste zuerst (der
+  Zeitraum aus den Einstellungen begrenzt nur die Karten von „Für dich“), und am Ende laden die
+  Themen von selbst ältere nach. **Ein Thema**: oben eine schmale Zeile
   „37 MELDUNGEN · STAND 07:12“ (bei Kategorien mit „Unterthemen von …“), darunter eine Glaskarte –
-  erste Meldung groß, dann Zeilen –, endlos mit Nachladen älterer Meldungen.
+  erste Meldung groß, dann Zeilen –, endlos mit Nachladen älterer Meldungen (auch
+  „Schlagzeilen“). Nachgeladen wird ohne Knopf; ruhige Tage überspringt die App von selbst.
+  „Weiter zurück suchen“ erscheint nur, wenn das Laden scheitert (offline), „Das war's“ erst,
+  wenn es wirklich nichts Älteres mehr gibt.
   Lange Karten sind aus einzelnen Listen-Elementen gebaut (`glassCardPart`): nur das erste hat die
   oberen, nur das letzte die unteren Rundungen, die Kante läuft ohne Naht durch.
 * **Keine Knopfreihe unter den Meldungen.** Das ⋮-Menü (auch per langem Druck auf die Meldung)

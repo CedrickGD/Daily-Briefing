@@ -329,7 +329,14 @@ class TopicSourcesTest {
         val off = germany.copy(disabledFeeds = setOf("gn:wirtschaft/boerse@DE:de", "ntv-boerse"))
         assertEquals(listOf("tagesschau-finanzen"), TopicSources.resolve("wirtschaft/boerse", off).map { it.id })
         assertEquals(3, TopicSources.resolve("wirtschaft/boerse", off, includeDisabled = true).size)
-        assertNull(TopicSources.pagingQuery(Topics.TOP_ID, germany))
+        // The top stories page with the headline desks' query of the edition's language …
+        val top = TopicSources.pagingQuery(Topics.TOP_ID, germany)!!
+        assertTrue(top.query.startsWith("Politik OR"))
+        assertEquals("gn:top@DE:de", top.sourceId)
+        assertTrue(TopicSources.pagingQuery(Topics.TOP_ID, germany.copy(edition = NewsEdition.USA))!!.query.startsWith("politics OR"))
+        // … not where only the English fallback would answer, and not with their Google News source off.
+        assertNull(TopicSources.pagingQuery(Topics.TOP_ID, germany.copy(edition = NewsEdition("NL", "nl"))))
+        assertNull(TopicSources.pagingQuery(Topics.TOP_ID, germany.copy(disabledFeeds = setOf("gn:top@DE:de"))))
         val paging = TopicSources.pagingQuery("wirtschaft/boerse", germany)!!
         assertTrue(paging.query.startsWith("DAX OR"))
         assertEquals("gn:wirtschaft/boerse@DE:de", paging.sourceId)

@@ -53,6 +53,21 @@ data class RefreshOutcome(
     val allFailed: Boolean get() = refreshed.isEmpty() && failed.isNotEmpty()
 }
 
+/** What asking for older articles of a topic ended in ([NewsRepository.loadOlder]). */
+enum class MoreResult {
+    /** New articles were appended. */
+    GREW,
+
+    /** The windows asked for held nothing new; the next call looks further back (wider windows). */
+    EMPTY,
+
+    /** Google News could not be reached (offline, an error status): try again later. */
+    FAILED,
+
+    /** Nothing older exists for the topic (its end, or a topic that cannot page). */
+    END,
+}
+
 /**
  * The news of the app: every topic's articles, merged from its sources ([TopicSources]:
  * publisher feeds and Google News), kept in memory ([state]) and on disk ([NewsCache]).
@@ -191,12 +206,19 @@ class NewsRepository(
      * the oldest Google News article the topic holds (3 days at first, wider when little comes;
      * empty windows are skipped, up to [MAX_EMPTY_WINDOWS] per call, at most
      * [MAX_HISTORY_DAYS] back). Returns whether anything
-     * new came; false at the end of the list, for topics without a search (own feeds only, top
-     * stories) and when Google News is not reachable (try again later).
+     * new came; false at the end of the list, for topics without a search (own feeds only)
+     * and when Google News is not reachable (try again later). [loadOlder] tells these apart.
      */
-    suspend fun loadMore(topicId: String, settings: AppSettings): Boolean {
+    suspend fun loadMore(topicId: String, settings: AppSettings): Boolean = loadOlder(topicId, settings) == MoreResult.GREW
+
+    /**
+     * [loadMore] with the reason when nothing came: [MoreResult.EMPTY] (quiet days – the next
+     * call continues further back with wider windows, so the caller may simply ask again),
+     * [MoreResult.FAILED] (Google News not reachable) or [MoreResult.END].
+     */
+    suspend fun loadOlder(topicId: String, settings: AppSettings): MoreResult {
         warm()
-        val paging = TopicSources.pagingQuery(topicId, settings) ?: return false
+        val paging = TopicSources.pagingQuery(topicId, settings) ?: return MoreResult.END
         return topicLock(topicId).withLock {
             _state.update { it.copy(loadingMore = it.loadingMore + topicId) }
             try {
@@ -207,12 +229,12 @@ class NewsRepository(
         }
     }
 
-    private suspend fun loadMoreLocked(topicId: String, settings: AppSettings, paging: PagingQuery): Boolean {
+    private suspend fun loadMoreLocked(topicId: String, settings: AppSettings, paging: PagingQuery): MoreResult {
         val today = clock().toLocalDate()
         val previous = _state.value.topics[topicId]
         if ((previous?.items?.size ?: 0) >= MAX_PER_TOPIC) {
             markEnd(topicId, true)
-            return false
+            return MoreResult.END
         }
         var cursor = synchronized(cursors) { cursors[topicId] }?.takeIf { it.paging == paging }
             ?: PageCursor(paging, before = initialCursor(previous, paging, today), days = FIRST_WINDOW_DAYS)
@@ -222,7 +244,7 @@ class NewsRepository(
             if (cursor.before.isBefore(today.minusDays(MAX_HISTORY_DAYS))) {
                 remember(topicId, cursor)
                 markEnd(topicId, true)
-                return false
+                return MoreResult.END
             }
             val window = GoogleNews.DateWindow(after = cursor.before.minusDays(cursor.days), before = cursor.before)
             val source = FeedSource(
@@ -240,7 +262,7 @@ class NewsRepository(
             } catch (e: IOException) {
                 Log.i(TAG, "More for $topicId failed: ${e.message}")
                 remember(topicId, cursor)
-                return false
+                return MoreResult.FAILED
             }
             // Refreshes wait for this lock before they publish, so the topic is still as read here.
             val current = _state.value.topics[topicId] ?: previous
@@ -254,12 +276,12 @@ class NewsRepository(
                 publish(merged)
                 remember(topicId, next)
                 markEnd(topicId, merged.items.size >= MAX_PER_TOPIC)
-                return true
+                return MoreResult.GREW
             }
             cursor = next
         }
         remember(topicId, cursor)
-        return false
+        return MoreResult.EMPTY
     }
 
     /**

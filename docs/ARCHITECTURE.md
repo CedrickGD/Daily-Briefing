@@ -26,7 +26,9 @@ keine Cloud und keine KI. (Paket und applicationId heißen aus Update-Gründen w
         ├─ RssClient (OkHttp + RssParser) holt bis zu 6 parallel
         ├─ zusammenführen, gleiche Meldung (Link oder Überschrift) raus, neueste zuerst,
         │   ausgefallene Quellen behalten ihre letzten Meldungen (3 Tage)
-        ├─ loadMore: ältere Google-News-Zeitfenster (after:/before:) anhängen = endlose Liste
+        ├─ loadOlder: ältere Google-News-Zeitfenster (after:/before:) anhängen = endlose Liste
+        │   (auch „Schlagzeilen“: Suche der Hauptressorts); Ergebnis GREW / EMPTY (ruhige Tage,
+        │   nächster Aufruf sucht weiter zurück) / FAILED (offline) / END
         ├─ search(query, page): flüchtige Ergebnisse, Seiten = Zeitfenster; SearchQuery versteht
         │   die Anfrage (Ticker wie SLV exakt, Anführungszeichen, OR, -Wort), Hauptausgabe + US/GB
         │   parallel, SearchRanking sortiert nach Relevanz (ohne -site:, das Google lockert)
@@ -40,6 +42,16 @@ Artikel öffnen / vorladen
      → ArticleCompleteness: vollständig oder nur Anriss (Abo-Hinweise, erklärte Länge, nur der
        Vorspann, abgeschnitten, Video-/Start-/Kursseite) → Status READABLE = „geprüft“
      → Cache store/articles/<id>.json (7 Tage), Urteil je Artikel store/verdicts.json (7 Tage)
+
+Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
+  CoverResolver ── vor der Liste: was im Bild ist und die nächste Seite, 3 parallel (sparsam 2),
+     auf jeder Verbindung (auch mobil), unabhängig von „Artikel vorladen“; nicht mit „Bilder aus“
+     → LinkResolver (aufgelöste Links werden nie erneut gefragt; bei 429/Fehlern Pause 2–30 min)
+     → CoverLookup: nur der Seitenanfang bis </head> (≤ 384 kB, meist 8 kB) → og:image /
+       twitter:image (CoverMeta), nur https
+     → CoverStore store/covers.json (Bild 30 Tage, „kein Bild“ 12 Std.) → Karten zeigen es sofort
+     → was Leser und Prefetcher finden (leadImage), zählt mit
+  CoverPreloader (Coil): lädt die Bilder des nächsten Bildschirms in Kartengröße vor
 
 „Nur vollständige Artikel“ (AppSettings.readableOnly)
   Listen (Für dich, Neueste, Themen, Entdecken) zeigen nur READABLE-Meldungen (VerifiedLists):
@@ -93,7 +105,13 @@ Artikel öffnen / vorladen
   sind ein Hash des normalisierten Links.
 * **Feed-Logik** (`ui/news/FeedLogic.kt`, `NewsModels.kt`): pro gefolgtem Thema eine Sektion
   („Für dich“), „Neueste“ über alle Themen ohne Doppelte, je Thema eine endlose Liste mit
-  `loadMore` am Ende; „nur vollständige Artikel“ filtert Meldungen gesperrter Seiten und zeigt
+  `loadMore` am Ende. Auch „Neueste“ und das Ende von „Für dich“ sind endlos (`FeedTimeline.kt`):
+  alles, was die Themen haben, neueste zuerst (die Zeitraum-Einstellung begrenzt nur die Karten
+  von „Für dich“), aber – jenseits der letzten 24 Stunden – nur so weit zurück, wie jedes noch
+  blätterbare Thema gelesen ist – so hängen ältere Seiten immer nur
+  unten an; am Ende blättern die Themen mit der kürzesten Historie weiter (`loadOlder` im
+  ViewModel, höchstens 4, sparsam 2 zugleich). Listen-Einträge sind nach Artikel verschlüsselt,
+  nicht nach Position: Neues darüber verschiebt nichts. „Nur vollständige Artikel“ filtert Meldungen gesperrter Seiten und zeigt
   nur vom `ArticlePrefetcher` geprüfte (`VerifiedLists.kt`, `ui/today/TodayWindows.kt`: was als
   Nächstes geprüft wird); ohne die Einstellung gehen sichtbare Meldungen zum Vorladen an den
   Prefetcher (Status „Volltext“/„Bezahlinhalt“, Bild für Google-News-Karten).
@@ -115,7 +133,7 @@ Artikel öffnen / vorladen
 | `data/remote` | `OpenMeteoClient`, `RssClient` (Feeds lesen, Feed hinter einer Website finden), `GoogleNewsDecoder` (Google-News-Link → Artikel-URL) |
 | `data/local` | `WeatherStore`, `NewsCache` (JSON-Dateien, atomar geschrieben) |
 | `data` | `SettingsRepository` (DataStore) + `SettingsOps` (folgen, sortieren, Orte, Suchen) + `SettingsMigration`, `WeatherRepository`, `NewsRepository` |
-| `data/article` | `ArticleExtractor`, `ArticleCleaner`, `PageSignals` (Bezahlschranke/Cookie-Wand), `ArticleCompleteness` (vollständig oder Anriss), `ArticleRepository`, `ReadabilityStore` (`store/readability.json`, Startliste `KnownWalls`), `ArticlePrefetcher` + `NetworkMeter` + `VerdictStore` (`store/verdicts.json`), `LinkResolver`, `SessionCookies`. Prüfung gegen echte Seiten: `ArticleLiveEvaluation` (`MB_LIVE=1`) |
+| `data/article` | `ArticleExtractor`, `ArticleCleaner`, `PageSignals` (Bezahlschranke/Cookie-Wand), `ArticleCompleteness` (vollständig oder Anriss), `ArticleRepository`, `ReadabilityStore` (`store/readability.json`, Startliste `KnownWalls`), `ArticlePrefetcher` + `NetworkMeter` + `VerdictStore` (`store/verdicts.json`), `CoverResolver` + `CoverLookup` + `CoverStore` (`store/covers.json`: Titelbilder für Meldungen ohne Bild), `LinkResolver`, `SessionCookies`. Prüfung gegen echte Seiten: `ArticleLiveEvaluation` (`MB_LIVE=1`) |
 | `domain` | `Condition`, `WeatherInsights`, `ClothingAdvisor` (Headline, Kleidung, Warnungen, Notification-Text in jeder Sprache), `Fmt` |
 | `location` | `LocationFinder` („Mein Standort“) |
 | `notify` | `AlarmScheduler`, `MorningAlarmReceiver`, `SystemEventsReceiver`, `MorningWorker`, `Notifications` |

@@ -9,6 +9,9 @@ import com.cedrickgd.morgenbriefing.data.WeatherRepository
 import com.cedrickgd.morgenbriefing.data.article.AndroidNetworkMeter
 import com.cedrickgd.morgenbriefing.data.article.ArticlePrefetcher
 import com.cedrickgd.morgenbriefing.data.article.ArticleRepository
+import com.cedrickgd.morgenbriefing.data.article.CoverLookup
+import com.cedrickgd.morgenbriefing.data.article.CoverResolver
+import com.cedrickgd.morgenbriefing.data.article.CoverStore
 import com.cedrickgd.morgenbriefing.data.article.LinkResolver
 import com.cedrickgd.morgenbriefing.data.article.ReadabilityStore
 import com.cedrickgd.morgenbriefing.data.article.VerdictStore
@@ -86,6 +89,21 @@ class AppContainer(context: Context) {
     val network = AndroidNetworkMeter(app)
     /** Checks 3 articles at a time, 2 with light effects. */
     val prefetcher = ArticlePrefetcher(articles, network, verdicts, light = performance::light)
+
+    /**
+     * Cover pictures for cards of articles whose feed carried none (Google News): looked up ahead
+     * of the lists on any connection, kept across starts (`store/covers.json`); what the reader
+     * and the prefetcher find counts too.
+     */
+    private val coverLookup = CoverLookup(http, linkResolver)
+    val covers = CoverResolver(
+        source = { item, language -> coverLookup.find(item, language) },
+        network = network,
+        store = CoverStore(File(storeDir, "covers.json"), json, CoroutineScope(SupervisorJob() + Dispatchers.IO)),
+        light = performance::light,
+        resolved = googleNewsDecoder::peek,
+        cached = { item -> articles.cachedOrNull(item)?.leadImage },
+    ).also { it.follow(prefetcher.images) }
     val location = LocationFinder(app)
 }
 

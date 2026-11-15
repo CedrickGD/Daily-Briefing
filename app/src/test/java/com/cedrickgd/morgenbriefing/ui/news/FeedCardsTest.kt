@@ -92,14 +92,12 @@ class FeedCardsTest {
     }
 
     @Test
-    fun `stories without a picture get the topic tile, never a cover`() {
-        assertEquals(StoryVisual.PICTURE, storyVisual(showImages = true, imageUrl = "https://cdn.example.com/a.jpg"))
-        assertEquals(StoryVisual.TOPIC_TILE, storyVisual(showImages = true, imageUrl = null))
-        assertEquals(StoryVisual.TOPIC_TILE, storyVisual(showImages = true, imageUrl = ""))
-        // Only pictures the app may load: no plain http.
-        assertEquals(StoryVisual.TOPIC_TILE, storyVisual(showImages = true, imageUrl = "http://cdn.example.com/a.jpg"))
-        // "Bilder anzeigen" off: tiles everywhere.
-        assertEquals(StoryVisual.TOPIC_TILE, storyVisual(showImages = false, imageUrl = "https://cdn.example.com/a.jpg"))
+    fun `every story has its picture slot, the topic tile only with pictures off`() {
+        // Whether or not a picture is known yet: the slot is there (the generated cover shows
+        // until the picture does), so a card never changes its height when one arrives.
+        assertEquals(StoryVisual.PICTURE, storyVisual(showImages = true))
+        // "Bilder anzeigen" off: tiles everywhere, nothing is downloaded.
+        assertEquals(StoryVisual.TOPIC_TILE, storyVisual(showImages = false))
     }
 
     @Test

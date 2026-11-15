@@ -129,6 +129,7 @@ import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import com.cedrickgd.morgenbriefing.ui.nav.SearchRoute
 import com.cedrickgd.morgenbriefing.ui.news.FeedActions
 import com.cedrickgd.morgenbriefing.ui.news.FeedEntry
+import com.cedrickgd.morgenbriefing.ui.news.FeedGutter
 import com.cedrickgd.morgenbriefing.ui.news.copyLink
 import com.cedrickgd.morgenbriefing.ui.shell.reportChromeScroll
 import com.cedrickgd.morgenbriefing.util.horizontalSafeDrawing
@@ -178,7 +179,8 @@ fun SearchScreen(
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val now = rememberNow()
-    val side = 16.dp + pageSideInset()
+    // The app-wide screen-edge gutter (docs/DESIGN.md §5), like the feed.
+    val side = FeedGutter + pageSideInset()
     val bottom = contentPadding.calculateBottomPadding()
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -254,7 +256,11 @@ fun SearchScreen(
             .collect { (ids, _) ->
                 val current = latestState
                 val byId = current.articles.associateBy { it.item.id }
-                viewModel.prefetch((ids.mapNotNull { byId[it]?.item } + current.candidates).distinctBy { it.id })
+                val below = current.articles.indexOfLast { it.item.id in ids } + 1
+                viewModel.prefetch(
+                    items = (ids.mapNotNull { byId[it]?.item } + current.candidates).distinctBy { it.id },
+                    upcoming = current.articles.drop(below).take(COVERS_AHEAD).map { it.item },
+                )
             }
     }
 
@@ -417,7 +423,7 @@ fun SearchScreen(
             },
             onBack = onBack,
             focusRequester = focusRequester,
-            side = side - 4.dp,
+            side = side,
         )
 
         GlassSnackbarHost(
@@ -432,6 +438,9 @@ fun SearchScreen(
 }
 
 private const val RESULT_PREFIX = "r:"
+
+/** Results below the screen whose covers are looked up ahead (large entries: about two screens). */
+private const val COVERS_AHEAD = 6
 
 /** The feed entry's actions for search results: open in the reader, listen, share, copy. */
 @Composable

@@ -40,8 +40,8 @@ import com.cedrickgd.morgenbriefing.ui.glass.glass
 import com.cedrickgd.morgenbriefing.ui.theme.OverlineLetterSpacing
 import java.time.ZonedDateTime
 
-/** Side margin of feed content (docs/DESIGN.md §5: 16 dp). */
-internal val FeedGutter: Dp = 16.dp
+/** Side margin of feed content: the app-wide screen-edge gutter (docs/DESIGN.md §5: 10 dp). */
+internal val FeedGutter: Dp = 10.dp
 
 /**
  * A small overline + serif title introducing a feed view ("Neueste", a topic), with an optional
@@ -283,6 +283,9 @@ internal fun LazyListScope.forYouItems(
  * An endless list as one glass card ("Neueste", a topic's tab): every story a piece of the card,
  * the first one large when [leadFirst] (a topic), else compact rows only.
  *
+ * Entries are keyed by article, not by position: when older pages or a refresh put stories above
+ * the ones on screen, the list stays where the reader is instead of sliding under the finger.
+ *
  * @param showTopic a small colored topic label above each headline (mixed views).
  */
 internal fun LazyListScope.storyListItems(
@@ -297,9 +300,12 @@ internal fun LazyListScope.storyListItems(
     leadFirst: Boolean,
 ) {
     val count = articles.size
+    val keyed = HashSet<String>(count)
     articles.forEachIndexed { index, article ->
         val style = listStoryStyle(index, leadFirst)
-        item(key = entryKey(keyPrefix, index, article.feedKey), contentType = "story-$style") {
+        // A story is in a list once; should one ever come twice, its position keeps the key unique.
+        val key = entryKey(keyPrefix, if (keyed.add(article.feedKey)) 0 else index, article.feedKey)
+        item(key = key, contentType = "story-$style") {
             CardPiece(cardPart(index, count), Modifier.animateItem().padding(horizontal = FeedGutter)) {
                 StoryCardItem(
                     article = article,
