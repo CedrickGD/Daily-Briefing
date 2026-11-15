@@ -399,8 +399,8 @@ object Regions {
     /** The preset for [key]; unknown keys fall back to [DEFAULT]. */
     fun byKey(key: String?): Region = byKey[key] ?: byKey.getValue(DEFAULT)
 
-    /** The presets are German public broadcasters: they serve the German edition only. */
-    fun servesEdition(edition: NewsEdition): Boolean = edition.country == "DE"
+    /** The presets are German public broadcasters: they serve Germany read in German only (not Germany in English). */
+    fun servesEdition(edition: NewsEdition): Boolean = edition == NewsEdition.GERMANY
 
     /**
      * The preset a place belongs to, judged by the Bundesland in its region label

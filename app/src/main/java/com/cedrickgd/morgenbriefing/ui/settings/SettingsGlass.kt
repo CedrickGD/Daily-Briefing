@@ -117,6 +117,13 @@ import kotlinx.coroutines.delay
  * entrance of page content.
  */
 
+/**
+ * The outer margin of the settings page, the first-start sheet and their picker sheets: narrow,
+ * so the cards use the width of the screen (the owner found 16 dp "small"). Cards keep their
+ * inner padding; headings and sheet titles sit a few dp further in.
+ */
+internal val SettingsGutter = 10.dp
+
 /** Overline + serif title above a section (docs/DESIGN.md §5: every section has both). */
 @Composable
 internal fun SectionHeading(overline: String, title: String, modifier: Modifier = Modifier, top: Dp = 36.dp) {

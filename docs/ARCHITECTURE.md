@@ -1,8 +1,8 @@
 # Daily Briefing – Architektur
 
 Android-App für alle: Wetter („Vor der Tür“, Tagesverlauf, was anziehen) und Nachrichten aus
-gefolgten Kategorien, Unterthemen, Suchen und Orten – aus 23 Länder-Ausgaben, in fünf
-Oberflächensprachen, mit einem Lesemodus, der den ganzen Artikel ohne Werbung in der App zeigt.
+gefolgten Kategorien, Unterthemen, Suchen und Orten – über 22 Länder in 11 Sprachen (Region und
+Sprache frei kombinierbar), in fünf Oberflächensprachen, mit einem Lesemodus, der den ganzen Artikel ohne Werbung in der App zeigt.
 Morgens eine Benachrichtigung mit Wetter und Schlagzeilen. Hell/Dunkel + Akzentfarben,
 „Morgenglas“-Design ([DESIGN.md](DESIGN.md)). Alles läuft auf dem Gerät; es gibt keinen Server,
 keine Cloud und keine KI. (Paket und applicationId heißen aus Update-Gründen weiter
@@ -20,7 +20,9 @@ keine Cloud und keine KI. (Paket und applicationId heißen aus Update-Gründen w
         │     · GoogleNews: Rubrik, Top-Meldungen oder Suche (Taxonomy-Suchbegriff je Sprache,
         │       Ort mit Bundesstaat, eigener Suchbegriff) in der Ausgabe des Themas;
         │       mit „nur lesbar“ als -site:-Ausschlüsse (KnownWalls + gelernte Seiten)
-        │     · Regions: Sender des Bundeslandes (nur deutsche Ausgaben) · eigene Feeds
+        │     · Region × Sprache ohne eigene Google-News-Ausgabe (USA auf Deutsch): Ausgabe der
+        │       Sprache; Heimat-Themen und Orte als Suche nach dem Namen (CountryQuery)
+        │     · Regions: Sender des Bundeslandes (nur Deutschland auf Deutsch) · eigene Feeds
         ├─ RssClient (OkHttp + RssParser) holt bis zu 6 parallel
         ├─ zusammenführen, gleiche Meldung (Link oder Überschrift) raus, neueste zuerst,
         │   ausgefallene Quellen behalten ihre letzten Meldungen (3 Tage)
@@ -53,8 +55,32 @@ Artikel öffnen / vorladen
   Muster in `CommonStrings.kt`): ein Interface, ein Objekt je Sprache – fehlt eine Übersetzung,
   baut die App nicht. `LocalAppLanguage` wird in `AppRoot` aus den Einstellungen gesetzt;
   Worker, Benachrichtigungen und reine Logik bekommen die Sprache als Parameter.
-* **Ausgabe** (`NewsEdition`): Land + Sprache der Nachrichten, unabhängig von der App-Sprache.
-  Ein lokaler Ort im Ausland liest die Ausgabe seines Landes (`NewsEdition.forCountry`).
+* **Region und Nachrichten-Sprache** (`NewsEdition` = Land + Sprache, gespeichert als
+  `news_edition` „US:de“): zwei Einstellungen, unabhängig voneinander und von der App-Sprache;
+  jedes der 22 Länder (`COUNTRIES`) geht mit jeder der 11 Sprachen (`LANGUAGES`). Google News
+  hat nur für 26 Paare eine eigene Ausgabe (`NewsEdition.ALL`, `isNative`). Für alle anderen
+  leitet es stumm auf die Heimat-Ausgabe der Sprache um und lässt das Land fallen
+  (`hl=de&gl=US&ceid=US:de` → Top-Meldungen und Rubriken aus Deutschland, „Inland“ und
+  Ortsseiten leer; nur Suchen liefern – geprüft 15.11.2026). Darum fragt die App immer eine
+  Ausgabe, die es gibt (`NewsEdition.google`), und holt das Land über den Namen:
+  * **Heimat-Themen** (`Taxonomy.DOMESTIC`: Schlagzeilen, Politik, Inland, Wahlen, Wirtschaft,
+    Konjunktur, Geld, Immobilien) werden zur Suche „Land + Themenwörter“
+    (`TopicDef.queryFor`, `CountryQuery`: `USA OR "Vereinigte Staaten" Politik OR Regierung …`;
+    Schlagzeilen = das Land in den letzten 7 Tagen) – ohne Redaktions-Feeds, die über die
+    Heimatländer der Sprache berichten. Das endlose Nachladen sucht mit denselben Wörtern.
+  * **Alle anderen Themen** (Welt, Tech, Wissenschaft, Börse, Sport …) lesen Rubrik, Suche und
+    die länderunabhängigen Redaktions-Feeds der Sprache; Feeds, die an ein anderes Land
+    gebunden sind, und die Bundesland-Sender (nur Deutschland auf Deutsch) bleiben draußen.
+  * **Orte** (`TopicSources.placeSource`) liest die App in der Nachrichten-Sprache mit dem Land
+    des Ortes als Region: gibt es die Ausgabe (Wien auf Deutsch, London auf Englisch), über
+    die Ortsseite von Google News; sonst (Washington, D.C. auf Deutsch) als Suche nach dem
+    Namen in den letzten 14 Tagen. Bringt das weniger als 12 Meldungen (`FeedSource.ENOUGH`),
+    liest `RssClient.fetch` zusätzlich die Ortsseite in der Hauptsprache des Landes
+    (`FeedSource.fallback`) – deren Meldungen tragen die Quellen-Id ihrer Ausgabe, damit
+    Vorlesen und Silbentrennung ihre Sprache kennen (`ItemEdition`).
+  Ein Sprachwechsel lässt die gefolgten Themen, wie sie sind; ein Regionswechsel tauscht nur
+  einen unveränderten Standard-Feed (`EditionChange`). Eine Neuinstallation beginnt mit Land
+  und Sprache des Handys (`NewsEdition.default`).
 * **Themen** (`Taxonomy`, Fassade `Topics`): 12 Kategorien mit 47 Unterthemen (`politik/wahlen`,
   `wirtschaft/boerse` …), je mit `TopicIcon` (Material Symbols, `ui/news/TopicIcons.kt`), Farbe,
   Google-News-Rubrik und Suchbegriffen je Sprache. Titel kommen aus `TopicStrings`. Was der Feed
@@ -85,7 +111,7 @@ Artikel öffnen / vorladen
 |---|---|
 | `i18n` | `AppLanguage`, `LocalAppLanguage` und alle Texte (`CommonStrings`, `TopicStrings`, `FeedStrings`, `DiscoverStrings`, `SearchStrings`, `ReaderStrings`, `SettingsStrings`, `SourcesStrings`, `RegionStrings`, `OnboardingStrings`, `WeatherStrings`, `ClothingStrings`, `FormatStrings`, `NotifyStrings`, `ListenStrings`, `UpdateStrings`, `ComponentStrings`, `ShellStrings`) |
 | `data/model` | `Topic`, `TopicIcon`, `FeedSource`, `NewsItem`, `TopicNews`, `NewsEdition`, `Topics` (Fassade), Wetter, `AppSettings` |
-| `data/news` | `Taxonomy` (Kategorien + Unterthemen), `TopicSources` (Quellen eines Themas), `GoogleNews` (URLs, Suchbegriffe, Ausschlüsse, Zeitfenster, Kursseiten), `SearchQuery` (Suchanfrage verstehen, ganze Wörter), `SearchRanking` (Relevanz der Treffer), `FeedCatalog` + `Regions`, `RssParser`, `RssDates`, `HtmlText` |
+| `data/news` | `Taxonomy` (Kategorien + Unterthemen), `TopicSources` (Quellen eines Themas), `GoogleNews` (URLs, Suchbegriffe, Ausschlüsse, Zeitfenster, Kursseiten), `CountryQuery` (wie Nachrichten ein Land in einer Sprache nennen), `SearchQuery` (Suchanfrage verstehen, ganze Wörter), `SearchRanking` (Relevanz der Treffer), `FeedCatalog` + `Regions`, `RssParser`, `RssDates`, `HtmlText` |
 | `data/remote` | `OpenMeteoClient`, `RssClient` (Feeds lesen, Feed hinter einer Website finden), `GoogleNewsDecoder` (Google-News-Link → Artikel-URL) |
 | `data/local` | `WeatherStore`, `NewsCache` (JSON-Dateien, atomar geschrieben) |
 | `data` | `SettingsRepository` (DataStore) + `SettingsOps` (folgen, sortieren, Orte, Suchen) + `SettingsMigration`, `WeatherRepository`, `NewsRepository` |
@@ -101,8 +127,8 @@ Artikel öffnen / vorladen
 | `ui/today`, `ui/news` | Heute-Seite: kompakte Wetterkarte (`TodayWeather`), Feed-Leiste mit Suche und Tabs (`FeedChips`, pinnt oben), Glaskarten je Thema aus Listen-Stücken (`FeedCards` = reine Logik, `StoryCards`, `FeedSections`), endlose Listen, „Deine Themen“-Sheet, Vorladen |
 | `ui/discover` | „Themen entdecken“: Kategorie-Kacheln, Kategorie mit Unterthemen und Vorschau, lokale Orte, gefolgte Suchen |
 | `ui/search` | Suche: Feld, letzte Suchen, „Gerade wichtig“, endlose Ergebnisse (Relevanz/Neueste, Alle Sprachen/Nur Ausgabe, „EN“-Marke, mit „nur lesbar“ nur geprüfte: `SearchView`), „Diesem Thema folgen“ |
-| `ui/settings` | Einstellungen: Status, Sprache & Region, lokale Nachrichten, Wecker, Deine Themen (sortieren, eigene), Quellen, Feed & Lesen, Vorlesen (`ListenSection`), Darstellung, Orte, Wetterblöcke, App/Updates |
-| `ui/onboarding` | Erster Start: Sprache, Ausgabe, Benachrichtigungen, Ort |
+| `ui/settings` | Einstellungen: Status, Sprache & Region (App-Sprache, Nachrichten-Region, Nachrichten-Sprache: `EditionLogic`, `LanguageRegion`), lokale Nachrichten, Wecker, Deine Themen (sortieren, eigene), Quellen, Feed & Lesen, Vorlesen (`ListenSection`), Darstellung, Orte, Wetterblöcke, App/Updates |
+| `ui/onboarding` | Erster Start: App-Sprache, Nachrichten (Region und Sprache getrennt), Benachrichtigungen, Ort |
 | `ui/theme` | Theme, Akzent-Schemata, Typografie, `Reading` (Serif-Lesestile) |
 | `ui/nav` | `MainRoute` (der Pager), `ArticleRoute`, `DiscoverRoute`, `SearchRoute` (darüber geschoben) |
 | `ui/article` | `ArticleScreen` + `ArticleViewModel`: der Lesemodus (Bild, Überschrift, Teaser, Textblöcke, Zuhören, Teilen, Browser als Ausweg, eigene Zustände für Bezahlschranke, Cookie-Wand und Sperre) |

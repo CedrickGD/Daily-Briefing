@@ -91,10 +91,11 @@ internal object SourcesLogic {
             else -> {
                 val def = Taxonomy.byId(topicId)
                 val edition = NewsEdition.fromKey(source.edition) ?: settings.edition
-                when {
-                    def == null || def.topStories -> GoogleNewsLine.TopStories
-                    def.section != null && def.isCategory -> GoogleNewsLine.Section(def.section)
-                    else -> GoogleNewsLine.Search(shortQuery(def.queryFor(edition).orEmpty()))
+                // A pair Google News has no edition of searches for the country instead ([TopicSources.googleFeed]).
+                when (def?.let { TopicSources.googleFeed(it, edition) }) {
+                    null, TopicSources.GoogleFeed.TOP_STORIES -> GoogleNewsLine.TopStories
+                    TopicSources.GoogleFeed.SECTION -> def.section?.let { GoogleNewsLine.Section(it) } ?: GoogleNewsLine.TopStories
+                    TopicSources.GoogleFeed.SEARCH -> GoogleNewsLine.Search(shortQuery(def.queryFor(edition).orEmpty()))
                 }
             }
         }

@@ -94,6 +94,9 @@ class FeedCatalogTest {
         assertEquals(Regions.DEFAULT, Regions.byKey("gibts-nicht").key)
         assertTrue(Regions.servesEdition(NewsEdition.GERMANY))
         assertFalse(Regions.servesEdition(austria))
+        // German broadcasters: not for Germany read in another language.
+        assertFalse(Regions.servesEdition(NewsEdition("DE", "en")))
+        assertFalse(Regions.servesEdition(NewsEdition("DE", "tr")))
     }
 
     @Test

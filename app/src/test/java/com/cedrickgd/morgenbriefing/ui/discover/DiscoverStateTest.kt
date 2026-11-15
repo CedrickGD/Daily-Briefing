@@ -167,14 +167,15 @@ class DiscoverStateTest {
     }
 
     @Test
-    fun `followed places read their own country's edition`() {
+    fun `followed places are read in the news language, with their own country as the region`() {
         val withPlaces = SettingsOps.addLocalPlace(SettingsOps.addLocalPlace(settings, washington).first, atlantis).first
         val state = build(s = withPlaces)
         assertEquals(listOf("Washington", "Atlantis"), state.places.map { it.place.name })
         val dc = state.places.first()
         assertEquals(Topics.localId(washington), dc.topicId)
         assertTrue(dc.followed)
-        assertEquals("Englisch", dc.language)
+        // Read in the news language (German), with the place's country as the region.
+        assertEquals("Deutsch", dc.language)
         assertEquals("Vereinigte Staaten", dc.country)
         // No edition for the place's country: the main edition.
         assertEquals("Deutsch", state.places[1].language)
@@ -195,7 +196,10 @@ class DiscoverStateTest {
     @Test
     fun `a place is labelled with the edition the engine reads it in`() {
         val withParis = SettingsOps.addLocalPlace(settings, paris).first
-        assertEquals("Französisch", build(s = withParis).places.single().language)
+        // The news language, not the language of the place's country.
+        assertEquals("Deutsch", build(s = withParis).places.single().language)
+        assertEquals("Frankreich", build(s = withParis).places.single().country)
+        assertEquals("Französisch", build(s = withParis.copy(edition = NewsEdition.fromKey("DE:fr")!!)).places.single().language)
         // Same country as the main edition: the user's language, not the country's first edition (CH:de).
         val zurich = Place("Zürich", 47.37, 8.54, "Zürich, Schweiz", "CH")
         val swissFrench = SettingsOps.addLocalPlace(settings.copy(edition = NewsEdition.fromKey("CH:fr")!!), zurich).first

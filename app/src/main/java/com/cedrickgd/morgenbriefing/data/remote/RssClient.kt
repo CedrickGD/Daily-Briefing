@@ -161,9 +161,24 @@ class RssClient(
     /**
      * The articles of [source], in feed order. Publisher feeds name the feed as the source;
      * Google News items name their publisher and may legitimately be none (a narrow search).
+     *
+     * A source with a [FeedSource.fallback] that brings fewer than [FeedSource.ENOUGH] articles
+     * is followed by the articles of its fallback (a place searched in the user's language,
+     * then its place page in the place's own language); a fallback that fails adds nothing.
      * @throws FeedException when the feed is unreachable, not a feed, or (publisher feeds) empty.
      */
     suspend fun fetch(source: FeedSource): List<NewsItem> {
+        val items = fetchOnly(source)
+        val fallback = source.fallback?.takeIf { items.size < FeedSource.ENOUGH } ?: return items
+        val more = try {
+            fetchOnly(fallback)
+        } catch (_: FeedException) {
+            emptyList()
+        }
+        return items + more
+    }
+
+    private suspend fun fetchOnly(source: FeedSource): List<NewsItem> {
         val feed = fetchFeed(source.url)
         if (source.isGoogleNews) return feed.entries.mapNotNull { googleNewsItem(it, source) }
         val items = feed.entries.mapNotNull { publisherItem(it, source) }

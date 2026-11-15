@@ -52,18 +52,22 @@ class PlaceNamingTest {
     }
 
     @Test
-    fun `local news page with the name the place's own edition knows`() {
-        // A German user added Milan: shown as "Mailand", searched in IT:it as "Milano".
+    fun `local news page with the name the news language knows the place by`() {
+        // A German user added Milan, shown as "Mailand": German news call it that …
         val milan = Place("Mailand", 45.46427, 9.18951, "Lombardei, Italien", "IT", localName = "Milano")
         val id = Topics.localId(milan)
         val settings = AppSettings(edition = NewsEdition.GERMANY, localPlaces = listOf(milan), followed = listOf(id))
-        val paging = TopicSources.pagingQuery(id, settings)!!
+        val german = TopicSources.pagingQuery(id, settings)!!
+        assertEquals(NewsEdition("IT", "de"), german.edition)
+        assertEquals("\"Mailand\"", german.query)
+        // … Italian news, for a reader of Italian news, "Milano".
+        val paging = TopicSources.pagingQuery(id, settings.copy(edition = NewsEdition("DE", "it")))!!
         assertEquals(NewsEdition("IT", "it"), paging.edition)
         assertEquals("\"Milano\"", paging.query)
         // Places stored before v3.0 have no local name and keep their name.
         val old = milan.copy(localName = "")
         val oldId = Topics.localId(old)
-        assertEquals("\"Mailand\"", TopicSources.pagingQuery(oldId, settings.copy(localPlaces = listOf(old)))!!.query)
+        assertEquals("\"Mailand\"", TopicSources.pagingQuery(oldId, settings.copy(edition = NewsEdition("DE", "it"), localPlaces = listOf(old)))!!.query)
         // The home place in a country whose language is the main edition's: its own name.
         assertEquals("Leipzig", Place.LEIPZIG.newsName("de"))
         assertEquals("Milan", Place("Milan", 45.46, 9.19, "", "IT", localName = "Milano").newsName("en"))

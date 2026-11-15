@@ -11,7 +11,7 @@ import java.util.Locale
 
 /**
  * Which languages "Zuhören" speaks. An article is read in the language of its own edition
- * ([editionOf]: Washington local news in English, even with a German main edition), so the
+ * ([editionOf]: an English search hit or English local news under a German main edition), so the
  * voice follows the article, not the interface. The voice's own few words ("Quelle: …") must
  * match the voice: in the interface language when it is the edition's language, else in the
  * edition's language when the app speaks it, else in English.

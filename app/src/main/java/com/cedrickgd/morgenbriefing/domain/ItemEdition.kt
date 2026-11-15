@@ -9,8 +9,9 @@ import com.cedrickgd.morgenbriefing.data.news.Regions
 import com.cedrickgd.morgenbriefing.data.news.TopicSources
 
 /**
- * The edition (and so the language) one article is written in. Since v3 a single feed mixes
- * editions: Washington, D.C. local news are read in `US:en` while the main edition is `DE:de`,
+ * The edition (and so the language) one article is written in. A single feed mixes languages:
+ * a followed search also reads the English editions, and a place abroad with too little in the
+ * news language brings its place page in its own language (Boise in `US:en` beside `US:de`),
  * so "Zuhören" and the hyphenation of a headline must ask the article, not the settings.
  *
  * The source tells: a Google News item names its edition in its source id

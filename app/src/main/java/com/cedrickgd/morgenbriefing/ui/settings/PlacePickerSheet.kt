@@ -141,7 +141,8 @@ internal fun PlacePickerSheet(
                 .fillMaxWidth()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
+                // Text and fields stand free here (no cards): a little inside the gutter.
+                .padding(horizontal = SettingsGutter + 4.dp)
                 .padding(bottom = 8.dp),
         ) {
             Overline(

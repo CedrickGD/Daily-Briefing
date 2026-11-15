@@ -67,12 +67,14 @@ import com.cedrickgd.morgenbriefing.ui.settings.flagEmoji
 
 /**
  * "Ort hinzufügen" as a glass sheet: a search field with live results (Open-Meteo geocoding,
- * debounced in the view model), each with its flag and the news it would bring ("Nachrichten
- * auf Englisch · Vereinigte Staaten"). Picking one follows its local news.
+ * debounced in the view model), each with its flag and the news it would bring: in the news
+ * language [newsLanguage], from its country ("Nachrichten auf Deutsch · Vereinigte Staaten").
+ * Picking one follows its local news.
  */
 @Composable
 internal fun PlaceSearchSheet(
     search: PlaceSearchUi,
+    newsLanguage: String,
     onQueryChange: (String) -> Unit,
     onPick: (Place) -> Unit,
     onDismiss: () -> Unit,
@@ -143,7 +145,7 @@ internal fun PlaceSearchSheet(
                     Note(strings.placeNothingFound(search.query.trim()))
 
                 else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    search.results.forEach { place -> PlaceResult(place, onClick = { onPick(place) }) }
+                    search.results.forEach { place -> PlaceResult(place, newsLanguage, onClick = { onPick(place) }) }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -152,16 +154,17 @@ internal fun PlaceSearchSheet(
 }
 
 @Composable
-private fun PlaceResult(place: Place, onClick: () -> Unit) {
+private fun PlaceResult(place: Place, newsLanguage: String, onClick: () -> Unit) {
     val strings = discoverStrings()
     val colors = MaterialTheme.colorScheme
     val topic = remember(place) { Topics.localTopic(place) }
     val topicColors = rememberTopicColors(topic)
     val interaction = remember { MutableInteractionSource() }
     val lang = LocalAppLanguage.current
-    // Which news the place brings: its country's edition (the main one when we offer none).
-    val news = remember(place, lang) {
-        NewsEdition.forCountry(place.countryCode)
+    // Which news the place brings: its country, read in the user's news language.
+    val news = remember(place, lang, newsLanguage) {
+        place.countryCode.takeIf { it.length == 2 }
+            ?.let { NewsEdition(it.uppercase(), newsLanguage) }
             ?.let { strings.placeNews(displayLanguage(it, lang.locale), displayCountry(it, lang.locale)) }
     }
     Row(

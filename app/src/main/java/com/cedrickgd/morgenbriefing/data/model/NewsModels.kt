@@ -54,11 +54,26 @@ data class FeedSource(
     val kind: SourceKind = SourceKind.RSS,
     /** [NewsEdition.key] a Google News source reads (`US:en`); null for publisher feeds. */
     val edition: String? = null,
+    /**
+     * A second feed, read as well when this one brings fewer than [ENOUGH] articles: behind the
+     * search for a place in the user's language, the place page in the place's own language
+     * ([com.cedrickgd.morgenbriefing.data.news.TopicSources.placeSource]). Its articles carry
+     * its own [id], so they are known to be in the other language.
+     */
+    val fallback: FeedSource? = null,
 ) {
     val isCustom: Boolean get() = !builtIn
     val isGoogleNews: Boolean get() = kind == SourceKind.GOOGLE_NEWS
 
     companion object {
+        /**
+         * A feed with a [fallback] that brings at least this many articles is read alone.
+         * Searches of two weeks, 15.11.2026: Boise in German 8 (mostly a company of that name),
+         * Leipzig in English with its state 10; Lyon in German 44, Los Angeles 75, Graz in
+         * English 30.
+         */
+        const val ENOUGH = 12
+
         /** Id prefix of the feeds the user added ([builtIn] = false). */
         const val USER_ID_PREFIX = "custom:"
 

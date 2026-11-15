@@ -73,7 +73,7 @@ interface DiscoverStrings {
     val addPlace: String
     fun removePlace(name: String): String
 
-    /** Which news a followed place reads: "Nachrichten auf Englisch · Vereinigte Staaten". */
+    /** Which news a followed place reads – the news language and the place's country: "Nachrichten auf Deutsch · Vereinigte Staaten". */
     fun placeNews(language: String, country: String): String
 
     /** Click label of a place row: shows (or hides) its newest headlines. */

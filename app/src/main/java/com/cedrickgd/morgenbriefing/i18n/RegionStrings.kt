@@ -4,9 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 
 /**
- * "Sprache & Region" (app language, news edition, Bundesland, local news), the place cards with
- * the day window and the place picker. Country and language names of the editions come from the
- * platform's locale data in the interface language (`ui/settings/EditionLogic`).
+ * "Sprache & Region" (app language, news region, news language, Bundesland, local news), the
+ * place cards with the day window and the place picker. Country and language names come from
+ * the platform's locale data in the interface language (`ui/settings/EditionLogic`).
  */
 interface RegionStrings {
     // App language
@@ -16,19 +16,29 @@ interface RegionStrings {
     /** "Wie das Handy · Deutsch" */
     fun followPhoneWith(language: String): String
 
-    // News edition
-    val newsEdition: String
+    // News region and news language: two choices, independent of each other and of the app language
+    val newsRegion: String
+    val newsLanguage: String
     val newsEditionHint: String
+    /**
+     * Under the two choices when Google News has no edition of [country] in [language]: the app
+     * searches for the country instead. [language] as a sentence writes it ("Deutsch", "allemand").
+     */
+    fun newsSearchedHint(country: String, language: String): String
     val change: String
-    val editionSheetOverline: String
-    val editionSheetTitle: String
-    val editionSearch: String
-    val editionSuggested: String
-    val editionAll: String
-    fun editionNone(query: String): String
+    val newsRegionTitle: String
+    val newsRegionSearch: String
+    val newsRegionSuggested: String
+    val newsRegionAll: String
+    fun newsRegionNone(query: String): String
+    val newsLanguageTitle: String
+    /** Heading over the languages Google News has an edition of [country] in. */
+    fun newsLanguageOwn(country: String): String
+    val newsLanguageOther: String
+    val newsLanguageOtherHint: String
     val selected: String
     val clearSearch: String
-    /** "Deutschland · Deutsch" read out for one edition. */
+    /** "Deutschland · Deutsch" read out for a region with its language, "English · Englisch" for a language. */
     fun editionDescription(country: String, language: String): String
 
     // Bundesland (German editions)
@@ -43,7 +53,7 @@ interface RegionStrings {
     val localEmpty: String
     val addPlace: String
     fun removePlace(name: String): String
-    /** "Nachrichten aus den USA · English" under a followed place. */
+    /** "Nachrichten: 🇺🇸 Vereinigte Staaten · Deutsch" under a followed place: its country and the news language. */
     fun localEdition(country: String, language: String): String
     val notInFeed: String
     val follow: String
@@ -94,15 +104,20 @@ interface RegionStrings {
         override val followPhone = "Wie das Handy"
         override fun followPhoneWith(language: String) = "Wie das Handy · $language"
 
-        override val newsEdition = "Nachrichten aus"
-        override val newsEditionHint = "Woher deine Schlagzeilen kommen – unabhängig von der App-Sprache."
+        override val newsRegion = "Nachrichten-Region"
+        override val newsLanguage = "Nachrichten-Sprache"
+        override val newsEditionHint = "Worüber deine Schlagzeilen berichten und in welcher Sprache – beides unabhängig voneinander und von der App-Sprache."
+        override fun newsSearchedHint(country: String, language: String) = "$country auf $language: Dafür hat Google News keine eigene Ausgabe. Die App sucht stattdessen Meldungen über das Land in dieser Sprache."
         override val change = "Ändern"
-        override val editionSheetOverline = "Nachrichten-Ausgabe"
-        override val editionSheetTitle = "Woher sollen deine Nachrichten kommen?"
-        override val editionSearch = "Land oder Sprache suchen"
-        override val editionSuggested = "Vorschläge"
-        override val editionAll = "Alle Ausgaben"
-        override fun editionNone(query: String) = "Keine Ausgabe für „$query“."
+        override val newsRegionTitle = "Aus welchem Land sollen deine Nachrichten kommen?"
+        override val newsRegionSearch = "Land suchen"
+        override val newsRegionSuggested = "Vorschläge"
+        override val newsRegionAll = "Alle Länder"
+        override fun newsRegionNone(query: String) = "Kein Land für „$query“."
+        override val newsLanguageTitle = "In welcher Sprache möchtest du Nachrichten lesen?"
+        override fun newsLanguageOwn(country: String) = "$country · eigene Ausgabe"
+        override val newsLanguageOther = "Weitere Sprachen"
+        override val newsLanguageOtherHint = "Dafür gibt es keine eigene Ausgabe – die App sucht Meldungen über das Land in der gewählten Sprache."
         override val selected = "Ausgewählt"
         override val clearSearch = "Suche leeren"
         override fun editionDescription(country: String, language: String) = "$country · $language"
@@ -113,11 +128,11 @@ interface RegionStrings {
         override val regionDialogText = "Regionale Nachrichten kommen von den öffentlich-rechtlichen Sendern deines Bundeslandes."
 
         override val localNews = "Lokale Nachrichten"
-        override val localNewsHint = "Folge Orten überall auf der Welt. Ein Ort im Ausland bringt die Nachrichten seines Landes – Washington, D.C. etwa aus den USA, auf Englisch."
+        override val localNewsHint = "Folge Orten überall auf der Welt. Ihre Nachrichten liest du in deiner Nachrichten-Sprache, auch im Ausland. Gibt es in ihr zu wenig über einen Ort, kommen Meldungen in der Sprache seines Landes dazu."
         override val localEmpty = "Noch kein Ort – zum Beispiel deine Stadt oder Washington, D.C."
         override val addPlace = "Ort hinzufügen"
         override fun removePlace(name: String) = "$name entfernen"
-        override fun localEdition(country: String, language: String) = "Ausgabe: $country · $language"
+        override fun localEdition(country: String, language: String) = "Nachrichten: $country · $language"
         override val notInFeed = "Gerade nicht in deinem Feed"
         override val follow = "Folgen"
 
@@ -135,7 +150,7 @@ interface RegionStrings {
         override val pickerHomeQuestion = "Wo bist du morgens?"
         override val pickerDayQuestion = "Wo verbringst du den Tag?"
         override val pickerLocalQuestion = "Welchem Ort willst du folgen?"
-        override val pickerLocalHint = "Überall auf der Welt – die Nachrichten kommen aus dem Land des Ortes."
+        override val pickerLocalHint = "Überall auf der Welt – in deiner Nachrichten-Sprache."
         override val searchPlaceholder = "Ort suchen, z. B. Leipzig"
         override val myLocation = "Mein Standort"
         override val locating = "Suche Standort …"
@@ -155,15 +170,20 @@ interface RegionStrings {
         override val followPhone = "Same as phone"
         override fun followPhoneWith(language: String) = "Same as phone · $language"
 
-        override val newsEdition = "News from"
-        override val newsEditionHint = "Where your headlines come from – independent of the app language."
+        override val newsRegion = "News region"
+        override val newsLanguage = "News language"
+        override val newsEditionHint = "What your headlines cover and in which language – each independent of the other and of the app language."
+        override fun newsSearchedHint(country: String, language: String) = "$country in $language: Google News has no edition of its own for this. The app searches for stories about the country in this language instead."
         override val change = "Change"
-        override val editionSheetOverline = "News edition"
-        override val editionSheetTitle = "Where should your news come from?"
-        override val editionSearch = "Search country or language"
-        override val editionSuggested = "Suggestions"
-        override val editionAll = "All editions"
-        override fun editionNone(query: String) = "No edition for “$query”."
+        override val newsRegionTitle = "Which country should your news come from?"
+        override val newsRegionSearch = "Search country"
+        override val newsRegionSuggested = "Suggestions"
+        override val newsRegionAll = "All countries"
+        override fun newsRegionNone(query: String) = "No country for “$query”."
+        override val newsLanguageTitle = "Which language do you want to read news in?"
+        override fun newsLanguageOwn(country: String) = "$country · own edition"
+        override val newsLanguageOther = "More languages"
+        override val newsLanguageOtherHint = "There is no edition of its own for these – the app searches for stories about the country in the language you pick."
         override val selected = "Selected"
         override val clearSearch = "Clear search"
         override fun editionDescription(country: String, language: String) = "$country · $language"
@@ -174,11 +194,11 @@ interface RegionStrings {
         override val regionDialogText = "Regional news comes from the public broadcasters of your German state."
 
         override val localNews = "Local news"
-        override val localNewsHint = "Follow places anywhere in the world. A place abroad brings that country's news – Washington, D.C. from the US, in English."
+        override val localNewsHint = "Follow places anywhere in the world. You read their news in your news language, abroad too. If there is too little about a place in it, stories in its country's language are added."
         override val localEmpty = "No place yet – your town, for example, or Washington, D.C."
         override val addPlace = "Add place"
         override fun removePlace(name: String) = "Remove $name"
-        override fun localEdition(country: String, language: String) = "Edition: $country · $language"
+        override fun localEdition(country: String, language: String) = "News: $country · $language"
         override val notInFeed = "Not in your feed right now"
         override val follow = "Follow"
 
@@ -196,7 +216,7 @@ interface RegionStrings {
         override val pickerHomeQuestion = "Where are you in the morning?"
         override val pickerDayQuestion = "Where do you spend the day?"
         override val pickerLocalQuestion = "Which place do you want to follow?"
-        override val pickerLocalHint = "Anywhere in the world – the news comes from the place's country."
+        override val pickerLocalHint = "Anywhere in the world – in your news language."
         override val searchPlaceholder = "Search a place, e.g. Boston"
         override val myLocation = "My location"
         override val locating = "Finding location …"
@@ -216,15 +236,20 @@ interface RegionStrings {
         override val followPhone = "Comme le téléphone"
         override fun followPhoneWith(language: String) = "Comme le téléphone · $language"
 
-        override val newsEdition = "Actualités de"
-        override val newsEditionHint = "D'où viennent tes titres – indépendamment de la langue de l'appli."
+        override val newsRegion = "Région des actualités"
+        override val newsLanguage = "Langue des actualités"
+        override val newsEditionHint = "De quel pays parlent tes titres et dans quelle langue – deux choix indépendants l'un de l'autre et de la langue de l'appli."
+        override fun newsSearchedHint(country: String, language: String) = "$country en $language : Google Actualités n'a pas d'édition propre pour cela. L'appli cherche à la place des articles sur ce pays dans cette langue."
         override val change = "Changer"
-        override val editionSheetOverline = "Édition"
-        override val editionSheetTitle = "D'où doivent venir tes actualités ?"
-        override val editionSearch = "Chercher un pays ou une langue"
-        override val editionSuggested = "Suggestions"
-        override val editionAll = "Toutes les éditions"
-        override fun editionNone(query: String) = "Aucune édition pour « $query »."
+        override val newsRegionTitle = "De quel pays doivent venir tes actualités ?"
+        override val newsRegionSearch = "Chercher un pays"
+        override val newsRegionSuggested = "Suggestions"
+        override val newsRegionAll = "Tous les pays"
+        override fun newsRegionNone(query: String) = "Aucun pays pour « $query »."
+        override val newsLanguageTitle = "Dans quelle langue veux-tu lire les actualités ?"
+        override fun newsLanguageOwn(country: String) = "$country · édition propre"
+        override val newsLanguageOther = "Autres langues"
+        override val newsLanguageOtherHint = "Il n'existe pas d'édition propre pour celles-ci – l'appli cherche des articles sur le pays dans la langue choisie."
         override val selected = "Sélectionné"
         override val clearSearch = "Effacer la recherche"
         override fun editionDescription(country: String, language: String) = "$country · $language"
@@ -235,11 +260,11 @@ interface RegionStrings {
         override val regionDialogText = "L'actualité régionale vient des chaînes publiques de ton Land allemand."
 
         override val localNews = "Actualité locale"
-        override val localNewsHint = "Suis des lieux partout dans le monde. Un lieu à l'étranger apporte l'actualité de son pays – Washington, D.C. depuis les États-Unis, en anglais."
+        override val localNewsHint = "Suis des lieux partout dans le monde. Tu lis leur actualité dans ta langue des actualités, à l'étranger aussi. S'il y a trop peu d'articles sur un lieu dans cette langue, ceux dans la langue de son pays s'y ajoutent."
         override val localEmpty = "Aucun lieu pour l'instant – ta ville, par exemple, ou Washington, D.C."
         override val addPlace = "Ajouter un lieu"
         override fun removePlace(name: String) = "Retirer $name"
-        override fun localEdition(country: String, language: String) = "Édition : $country · $language"
+        override fun localEdition(country: String, language: String) = "Actualités : $country · $language"
         override val notInFeed = "Pas dans ton fil pour l'instant"
         override val follow = "Suivre"
 
@@ -257,7 +282,7 @@ interface RegionStrings {
         override val pickerHomeQuestion = "Où es-tu le matin ?"
         override val pickerDayQuestion = "Où passes-tu la journée ?"
         override val pickerLocalQuestion = "Quel lieu veux-tu suivre ?"
-        override val pickerLocalHint = "Partout dans le monde – l'actualité vient du pays du lieu."
+        override val pickerLocalHint = "Partout dans le monde – dans ta langue des actualités."
         override val searchPlaceholder = "Chercher un lieu, p. ex. Lyon"
         override val myLocation = "Ma position"
         override val locating = "Recherche de la position …"
@@ -277,16 +302,21 @@ interface RegionStrings {
         override val followPhone = "Como el móvil"
         override fun followPhoneWith(language: String) = "Como el móvil · $language"
 
-        override val newsEdition = "Noticias de"
-        override val newsEditionHint = "De dónde vienen tus titulares – sin depender del idioma de la app."
+        override val newsRegion = "Región de las noticias"
+        override val newsLanguage = "Idioma de las noticias"
+        override val newsEditionHint = "De qué país hablan tus titulares y en qué idioma – dos elecciones independientes entre sí y del idioma de la app."
+        override fun newsSearchedHint(country: String, language: String) = "$country en $language: Google Noticias no tiene una edición propia para esto. La app busca en su lugar noticias sobre el país en este idioma."
         override val change = "Cambiar"
-        override val editionSheetOverline = "Edición"
-        override val editionSheetTitle = "¿De dónde quieres tus noticias?"
-        override val editionSearch = "Buscar país o idioma"
-        override val editionSuggested = "Sugerencias"
-        override val editionAll = "Todas las ediciones"
-        override fun editionNone(query: String) = "Ninguna edición para «$query»."
-        override val selected = "Seleccionada"
+        override val newsRegionTitle = "¿De qué país quieres tus noticias?"
+        override val newsRegionSearch = "Buscar país"
+        override val newsRegionSuggested = "Sugerencias"
+        override val newsRegionAll = "Todos los países"
+        override fun newsRegionNone(query: String) = "Ningún país para «$query»."
+        override val newsLanguageTitle = "¿En qué idioma quieres leer las noticias?"
+        override fun newsLanguageOwn(country: String) = "$country · edición propia"
+        override val newsLanguageOther = "Más idiomas"
+        override val newsLanguageOtherHint = "Para estos no hay edición propia – la app busca noticias sobre el país en el idioma que elijas."
+        override val selected = "Seleccionado"
         override val clearSearch = "Borrar búsqueda"
         override fun editionDescription(country: String, language: String) = "$country · $language"
 
@@ -296,11 +326,11 @@ interface RegionStrings {
         override val regionDialogText = "Las noticias regionales vienen de las cadenas públicas de tu estado federado alemán."
 
         override val localNews = "Noticias locales"
-        override val localNewsHint = "Sigue lugares de todo el mundo. Un lugar en el extranjero trae las noticias de su país – Washington, D.C. desde EE. UU., en inglés."
+        override val localNewsHint = "Sigue lugares de todo el mundo. Lees sus noticias en tu idioma de las noticias, también en el extranjero. Si en él hay muy poco sobre un lugar, se añaden noticias en el idioma de su país."
         override val localEmpty = "Aún ningún lugar – tu ciudad, por ejemplo, o Washington, D.C."
         override val addPlace = "Añadir lugar"
         override fun removePlace(name: String) = "Quitar $name"
-        override fun localEdition(country: String, language: String) = "Edición: $country · $language"
+        override fun localEdition(country: String, language: String) = "Noticias: $country · $language"
         override val notInFeed = "Ahora no está en tu feed"
         override val follow = "Seguir"
 
@@ -318,7 +348,7 @@ interface RegionStrings {
         override val pickerHomeQuestion = "¿Dónde estás por la mañana?"
         override val pickerDayQuestion = "¿Dónde pasas el día?"
         override val pickerLocalQuestion = "¿Qué lugar quieres seguir?"
-        override val pickerLocalHint = "En cualquier parte del mundo – las noticias vienen del país del lugar."
+        override val pickerLocalHint = "En cualquier parte del mundo – en tu idioma de las noticias."
         override val searchPlaceholder = "Buscar un lugar, p. ej. Sevilla"
         override val myLocation = "Mi ubicación"
         override val locating = "Buscando ubicación …"
@@ -338,16 +368,21 @@ interface RegionStrings {
         override val followPhone = "Come il telefono"
         override fun followPhoneWith(language: String) = "Come il telefono · $language"
 
-        override val newsEdition = "Notizie da"
-        override val newsEditionHint = "Da dove arrivano i tuoi titoli – indipendente dalla lingua dell'app."
+        override val newsRegion = "Regione delle notizie"
+        override val newsLanguage = "Lingua delle notizie"
+        override val newsEditionHint = "Di quale paese parlano i tuoi titoli e in quale lingua – due scelte indipendenti tra loro e dalla lingua dell'app."
+        override fun newsSearchedHint(country: String, language: String) = "$country in $language: Google News non ha un'edizione propria per questa combinazione. L'app cerca invece notizie sul paese in questa lingua."
         override val change = "Cambia"
-        override val editionSheetOverline = "Edizione"
-        override val editionSheetTitle = "Da dove vuoi le tue notizie?"
-        override val editionSearch = "Cerca paese o lingua"
-        override val editionSuggested = "Suggerimenti"
-        override val editionAll = "Tutte le edizioni"
-        override fun editionNone(query: String) = "Nessuna edizione per «$query»."
-        override val selected = "Selezionata"
+        override val newsRegionTitle = "Da quale paese vuoi le tue notizie?"
+        override val newsRegionSearch = "Cerca un paese"
+        override val newsRegionSuggested = "Suggerimenti"
+        override val newsRegionAll = "Tutti i paesi"
+        override fun newsRegionNone(query: String) = "Nessun paese per «$query»."
+        override val newsLanguageTitle = "In quale lingua vuoi leggere le notizie?"
+        override fun newsLanguageOwn(country: String) = "$country · edizione propria"
+        override val newsLanguageOther = "Altre lingue"
+        override val newsLanguageOtherHint = "Per queste non esiste un'edizione propria – l'app cerca notizie sul paese nella lingua che scegli."
+        override val selected = "Selezionato"
         override val clearSearch = "Cancella ricerca"
         override fun editionDescription(country: String, language: String) = "$country · $language"
 
@@ -357,11 +392,11 @@ interface RegionStrings {
         override val regionDialogText = "Le notizie regionali arrivano dalle emittenti pubbliche del tuo Land tedesco."
 
         override val localNews = "Notizie locali"
-        override val localNewsHint = "Segui luoghi in tutto il mondo. Un luogo all'estero porta le notizie del suo paese – Washington, D.C. dagli Stati Uniti, in inglese."
+        override val localNewsHint = "Segui luoghi in tutto il mondo. Leggi le loro notizie nella tua lingua delle notizie, anche all'estero. Se in quella lingua c'è troppo poco su un luogo, si aggiungono notizie nella lingua del suo paese."
         override val localEmpty = "Ancora nessun luogo – la tua città, per esempio, o Washington, D.C."
         override val addPlace = "Aggiungi luogo"
         override fun removePlace(name: String) = "Rimuovi $name"
-        override fun localEdition(country: String, language: String) = "Edizione: $country · $language"
+        override fun localEdition(country: String, language: String) = "Notizie: $country · $language"
         override val notInFeed = "Al momento non è nel tuo feed"
         override val follow = "Segui"
 
@@ -379,7 +414,7 @@ interface RegionStrings {
         override val pickerHomeQuestion = "Dove sei al mattino?"
         override val pickerDayQuestion = "Dove passi la giornata?"
         override val pickerLocalQuestion = "Quale luogo vuoi seguire?"
-        override val pickerLocalHint = "Ovunque nel mondo – le notizie arrivano dal paese del luogo."
+        override val pickerLocalHint = "Ovunque nel mondo – nella tua lingua delle notizie."
         override val searchPlaceholder = "Cerca un luogo, ad es. Bologna"
         override val myLocation = "La mia posizione"
         override val locating = "Cerco la posizione …"

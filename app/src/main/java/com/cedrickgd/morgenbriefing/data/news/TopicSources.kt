@@ -25,11 +25,20 @@ data class PagingQuery(
  *   `top` reads the edition's top stories).
  * - **Sub-topic** (`wirtschaft/boerse`): its publisher feeds plus a Google News search in the
  *   edition's language.
- * - **Region**: in Germany the chosen Bundesland preset ([Regions]), everywhere the Google News
- *   page of the home place (in the edition of the place's country).
- * - **Place** (`local:…`): the Google News page of the place, in its country's edition.
+ * - **Region**: in Germany (in German) the chosen Bundesland preset ([Regions]), everywhere the
+ *   news of the home place, read like a place.
+ * - **Place** (`local:…`): the news of the place in the user's language, with the place's
+ *   country as the region ([placeSource]).
  * - **Own topic** (`custom:…`): the user's feeds and, for a followed search, that search in
  *   the main edition (plus, read by the repository, the English editions: [extraEditions]).
+ *
+ * Region and language are chosen independently, and Google News has an edition of its own
+ * only for some pairs ([NewsEdition.isNative]). For the others – the USA in German – every
+ * feed comes from the edition of the language ([NewsEdition.google]), so what belongs to the
+ * country must name it: [TopicDef.domestic] topics (top stories, politics, the economy) become
+ * searches for the country ([TopicDef.queryFor]) without publisher feeds, which report on the
+ * language's home countries; other topics read the language's sections, searches and the
+ * publisher feeds that are not bound to a country. A place becomes a search for its name.
  *
  * Feeds the user added to any topic come last. With [AppSettings.readableOnly] publisher feeds
  * of sites the reader cannot show are skipped and searches leave those sites out (`-site:`).
@@ -50,7 +59,7 @@ object TopicSources {
         val blockedSet = blocked.toSet()
         val own = settings.customFeeds.filter { it.topicId == topicId }
         val sources = when {
-            Topics.isLocalId(topicId) -> listOfNotNull(Topics.placeFor(topicId, settings)?.let { localSource(topicId, it, settings) })
+            Topics.isLocalId(topicId) -> listOfNotNull(Topics.placeFor(topicId, settings)?.let { placeSource(topicId, it, settings) })
             Topics.isCustomId(topicId) -> listOfNotNull(customSearch(topicId, settings, blocked, settings.edition))
             topicId == Topics.REGION_ID -> regionSources(settings)
             else -> builtInSources(topicId, settings, blocked)
@@ -91,12 +100,14 @@ object TopicSources {
      * take it as it is, English ones through [ENGLISH_STATES] ("Kalifornien" finds 2 stories of
      * Los Angeles in three days, "California" 100). Other languages, and countries whose first
      * level is too coarse for news to name it ([STATE_COUNTRIES]: "England", "Munster"), get the
-     * name alone.
+     * name alone – and so does a place read in a language Google News has no edition of its
+     * country in: German news name "Washington" or "Los Angeles", hardly ever the state
+     * (two weeks: 100 and 75 stories by name, 13 and 16 with the state; checked 15.11.2026).
      */
     internal fun placeQuery(place: Place, edition: NewsEdition): String {
         val name = quoted(place.newsName(edition.language))
         val state = stateOf(place)
-            ?.takeIf { place.countryCode.uppercase() in STATE_COUNTRIES }
+            ?.takeIf { edition.isNative && place.countryCode.uppercase() in STATE_COUNTRIES }
             ?.let { stateIn(it, edition.language) }
             ?: return name
         return "$name ${quoted(state)}"
@@ -130,7 +141,7 @@ object TopicSources {
         "Westbengalen" to "West Bengal",
     )
 
-    /** The edition a topic reads: a place's own country (else the main edition), otherwise [AppSettings.edition]. */
+    /** The edition a topic reads: a place's country in the user's language ([placeEdition]), otherwise [AppSettings.edition]. */
     fun editionFor(topicId: String, settings: AppSettings): NewsEdition = when {
         Topics.isLocalId(topicId) -> Topics.placeFor(topicId, settings)?.let { placeEdition(it, settings) } ?: settings.edition
         topicId == Topics.REGION_ID -> placeEdition(settings.home, settings)
@@ -148,31 +159,79 @@ object TopicSources {
         val def = Taxonomy.byId(topicId) ?: return emptyList()
         val edition = settings.edition
         val members = if (def.isCategory) setOf(topicId) + Taxonomy.children(topicId).map { it.id } else setOf(topicId)
-        val curated = FeedCatalog.forEdition(edition)
+        // The publisher feeds of a language report on its home countries, not on a country abroad.
+        val curated = if (searchesCountry(def, edition)) emptyList() else FeedCatalog.forEdition(edition)
             .filter { it.source.topicId in members }
             .map { it.source.copy(topicId = topicId) }
-        val googleUrl = when {
-            def.topStories -> GoogleNews.topStoriesUrl(edition)
-            def.section != null && def.isCategory -> GoogleNews.sectionUrl(def.section, edition)
-            else -> def.queryFor(edition)?.let { GoogleNews.searchUrl(GoogleNews.buildQuery(it, exclusions(settings, edition, blocked)), edition) }
+        val googleUrl = when (googleFeed(def, edition)) {
+            GoogleFeed.TOP_STORIES -> GoogleNews.topStoriesUrl(edition)
+            GoogleFeed.SECTION -> def.section?.let { GoogleNews.sectionUrl(it, edition) }
+            GoogleFeed.SEARCH -> def.queryFor(edition)
+                // Top stories found by the country's name: the last days only, a search answers by relevance.
+                ?.let { if (def.topStories) GoogleNews.recent(it, TOP_SEARCH_DAYS) else it }
+                ?.let { GoogleNews.searchUrl(GoogleNews.buildQuery(it, exclusions(settings, edition, blocked)), edition) }
         }
         val google = googleUrl?.let { googleSource(topicId, it, edition) }
         return curated + listOfNotNull(google)
     }
 
+    /** What the Google News source of a built-in topic is. */
+    enum class GoogleFeed { TOP_STORIES, SECTION, SEARCH }
+
+    /**
+     * The Google News feed of [def] in [edition]: the edition's top stories, the section of a
+     * category, else a search. Where Google News has no edition of the pair, top stories and
+     * sections would be those of the language's home country, so a [TopicDef.domestic] topic
+     * is a search for the country ([TopicDef.queryFor]).
+     */
+    fun googleFeed(def: TopicDef, edition: NewsEdition): GoogleFeed = when {
+        searchesCountry(def, edition) -> GoogleFeed.SEARCH
+        def.topStories -> GoogleFeed.TOP_STORIES
+        def.section != null && def.isCategory -> GoogleFeed.SECTION
+        else -> GoogleFeed.SEARCH
+    }
+
+    private fun searchesCountry(def: TopicDef, edition: NewsEdition): Boolean = def.domestic && !edition.isNative
+
+    /** How far back the search that stands in for a country's top stories reaches. */
+    private const val TOP_SEARCH_DAYS = 7
+
     private fun regionSources(settings: AppSettings): List<FeedSource> {
         val presets = if (Regions.servesEdition(settings.edition)) Regions.byKey(settings.region).feeds else emptyList()
-        val home = settings.home.takeIf { it.name.isNotBlank() }?.let { place ->
-            val edition = placeEdition(place, settings)
-            googleSource(Topics.REGION_ID, GoogleNews.geoUrl(geoName(place), edition), edition)
-        }
+        val home = settings.home.takeIf { it.name.isNotBlank() }?.let { placeSource(Topics.REGION_ID, it, settings) }
         return presets + listOfNotNull(home)
     }
 
-    private fun localSource(topicId: String, place: Place, settings: AppSettings): FeedSource {
+    /**
+     * The news of [place] in its edition ([placeEdition]). Where Google News has that edition
+     * and the place lies in its country, its own place page ([geoName]). Otherwise place pages
+     * are empty (Washington, D.C. in German, Leipzig in English: 0 stories, checked
+     * 15.11.2026), so the place is searched by name in the user's language ([placeQuery], the
+     * words its endless list pages with) over the last [PLACE_SEARCH_DAYS] days – without
+     * `-site:` exclusions, which make Google News answer loosely ([searchExclusions]); walled
+     * sites still go by domain.
+     *
+     * A small town has little written about it in another language (Boise in German: 7
+     * stories a week, most of them about a company of that name; Washington, D.C. on the
+     * Spanish place page of the USA: 6). A place read in another language than the main one of
+     * its country therefore carries the place page in that main language as
+     * [FeedSource.fallback], read as well when the first feed brings too little
+     * ([com.cedrickgd.morgenbriefing.data.remote.RssClient.fetch]): the place never stays empty.
+     */
+    internal fun placeSource(topicId: String, place: Place, settings: AppSettings): FeedSource {
         val edition = placeEdition(place, settings)
-        return googleSource(topicId, GoogleNews.geoUrl(geoName(place), edition), edition)
+        val url = if (edition.isNative && place.countryCode.equals(edition.country, ignoreCase = true)) {
+            GoogleNews.geoUrl(geoName(place), edition)
+        } else {
+            GoogleNews.searchUrl(GoogleNews.recent(placeQuery(place, edition), PLACE_SEARCH_DAYS), edition)
+        }
+        val own = NewsEdition.forCountry(place.countryCode)?.takeIf { it != edition }
+        return googleSource(topicId, url, edition)
+            .copy(fallback = own?.let { googleSource(topicId, GoogleNews.geoUrl(geoName(place), it), it) })
     }
+
+    /** How far back the first page of a place search reaches; older news come with the endless list. */
+    private const val PLACE_SEARCH_DAYS = 14
 
     /**
      * The English editions a followed search reads besides its main-edition source, like the
@@ -219,11 +278,14 @@ object TopicSources {
         edition = edition.key,
     )
 
+    /**
+     * The edition a place is read in: its own country in the user's news language – Washington,
+     * D.C. in German for a reader of German news, Zurich in French for a reader of Swiss French.
+     * A country the app does not offer keeps the main edition (and is searched by name).
+     */
     private fun placeEdition(place: Place, settings: AppSettings): NewsEdition {
         val main = settings.edition
-        // Same country as the main edition (Zurich while reading Swiss French): keep the user's language.
-        if (place.countryCode.equals(main.country, ignoreCase = true)) return main
-        return NewsEdition.forCountry(place.countryCode) ?: main
+        return NewsEdition.of(place.countryCode.uppercase(), main.language) ?: main
     }
 
     /**

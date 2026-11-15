@@ -65,6 +65,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -86,20 +87,21 @@ import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import java.util.Locale
 
 /**
- * Settings "Sprache & Region", first card: the app language (applies at once), the news
- * edition (flag, country in the interface language, the edition's own language; tap → picker
- * sheet) and, for the German edition, the Bundesland of the "Region" topic.
+ * Settings "Sprache & Region", first card: three choices that never change one another – the
+ * app language (applies at once), the news region (flag and country; tap → picker sheet) and
+ * the news language (tap → picker sheet) – and, for Germany in German, the Bundesland of the
+ * "Region" topic.
  */
 @Composable
 internal fun LanguageEditionCard(
     settings: AppSettings,
     onLanguage: (AppLanguage?) -> Unit,
-    onOpenEditions: () -> Unit,
+    onOpenNewsRegion: () -> Unit,
+    onOpenNewsLanguage: () -> Unit,
     onPickRegion: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val strings = regionStrings()
-    val lang = LocalAppLanguage.current
     val colors = MaterialTheme.colorScheme
     GlassCard(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -115,14 +117,7 @@ internal fun LanguageEditionCard(
 
         HorizontalDivider(Modifier.padding(vertical = 16.dp), color = colors.onSurface.copy(alpha = 0.08f))
 
-        val option = remember(settings.edition, lang) { EditionLabels.option(settings.edition, lang) }
-        EditionRow(option = option, onClick = onOpenEditions)
-        Text(
-            text = strings.newsEditionHint,
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onSurfaceVariant,
-            modifier = Modifier.padding(top = 6.dp),
-        )
+        NewsEditionRows(edition = settings.edition, onOpenRegion = onOpenNewsRegion, onOpenLanguage = onOpenNewsLanguage)
 
         AnimatedVisibility(
             visible = EditionChange.showsRegionPresets(settings.edition),
@@ -172,9 +167,65 @@ internal fun LanguagePills(selected: AppLanguage?, onSelect: (AppLanguage?) -> U
     }
 }
 
-/** The current edition: a big flag, the country in serif and the edition's language; tap to change. */
+/**
+ * The news region and the news language as two rows of their own (settings and first start),
+ * and one line on what the pair reads: independent choices ([explain]; the first-start step
+ * says so itself), or – where Google News has no edition of the country in that language –
+ * that the app searches for the country instead.
+ */
 @Composable
-internal fun EditionRow(option: EditionOption, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun NewsEditionRows(
+    edition: NewsEdition,
+    onOpenRegion: () -> Unit,
+    onOpenLanguage: () -> Unit,
+    modifier: Modifier = Modifier,
+    explain: Boolean = true,
+) {
+    val strings = regionStrings()
+    val lang = LocalAppLanguage.current
+    val region = remember(edition.country, lang) { EditionLabels.region(edition.country, lang) }
+    val language = remember(edition.language, lang) { EditionLabels.language(edition.language, lang) }
+    Column(modifier) {
+        ChoiceRow(
+            label = strings.newsRegion,
+            value = region.name,
+            onClick = onOpenRegion,
+            tile = { FlagTile(region.flag, size = 48.dp) },
+        )
+        Spacer(Modifier.height(6.dp))
+        ChoiceRow(
+            label = strings.newsLanguage,
+            value = language.nativeName,
+            detail = language.name.takeIf { !it.equals(language.nativeName, ignoreCase = true) },
+            onClick = onOpenLanguage,
+            tile = { LanguageTile(language.language, size = 48.dp) },
+        )
+        val hint = when {
+            !edition.isNative -> strings.newsSearchedHint(region.name, EditionLabels.languageInSentence(edition.language, lang))
+            explain -> strings.newsEditionHint
+            else -> null
+        }
+        if (hint != null) {
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+/** One choice that opens a picker: its tile, what it is (as an overline), the current value in serif and "Ändern". */
+@Composable
+private fun ChoiceRow(
+    label: String,
+    value: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    detail: String? = null,
+    tile: @Composable () -> Unit,
+) {
     val strings = regionStrings()
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
@@ -185,24 +236,34 @@ internal fun EditionRow(option: EditionOption, onClick: () -> Unit, modifier: Mo
             .clip(RoundedCornerShape(20.dp))
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClickLabel = strings.change, onClick = onClick)
             .semantics(mergeDescendants = true) {
-                contentDescription = "${strings.newsEdition}: ${strings.editionDescription(option.country, option.language)}"
+                contentDescription = if (detail == null) "$label: $value" else "$label: $value, $detail"
             }
-            .heightIn(min = 64.dp)
+            .heightIn(min = 60.dp)
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FlagTile(option.flag, size = 52.dp)
+        tile()
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Overline(strings.newsEdition)
+            // An overline that may take a second line: "Région des actualités" beside "Changer" on a narrow phone.
+            val locale = LocalAppLanguage.current.locale
             Text(
-                text = option.country,
+                text = remember(label, locale) { label.uppercase(locale) },
+                style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.6.sp),
+                color = colors.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = value,
                 style = MaterialTheme.typography.titleLarge.copy(fontFamily = MaterialTheme.typography.headlineSmall.fontFamily),
                 color = colors.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(option.language, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+            if (detail != null) {
+                Text(detail, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         Spacer(Modifier.width(8.dp))
         Text(strings.change, style = MaterialTheme.typography.labelLarge, color = colors.primary, modifier = Modifier.clearAndSetSemantics { })
@@ -212,6 +273,31 @@ internal fun EditionRow(option: EditionOption, onClick: () -> Unit, modifier: Mo
 /** A flag on a soft accent tile (a neutral newspaper symbol when there is no flag). */
 @Composable
 internal fun FlagTile(flag: String, size: Dp = 44.dp, modifier: Modifier = Modifier) {
+    SoftTile(size, modifier) {
+        if (flag.isNotEmpty()) {
+            Emoji(flag, size = (size.value * 0.46f).sp)
+        } else {
+            Icon(Icons.Rounded.Newspaper, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(size * 0.5f))
+        }
+    }
+}
+
+/** A news language on the same soft tile as the flags: its code in capitals ("DE", "EN"). */
+@Composable
+internal fun LanguageTile(language: String, size: Dp = 44.dp, modifier: Modifier = Modifier) {
+    SoftTile(size, modifier) {
+        Text(
+            text = language.uppercase(Locale.ROOT),
+            style = MaterialTheme.typography.titleSmall.copy(fontSize = (size.value * 0.32f).sp, letterSpacing = 0.5.sp),
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun SoftTile(size: Dp, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val dark = isGlassDark()
     val shape = RoundedCornerShape(size * 0.32f)
@@ -231,18 +317,14 @@ internal fun FlagTile(flag: String, size: Dp = 44.dp, modifier: Modifier = Modif
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        if (flag.isNotEmpty()) {
-            Emoji(flag, size = (size.value * 0.46f).sp)
-        } else {
-            Icon(Icons.Rounded.Newspaper, contentDescription = null, tint = colors.onPrimaryContainer, modifier = Modifier.size(size * 0.5f))
-        }
+        content()
     }
 }
 
 /**
  * Settings "Sprache & Region", second card: the places the user follows the local news of,
- * each with the edition its news come in (Washington, D.C. → USA · English), remove, follow
- * again, and "Ort hinzufügen" (the place picker).
+ * each with its country and the news language it is read in (Washington, D.C. → USA · Deutsch),
+ * remove, follow again, and "Ort hinzufügen" (the place picker).
  */
 @Composable
 internal fun LocalNewsCard(
@@ -335,34 +417,27 @@ private fun LocalPlaceRow(name: String, flag: String, detail: String, followed: 
 }
 
 /**
- * The news edition picker as a glass sheet: a search over country and language names
- * (interface language, English, the edition's own language), suggestions for this phone while
- * nothing is typed, then every edition. Picking one closes the sheet.
+ * The news region picker as a glass sheet: a search over the countries' names (interface
+ * language, English, their own languages), suggestions for this phone while nothing is typed,
+ * then every country. Picking one closes the sheet; the news language stays as it is.
  */
 @Composable
-internal fun EditionPickerSheet(current: NewsEdition, onPick: (NewsEdition) -> Unit, onDismiss: () -> Unit) {
+internal fun NewsRegionPickerSheet(current: NewsEdition, onPick: (country: String) -> Unit, onDismiss: () -> Unit) {
     val strings = regionStrings()
     val lang = LocalAppLanguage.current
     val colors = MaterialTheme.colorScheme
     var query by rememberSaveable { mutableStateOf("") }
-    val options = remember(lang) { EditionLabels.options(lang) }
-    val byEdition = remember(options) { options.associateBy { it.edition } }
-    val suggestions = remember(current, lang) {
-        EditionSearch.suggestions(current, Locale.getDefault(), lang).mapNotNull { byEdition[it] }
+    val options = remember(lang) { EditionLabels.regions(lang) }
+    val suggestions = remember(current, options) {
+        val byCountry = options.associateBy { it.country }
+        EditionSearch.regionSuggestions(current, Locale.getDefault()).mapNotNull { byCountry[it] }
     }
-    val results = remember(options, query, lang) { EditionSearch.filter(options, query, lang) }
+    val results = remember(options, query) { EditionSearch.filterRegions(options, query) }
     val searching = query.isNotBlank()
 
     GlassSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp)) {
-            Overline(strings.editionSheetOverline)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = strings.editionSheetTitle,
-                style = MaterialTheme.typography.headlineSmall,
-                color = colors.onSurface,
-                modifier = Modifier.semantics { heading() },
-            )
+        Column(Modifier.padding(start = SheetTextInset, end = SheetTextInset, top = 8.dp, bottom = 12.dp)) {
+            SheetHeading(overline = strings.newsRegion, title = strings.newsRegionTitle)
             Spacer(Modifier.height(14.dp))
             OutlinedTextField(
                 value = query,
@@ -370,7 +445,7 @@ internal fun EditionPickerSheet(current: NewsEdition, onPick: (NewsEdition) -> U
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 shape = GlassShapes.chip,
-                placeholder = { Text(strings.editionSearch) },
+                placeholder = { Text(strings.newsRegionSearch) },
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
@@ -390,23 +465,23 @@ internal fun EditionPickerSheet(current: NewsEdition, onPick: (NewsEdition) -> U
                 .fillMaxWidth()
                 .imePadding()
                 .selectableGroup(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            contentPadding = PaddingValues(start = SettingsGutter, end = SettingsGutter, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             if (!searching) {
-                item(key = "h-suggested", contentType = "heading") { ListHeading(strings.editionSuggested) }
-                items(suggestions, key = { "s:" + it.edition.key }, contentType = { "edition" }) { option ->
-                    EditionOptionRow(option, selected = option.edition == current, onClick = { onPick(option.edition) })
+                item(key = "h-suggested", contentType = "heading") { ListHeading(strings.newsRegionSuggested) }
+                items(suggestions, key = { "s:" + it.country }, contentType = { "option" }) { option ->
+                    RegionOptionRow(option, selected = option.country == current.country, onClick = { onPick(option.country) })
                 }
-                item(key = "h-all", contentType = "heading") { ListHeading(strings.editionAll) }
+                item(key = "h-all", contentType = "heading") { ListHeading(strings.newsRegionAll) }
             }
-            items(results, key = { "a:" + it.edition.key }, contentType = { "edition" }) { option ->
-                EditionOptionRow(option, selected = option.edition == current, onClick = { onPick(option.edition) })
+            items(results, key = { "a:" + it.country }, contentType = { "option" }) { option ->
+                RegionOptionRow(option, selected = option.country == current.country, onClick = { onPick(option.country) })
             }
             if (searching && results.isEmpty()) {
                 item(key = "none", contentType = "empty") {
                     Text(
-                        text = strings.editionNone(query.trim()),
+                        text = strings.newsRegionNone(query.trim()),
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
@@ -417,13 +492,91 @@ internal fun EditionPickerSheet(current: NewsEdition, onPick: (NewsEdition) -> U
     }
 }
 
+/**
+ * The news language picker as a glass sheet: first the languages Google News has an edition
+ * of the current region in, then every other language – for those the app searches for the
+ * region by name, which the sheet says. Picking one closes the sheet; the region stays.
+ */
+@Composable
+internal fun NewsLanguagePickerSheet(current: NewsEdition, onPick: (language: String) -> Unit, onDismiss: () -> Unit) {
+    val strings = regionStrings()
+    val lang = LocalAppLanguage.current
+    val colors = MaterialTheme.colorScheme
+    val country = remember(current.country, lang) { EditionLabels.country(current.country, lang) }
+    val (own, others) = remember(current.country, lang) { EditionSearch.languagesFor(current.country, EditionLabels.languages(lang)) }
+
+    GlassSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(start = SheetTextInset, end = SheetTextInset, top = 8.dp, bottom = 4.dp)) {
+            SheetHeading(overline = strings.newsLanguage, title = strings.newsLanguageTitle)
+        }
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .fillMaxWidth()
+                .selectableGroup(),
+            contentPadding = PaddingValues(start = SettingsGutter, end = SettingsGutter, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            item(key = "h-own", contentType = "heading") { ListHeading(strings.newsLanguageOwn(country)) }
+            items(own, key = { "o:" + it.language }, contentType = { "option" }) { option ->
+                LanguageOptionRow(option, selected = option.language == current.language, onClick = { onPick(option.language) })
+            }
+            item(key = "h-other", contentType = "heading") {
+                Column {
+                    ListHeading(strings.newsLanguageOther)
+                    Text(
+                        text = strings.newsLanguageOtherHint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 6.dp),
+                    )
+                }
+            }
+            items(others, key = { "a:" + it.language }, contentType = { "option" }) { option ->
+                LanguageOptionRow(option, selected = option.language == current.language, onClick = { onPick(option.language) })
+            }
+        }
+    }
+}
+
+/** Where a sheet's own text starts: a little inside the rows, which carry their own padding. */
+private val SheetTextInset = SettingsGutter + 8.dp
+
+@Composable
+private fun SheetHeading(overline: String, title: String) {
+    Overline(overline)
+    Spacer(Modifier.height(4.dp))
+    Text(
+        text = title,
+        style = MaterialTheme.typography.headlineSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.semantics { heading() },
+    )
+}
+
 @Composable
 private fun ListHeading(text: String) {
     Overline(text, modifier = Modifier.padding(start = 8.dp, top = 12.dp, bottom = 6.dp))
 }
 
 @Composable
-private fun EditionOptionRow(option: EditionOption, selected: Boolean, onClick: () -> Unit) {
+private fun RegionOptionRow(option: RegionOption, selected: Boolean, onClick: () -> Unit) {
+    OptionRow(title = option.name, detail = null, selected = selected, onClick = onClick) { FlagTile(option.flag, size = 40.dp) }
+}
+
+@Composable
+private fun LanguageOptionRow(option: NewsLanguageOption, selected: Boolean, onClick: () -> Unit) {
+    OptionRow(
+        title = option.nativeName,
+        detail = option.name.takeIf { !it.equals(option.nativeName, ignoreCase = true) },
+        selected = selected,
+        onClick = onClick,
+    ) { LanguageTile(option.language, size = 40.dp) }
+}
+
+/** One radio row of a picker sheet: tile, title, an optional second line and a check mark when chosen. */
+@Composable
+private fun OptionRow(title: String, detail: String?, selected: Boolean, onClick: () -> Unit, tile: @Composable () -> Unit) {
     val strings = regionStrings()
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
@@ -435,18 +588,20 @@ private fun EditionOptionRow(option: EditionOption, selected: Boolean, onClick: 
             .then(if (selected) Modifier.background(colors.primaryContainer.copy(alpha = if (isGlassDark()) 0.45f else 0.7f)) else Modifier)
             .selectable(selected = selected, interactionSource = interaction, indication = null, role = Role.RadioButton, onClick = onClick)
             .semantics(mergeDescendants = true) {
-                contentDescription = strings.editionDescription(option.country, option.language)
+                contentDescription = if (detail == null) title else strings.editionDescription(title, detail)
                 if (selected) stateDescription = strings.selected
             }
             .heightIn(min = 60.dp)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FlagTile(option.flag, size = 40.dp)
+        tile()
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(option.country, style = MaterialTheme.typography.titleMedium, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(option.language, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1)
+            Text(title, style = MaterialTheme.typography.titleMedium, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (detail != null) {
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1)
+            }
         }
         if (selected) {
             Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))

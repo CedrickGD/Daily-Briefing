@@ -285,6 +285,7 @@ fun DiscoverScreen(
     if (placeSheetOpen) {
         PlaceSearchSheet(
             search = placeSearch,
+            newsLanguage = state.newsLanguage,
             onQueryChange = viewModel::onPlaceQuery,
             onPick = { place ->
                 placeSheetOpen = false

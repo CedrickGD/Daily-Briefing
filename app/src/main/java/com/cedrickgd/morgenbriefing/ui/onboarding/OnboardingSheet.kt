@@ -58,19 +58,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.onboardingStrings
 import com.cedrickgd.morgenbriefing.ui.components.GlassSheet
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import com.cedrickgd.morgenbriefing.ui.settings.ChoicePill
-import com.cedrickgd.morgenbriefing.ui.settings.EditionLabels
-import com.cedrickgd.morgenbriefing.ui.settings.EditionPickerSheet
-import com.cedrickgd.morgenbriefing.ui.settings.EditionRow
 import com.cedrickgd.morgenbriefing.ui.settings.GlassPillButton
+import com.cedrickgd.morgenbriefing.ui.settings.NewsEditionRows
+import com.cedrickgd.morgenbriefing.ui.settings.NewsLanguagePickerSheet
+import com.cedrickgd.morgenbriefing.ui.settings.NewsRegionPickerSheet
 import com.cedrickgd.morgenbriefing.ui.settings.Overline
 import com.cedrickgd.morgenbriefing.ui.settings.PillStyle
+import com.cedrickgd.morgenbriefing.ui.settings.SettingsGutter
 import com.cedrickgd.morgenbriefing.ui.settings.lamina
 import com.cedrickgd.morgenbriefing.ui.settings.rememberToggleHaptics
 import com.cedrickgd.morgenbriefing.util.SystemStatus
@@ -80,9 +80,9 @@ import kotlinx.coroutines.launch
 
 /**
  * First-start sheet on Today: four quick steps – the app's language (the phone's is preselected
- * and switches the sheet at once), where the news come from (the phone's country is
- * preselected), notifications and your place – then "Los geht's". Swiping it away also counts
- * as done: it should welcome, not nag.
+ * and switches the sheet at once), your news (their region and their language as two choices
+ * of their own, the phone's country and language preselected), notifications and your place –
+ * then "Los geht's". Swiping it away also counts as done: it should welcome, not nag.
  *
  * @param onDone persist `onboardingDone = true`.
  * @param onChoosePlace close the sheet and open the place picker in the settings.
@@ -100,7 +100,8 @@ fun OnboardingSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    var editionsOpen by rememberSaveable { mutableStateOf(false) }
+    var regionsOpen by rememberSaveable { mutableStateOf(false) }
+    var languagesOpen by rememberSaveable { mutableStateOf(false) }
 
     var status by remember { mutableStateOf(SystemStatus.read(context)) }
     // Denied for good (or switched off): the button then opens the system settings – say so.
@@ -127,7 +128,7 @@ fun OnboardingSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = SettingsGutter)
                 .padding(top = 8.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -136,7 +137,7 @@ fun OnboardingSheet(
                 text = strings.intro,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp),
+                modifier = Modifier.padding(horizontal = HeaderInset),
             )
 
             val language = LocalAppLanguage.current
@@ -147,8 +148,7 @@ fun OnboardingSheet(
             val edition = settings?.edition
             OnboardingStep(number = 2, title = strings.editionTitle, text = strings.editionText, done = false) {
                 if (edition != null) {
-                    val option = remember(edition, language) { EditionLabels.option(edition, language) }
-                    EditionRow(option = option, onClick = { editionsOpen = true })
+                    NewsEditionRows(edition = edition, onOpenRegion = { regionsOpen = true }, onOpenLanguage = { languagesOpen = true }, explain = false)
                 }
             }
 
@@ -190,14 +190,24 @@ fun OnboardingSheet(
     }
 
     val current = settings?.edition
-    if (editionsOpen && current != null) {
-        EditionPickerSheet(
+    if (regionsOpen && current != null) {
+        NewsRegionPickerSheet(
             current = current,
-            onPick = { picked: NewsEdition ->
-                editionsOpen = false
-                viewModel.setEdition(picked)
+            onPick = { country ->
+                regionsOpen = false
+                viewModel.setNewsRegion(country)
             },
-            onDismiss = { editionsOpen = false },
+            onDismiss = { regionsOpen = false },
+        )
+    }
+    if (languagesOpen && current != null) {
+        NewsLanguagePickerSheet(
+            current = current,
+            onPick = { picked ->
+                languagesOpen = false
+                viewModel.setNewsLanguage(picked)
+            },
+            onDismiss = { languagesOpen = false },
         )
     }
 }
@@ -207,7 +217,7 @@ fun OnboardingSheet(
 private fun WelcomeHeader() {
     val strings = onboardingStrings()
     val colors = MaterialTheme.colorScheme
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = HeaderInset)) {
         Box(
             modifier = Modifier
                 .size(56.dp)
@@ -323,3 +333,6 @@ private fun StepBadge(number: Int, done: Boolean, description: String) {
 }
 
 private const val STEPS = 4
+
+/** The header and the intro stand a little inside the step panes, whose text starts further in still. */
+private val HeaderInset = 8.dp

@@ -100,4 +100,73 @@ class GoogleNewsClientTest {
         assertEquals("BBC News", item.source)
         assertEquals("Teaser text.", item.summary)
     }
+
+    // ---- A place searched in the news language, with its place page in its own language behind it ----
+
+    private val english = com.cedrickgd.morgenbriefing.data.model.NewsEdition.USA
+    private val place = FeedSource(
+        id = "gn:local:boise@US:de",
+        name = GoogleNews.SOURCE_NAME,
+        url = GoogleNews.searchUrl("when:14d \"Boise\"", com.cedrickgd.morgenbriefing.data.model.NewsEdition("US", "de")),
+        topicId = "local:boise",
+        kind = SourceKind.GOOGLE_NEWS,
+        edition = "US:de",
+        fallback = FeedSource(
+            id = "gn:local:boise@US:en",
+            name = GoogleNews.SOURCE_NAME,
+            url = GoogleNews.geoUrl("Boise, Idaho", english),
+            topicId = "local:boise",
+            kind = SourceKind.GOOGLE_NEWS,
+            edition = "US:en",
+        ),
+    )
+
+    private fun stories(count: Int, prefix: String) = GoogleNewsFixtures.feed(
+        *(1..count).map { GoogleNewsFixtures.item("$prefix Nummer $it aus der Stadt", "Zeitung", "https://www.zeitung.example", "CBMiAAAAAAAAAAAAAAAAAAAA$prefix$it") }.toTypedArray(),
+    )
+
+    @Test
+    fun `too little about a place in the news language adds the place's own language`() = runTest {
+        server.enqueue(MockResponse().setBody(stories(3, "Deutsch")))
+        server.enqueue(MockResponse().setBody(stories(20, "English")))
+        val items = client.fetch(place)
+        // The few German stories stay in front; the English ones carry the id of their own source.
+        assertEquals(23, items.size)
+        assertTrue(items.take(3).all { it.sourceId == "gn:local:boise@US:de" && it.headline.startsWith("Deutsch") })
+        assertTrue(items.drop(3).all { it.sourceId == "gn:local:boise@US:en" && it.headline.startsWith("English") })
+        assertTrue(items.all { it.topicId == "local:boise" })
+        assertEquals(2, seen.size)
+        assertEquals("/rss/search", seen[0].toHttpUrl().encodedPath)
+        assertEquals("de", seen[0].toHttpUrl().queryParameter("hl"))
+        assertTrue(seen[1], "/geo/" in seen[1] && seen[1].toHttpUrl().queryParameter("ceid") == "US:en")
+    }
+
+    @Test
+    fun `nothing at all in the news language still shows the place`() = runTest {
+        server.enqueue(MockResponse().setBody(GoogleNewsFixtures.feed()))
+        server.enqueue(MockResponse().setBody(stories(5, "English")))
+        assertEquals(5, client.fetch(place).size)
+    }
+
+    @Test
+    fun `enough in the news language is read alone`() = runTest {
+        server.enqueue(MockResponse().setBody(stories(FeedSource.ENOUGH, "Deutsch")))
+        val items = client.fetch(place)
+        assertEquals(FeedSource.ENOUGH, items.size)
+        assertTrue(items.all { it.sourceId == "gn:local:boise@US:de" })
+        assertEquals(1, seen.size)
+    }
+
+    @Test
+    fun `a failing fallback keeps what the news language brought`() = runTest {
+        server.enqueue(MockResponse().setBody(stories(2, "Deutsch")))
+        server.enqueue(MockResponse().setResponseCode(503))
+        assertEquals(2, client.fetch(place).size)
+    }
+
+    @Test(expected = FeedException::class)
+    fun `a failing search is a failure, whatever its fallback`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(503))
+        client.fetch(place)
+    }
 }

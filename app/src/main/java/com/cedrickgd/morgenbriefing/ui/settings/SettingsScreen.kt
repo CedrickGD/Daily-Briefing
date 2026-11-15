@@ -69,7 +69,7 @@ import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
 
 /** Dialogs and sheets of the settings page; saveable so they survive rotation. */
-private enum class SettingsDialog { TIME, HOME_PLACE, DAY_PLACE, LOCAL_PLACE, EDITION, ADD_FEED, NEW_TOPIC, EDIT_TOPIC, DELETE_TOPIC, REGION }
+private enum class SettingsDialog { TIME, HOME_PLACE, DAY_PLACE, LOCAL_PLACE, NEWS_REGION, NEWS_LANGUAGE, ADD_FEED, NEW_TOPIC, EDIT_TOPIC, DELETE_TOPIC, REGION }
 
 /** Lazy-list keys of the page, in display order. */
 private object Block {
@@ -333,8 +333,8 @@ fun SettingsScreen(
                 .horizontalSafeDrawing(),
             // Landscape and tablets: the cards stay a centred column.
             contentPadding = PaddingValues(
-                start = 16.dp + pageSideInset(),
-                end = 16.dp + pageSideInset(),
+                start = SettingsGutter + pageSideInset(),
+                end = SettingsGutter + pageSideInset(),
                 bottom = bottomContentInset(contentPadding) + 32.dp,
             ),
         ) {
@@ -371,7 +371,8 @@ fun SettingsScreen(
                         onPill = onPill,
                         onOpenAppDetails = { SystemIntents.openAppDetails(context) },
                         onLanguage = viewModel::setUiLanguage,
-                        onOpenEditions = { dialog = SettingsDialog.EDITION },
+                        onOpenNewsRegion = { dialog = SettingsDialog.NEWS_REGION },
+                        onOpenNewsLanguage = { dialog = SettingsDialog.NEWS_LANGUAGE },
                         onPickRegion = { dialog = SettingsDialog.REGION },
                         onAddLocalPlace = { openPlacePicker(PlaceTarget.LOCAL) },
                         onRemoveLocalPlace = viewModel::removeLocalPlace,
@@ -462,11 +463,20 @@ fun SettingsScreen(
             )
         }
 
-        SettingsDialog.EDITION -> EditionPickerSheet(
+        SettingsDialog.NEWS_REGION -> NewsRegionPickerSheet(
             current = current.edition,
-            onPick = { edition ->
+            onPick = { country ->
                 dialog = null
-                viewModel.setEdition(edition)
+                viewModel.setNewsRegion(country)
+            },
+            onDismiss = { dialog = null },
+        )
+
+        SettingsDialog.NEWS_LANGUAGE -> NewsLanguagePickerSheet(
+            current = current.edition,
+            onPick = { language ->
+                dialog = null
+                viewModel.setNewsLanguage(language)
             },
             onDismiss = { dialog = null },
         )
@@ -551,7 +561,8 @@ private class BlockCallbacks(
     val onPill: (StatusItem) -> Unit,
     val onOpenAppDetails: () -> Unit,
     val onLanguage: (AppLanguage?) -> Unit,
-    val onOpenEditions: () -> Unit,
+    val onOpenNewsRegion: () -> Unit,
+    val onOpenNewsLanguage: () -> Unit,
     val onPickRegion: () -> Unit,
     val onAddLocalPlace: () -> Unit,
     val onRemoveLocalPlace: (String) -> Unit,
@@ -611,7 +622,8 @@ private fun SettingsBlock(
         Block.LANGUAGE -> LanguageEditionCard(
             settings = settings,
             onLanguage = callbacks.onLanguage,
-            onOpenEditions = callbacks.onOpenEditions,
+            onOpenNewsRegion = callbacks.onOpenNewsRegion,
+            onOpenNewsLanguage = callbacks.onOpenNewsLanguage,
             onPickRegion = callbacks.onPickRegion,
             modifier = modifier,
         )

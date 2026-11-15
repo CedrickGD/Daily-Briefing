@@ -59,6 +59,13 @@ object GoogleNews {
         base(edition, "rss/search").addQueryParameter("q", query.trim()).build().toString()
 
     /**
+     * [query] limited to the last [days] days (`when:14d …`): a search without a date answers
+     * by relevance and mixes in pages that are months old (a town's weather and air-quality
+     * pages). The operator comes first, like the date window of [buildQuery].
+     */
+    fun recent(query: String, days: Int): String = "when:${days}d ${query.trim()}"
+
+    /**
      * What the user typed as Google News should get it ([SearchQuery.googleQuery]): tickers,
      * ISINs and WKNs quoted (`SLV ETF` → `"SLV" ETF`), the user's own quotes, `OR`, `-terms`
      * and operators kept. For searches and followed searches, not for the app's own topic
@@ -79,10 +86,18 @@ object GoogleNews {
     private const val ENGLISH = "en"
     private val ENGLISH_EDITIONS = listOf(NewsEdition.USA, NewsEdition("GB", ENGLISH))
 
+    /**
+     * Every feed is asked from an edition Google News has ([NewsEdition.google]). For a pair it
+     * lacks (`hl=de&gl=US&ceid=US:de`) it redirects to the home edition of the language anyway
+     * and drops the country without a word: top stories and sections come from Germany, the
+     * "nation" section and place pages come back empty, only searches work – they find German
+     * stories whatever the country (checked 15.11.2026). Who wants that country's news asks for
+     * it by name ([TopicSources], [CountryQuery]).
+     */
     private fun base(edition: NewsEdition, path: String): HttpUrl.Builder =
         HttpUrl.Builder().scheme("https").host(HOST).addPathSegments(path)
             .addEncodedQueryParameter("hl", edition.hl)
-            .addEncodedQueryParameter("gl", edition.country)
+            .addEncodedQueryParameter("gl", edition.gl)
             .addEncodedQueryParameter("ceid", edition.ceid)
 
     /**
@@ -116,8 +131,12 @@ object GoogleNews {
      * Google News lists most, then the other `.com` sites, YouTube, other countries' sites, and
      * social networks (rarely in news results) last. Within a rank the given order (most certain
      * first) is kept. What does not fit is still filtered out of the results by domain.
+     * A pair Google News has no edition of is ranked as the edition it reads
+     * ([NewsEdition.google]): the USA in German list German sites.
      */
     fun rankExclusions(blocked: Collection<String>, edition: NewsEdition): List<String> {
+        @Suppress("NAME_SHADOWING")
+        val edition = edition.google
         val ownTlds = countryTlds(edition.country)
         val english = edition.language == "en"
         fun rank(domain: String): Int {

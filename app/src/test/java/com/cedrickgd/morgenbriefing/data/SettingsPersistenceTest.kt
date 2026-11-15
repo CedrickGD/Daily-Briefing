@@ -9,8 +9,10 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.cedrickgd.morgenbriefing.data.model.EffectsMode
 import com.cedrickgd.morgenbriefing.data.model.ListenSettings
+import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.data.model.VoicePreference
+import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -156,5 +158,72 @@ class SettingsPersistenceTest {
         // Malformed entries inside a readable map are dropped one by one.
         store.edit { it[stringPreferencesKey("listen_voices")] = """{"DE":"de-DE-SMTm00","x1":"a","en":" "}""" }
         assertEquals(mapOf("de" to "de-DE-SMTm00"), repository.current().listen.voices)
+    }
+
+    // ---- News region and news language ----
+
+    @Test
+    fun `every edition an install from before 3_4 could have stored reads as before and is written back unchanged`() = runBlocking {
+        // The 23 pairs the old picker offered, as it stored them.
+        val stored = listOf(
+            "DE:de", "AT:de", "CH:de", "US:en", "GB:en", "CA:en", "AU:en", "IE:en", "IN:en", "FR:fr", "BE:fr", "CH:fr",
+            "ES:es", "MX:es", "AR:es", "IT:it", "NL:nl", "PL:pl", "PT:pt", "BR:pt", "SE:sv", "TR:tr", "JP:ja",
+        )
+        for (key in stored) {
+            store.edit { prefs ->
+                prefs[stringPreferencesKey("news_edition")] = key
+                prefs[booleanPreferencesKey("onboarding_done")] = true
+            }
+            val read = repository.current().edition
+            assertEquals(key, read.key)
+            assertEquals(key, "${read.country}:${read.language}")
+            // Google News has each of them: they read the very feeds they read before.
+            assertEquals(key, true, read.isNative)
+            assertEquals(key, read, read.google)
+            repository.update { it.copy(sectionSize = 5) }
+            assertEquals(key, store.data.first()[stringPreferencesKey("news_edition")])
+        }
+    }
+
+    @Test
+    fun `any region with any news language is stored and read back, the app language apart`() = runBlocking {
+        repository.update { it.copy(uiLanguage = AppLanguage.DE) }
+        for (country in NewsEdition.COUNTRIES) {
+            for (language in NewsEdition.LANGUAGES) {
+                val edition = NewsEdition(country, language)
+                repository.update { it.copy(edition = edition) }
+                val read = repository.current()
+                assertEquals(edition, read.edition)
+                assertEquals("$country:$language", store.data.first()[stringPreferencesKey("news_edition")])
+                // Neither choice moves the interface language.
+                assertEquals(AppLanguage.DE, read.uiLanguage)
+                assertEquals("de", store.data.first()[stringPreferencesKey("ui_language")])
+            }
+        }
+        // And the interface language moves neither of them.
+        repository.update { it.copy(edition = NewsEdition("US", "de")) }
+        repository.update { it.copy(uiLanguage = AppLanguage.EN) }
+        assertEquals(NewsEdition("US", "de"), repository.current().edition)
+    }
+
+    @Test
+    fun `changing the news region or language leaves every other setting alone`() = runBlocking {
+        repository.update { it.copy(themeMode = ThemeMode.LIGHT, sectionSize = 6, onboardingDone = true, followed = listOf("sport", "ki")) }
+        val before = repository.current()
+        repository.update { it.copy(edition = NewsEdition("US", "de")) }
+        assertEquals(before.copy(edition = NewsEdition("US", "de")), repository.current())
+        repository.update { it.copy(edition = NewsEdition("DE", "en")) }
+        assertEquals(before.copy(edition = NewsEdition("DE", "en")), repository.current())
+    }
+
+    @Test
+    fun `a stored edition the app does not offer falls back to the German news an old install had`() = runBlocking {
+        for (broken in listOf("XX:yy", "US", "us:en", "US:en:x", "NO:nb", "")) {
+            store.edit { prefs ->
+                prefs[stringPreferencesKey("news_edition")] = broken
+                prefs[booleanPreferencesKey("onboarding_done")] = true
+            }
+            assertEquals(broken, NewsEdition.GERMANY, repository.current().edition)
+        }
     }
 }
