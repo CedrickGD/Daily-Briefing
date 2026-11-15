@@ -173,7 +173,8 @@ class TopicSourcesTest {
         assertEquals("/rss/search", topUrl.encodedPath)
         assertTrue(topUrl.queryParameter("q")!!, topUrl.queryParameter("q")!!.startsWith("when:7d USA OR \"Vereinigte Staaten\" -site:"))
         assertEquals(listOf("de", "DE", "DE:de"), listOf("hl", "gl", "ceid").map { topUrl.queryParameter(it) })
-        assertNull(TopicSources.pagingQuery("top", settings))
+        // Older top stories page with the country's name too, not with the German headline desks.
+        assertEquals("USA OR \"Vereinigte Staaten\"", TopicSources.pagingQuery("top", settings)!!.query)
         // Politics and the economy: the country, then words every country has – not "Bundestag", no tagesschau.
         val politics = TopicSources.resolve("politik", settings).single()
         val politicsQuery = politics.url.toHttpUrl().queryParameter("q")!!

@@ -106,10 +106,10 @@ class TaxonomyTest {
     fun `a region Google News has no edition of in the language narrows its home topics to the country`() {
         val usaInGerman = NewsEdition("US", "de")
         val germanyInEnglish = NewsEdition("DE", "en")
-        // Top stories have no query of their own: the country.
+        // Top stories abroad: the country alone – the headline desks' words only page the home edition.
         assertEquals("USA OR \"Vereinigte Staaten\"", Taxonomy.byId("top")!!.queryFor(usaInGerman))
         assertEquals("Germany", Taxonomy.byId("top")!!.queryFor(germanyInEnglish))
-        assertNull(Taxonomy.byId("top")!!.queryFor(NewsEdition.GERMANY))
+        assertTrue(Taxonomy.byId("top")!!.queryFor(NewsEdition.GERMANY)!!.startsWith("Politik OR"))
         // Politics: words every country has, not the home institutions of the language.
         val inland = Taxonomy.byId("politik/inland")!!
         assertEquals("USA OR \"Vereinigte Staaten\" Politik OR Regierung OR Parlament OR Wahl OR Präsident OR Opposition", inland.queryFor(usaInGerman))

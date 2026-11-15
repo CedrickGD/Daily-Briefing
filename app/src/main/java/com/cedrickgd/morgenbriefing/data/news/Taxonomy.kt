@@ -58,7 +58,9 @@ data class TopicDef(
         val language = edition.language
         if (edition.isNative || !domestic) return queries["${language}_${edition.country}"] ?: queries[language] ?: queries["en"]
         val country = CountryQuery.terms(edition.country, language)
-        val words = queries["${language}_${Taxonomy.ABROAD}"] ?: queries[language]
+        // The top stories' own words are the home edition's headline desks ("Bundestag") and only
+        // page that edition into the past; abroad the country's name alone is the headline search.
+        val words = if (topStories) null else queries["${language}_${Taxonomy.ABROAD}"] ?: queries[language]
         return if (words == null) country else "$country $words"
     }
 
