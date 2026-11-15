@@ -28,19 +28,39 @@ data class TopicDef(
     /**
      * Google News search queries by language (`de`, `en`, `fr`, `es`, `it`), optionally refined
      * per country (`en_GB`, `de_AT` …) where the same words mean something else (domestic
-     * politics). Without date operators; paging adds `after:`/`before:`.
+     * politics), or for a country Google News has no edition of in that language
+     * (`de_abroad`, see [queryFor]). Without date operators; paging adds `after:`/`before:`.
      */
     val queries: Map<String, String> = emptyMap(),
 ) {
     val isCategory: Boolean get() = parentId == null
 
     /**
+     * Whether the topic's news are a country's own (top stories, home politics, the economy,
+     * housing) rather than a subject that reads the same everywhere (science, tech, the world).
+     */
+    val domestic: Boolean get() = id in Taxonomy.DOMESTIC
+
+    /**
      * The search query for [edition]: the country-specific one, else the language's, else the
      * English one (Google News finds English coverage in every edition); null when the topic
      * has no queries at all.
+     *
+     * For a pair Google News has no edition of ([NewsEdition.isNative] = false: the USA in
+     * German) the query runs in the edition of the language, which knows nothing of the
+     * country. A [domestic] topic is therefore narrowed to the country by name
+     * ([CountryQuery]): `USA OR "Vereinigte Staaten" Wirtschaft OR Konjunktur …` – with the
+     * `<language>_abroad` words where the language's own query names its home institutions
+     * ("Bundestag"), and the country alone for the top stories and for a language without
+     * queries. Other topics keep the language's query: tech news in German are the same news.
      */
-    fun queryFor(edition: NewsEdition): String? =
-        queries["${edition.language}_${edition.country}"] ?: queries[edition.language] ?: queries["en"]
+    fun queryFor(edition: NewsEdition): String? {
+        val language = edition.language
+        if (edition.isNative || !domestic) return queries["${language}_${edition.country}"] ?: queries[language] ?: queries["en"]
+        val country = CountryQuery.terms(edition.country, language)
+        val words = queries["${language}_${Taxonomy.ABROAD}"] ?: queries[language]
+        return if (words == null) country else "$country $words"
+    }
 
     /** Whether [edition]'s language has its own query (not the English fallback). */
     fun speaks(edition: NewsEdition): Boolean = queries.containsKey(edition.language)
@@ -57,6 +77,34 @@ data class TopicDef(
 object Taxonomy {
     const val TOP = "top"
     const val REGION = "region"
+
+    /** Key suffix of the query a topic uses for a country abroad (`de_abroad`, see [TopicDef.queryFor]). */
+    const val ABROAD = "abroad"
+
+    /**
+     * The topics whose news belong to the edition's country ([TopicDef.domestic]): where Google
+     * News has no edition of a country in the user's language, they search for the country by
+     * name instead of reading the language's home edition (German top stories are Germany's).
+     */
+    val DOMESTIC: Set<String> = setOf(
+        TOP, "politik", "politik/inland", "politik/wahlen",
+        "wirtschaft", "wirtschaft/konjunktur", "wirtschaft/geld", "wirtschaft/immobilien",
+    )
+
+    /**
+     * Politics of a country abroad, in words every country has – the languages' own queries
+     * name their home institutions ("Bundestag", "Congress"). With the country in front
+     * ([TopicDef.queryFor]) `USA OR "Vereinigte Staaten" Politik OR Regierung OR Parlament OR
+     * Wahl` finds 68 stories (28 of the last two days, US politics); the German home query
+     * finds 38, many of them off the subject (checked 15.11.2026).
+     */
+    private val POLITICS_ABROAD = arrayOf(
+        "de_$ABROAD" to "Politik OR Regierung OR Parlament OR Wahl OR Präsident OR Opposition",
+        "en_$ABROAD" to "politics OR government OR parliament OR election OR president OR \"prime minister\"",
+        "fr_$ABROAD" to "politique OR gouvernement OR parlement OR élection OR président OR opposition",
+        "es_$ABROAD" to "política OR gobierno OR parlamento OR elecciones OR presidente OR oposición",
+        "it_$ABROAD" to "politica OR governo OR parlamento OR elezioni OR presidente OR opposizione",
+    )
 
     private fun cat(
         id: String,
@@ -87,6 +135,7 @@ object Taxonomy {
                 fr = "politique OR gouvernement OR \"Assemblée nationale\" OR Sénat OR partis",
                 es = "política OR Gobierno OR Congreso OR Senado OR partidos",
                 it = "politica OR governo OR Parlamento OR Senato OR partiti",
+                *POLITICS_ABROAD,
             ),
         ),
         sub(
@@ -106,8 +155,11 @@ object Taxonomy {
                 "en_IN" to "\"Lok Sabha\" OR \"Rajya Sabha\" OR \"prime minister\" OR BJP OR Congress India",
                 "fr_BE" to "\"gouvernement fédéral\" OR \"Chambre des représentants\" OR \"Premier ministre\" OR N-VA OR \"Les Engagés\" OR MR",
                 "fr_CH" to "\"Conseil fédéral\" OR \"Conseil national\" OR \"Conseil des États\" OR votation",
+                "fr_CA" to "\"Chambre des communes\" OR Ottawa OR \"premier ministre\" OR libéraux OR conservateurs Canada",
                 "es_MX" to "\"Cámara de Diputados\" OR Senado OR \"Palacio Nacional\" OR Morena OR \"presidenta de México\"",
                 "es_AR" to "\"Casa Rosada\" OR Congreso OR Senado OR \"Cámara de Diputados\" Argentina",
+                "es_US" to "\"Casa Blanca\" OR Congreso OR Senado OR \"Cámara de Representantes\" OR gobernador",
+                *POLITICS_ABROAD,
             ),
         ),
         sub(

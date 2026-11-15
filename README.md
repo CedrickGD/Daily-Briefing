@@ -7,7 +7,8 @@ Handy: kein Konto, kein Server, keine Cloud, keine KI, keine Tokens.
 *Daily Briefing is a free Android news and weather app: follow categories and sub-topics (e.g.
 Finance → Stock market, Trading, Crypto), search any subject, follow the local news of any place
 on earth, and read full articles inside the app without ads. Interface in English, German,
-French, Spanish and Italian; news from 23 country editions.*
+French, Spanish and Italian; news about 22 countries in 11 languages, region and language
+chosen independently.*
 
 Android-App (Kotlin, Jetpack Compose, Material 3), ab **Android 7.0** (API 24). Früher hieß sie
 „Morgenbriefing“.
@@ -21,7 +22,7 @@ Android-App (Kotlin, Jetpack Compose, Material 3), ab **Android 7.0** (API 24). 
 | **Heute** | Oben ein animierter Himmel passend zu Wetter und Tageszeit, darunter das Wetter als **eine kompakte Karte** – Temperatur, Ort, Zustand und eine Zeile „5° – 10° · trocken · Jacke“; antippen klappt Tageskurve, „Vor der Tür“ und was du anziehen solltest auf, Warnungen stehen immer darunter. Dann eine Leiste mit **Suche** und den Tabs **„Für dich“** (je Thema eine Karte: die erste Meldung groß, dann kompakte Zeilen, „Alle →“ öffnet das Thema), **„Neueste“** (alles chronologisch) und einem Tab pro Thema mit einer **endlosen Liste** – am Ende lädt die App ältere Meldungen nach, so weit du willst. Die Leiste bleibt oben stehen; „＋“ öffnet **„Deine Themen“** (sortieren, entfernen, entdecken, Ort hinzufügen). Zuhören, Teilen und mehr stecken im ⋮ jeder Meldung (oder lange drücken). |
 | **Themen entdecken** | **12 Kategorien mit 47 Unterthemen**, jede mit eigenem Icon und eigener Farbe: Schlagzeilen · Politik (Inland, Wahlen, EU, USA, Sicherheit) · Welt (Europa, Amerika, Asien, Nahost, Afrika) · Wirtschaft & Finanzen (Börse & Märkte, Trading & Anlegen, Krypto, Konjunktur & Zinsen, Unternehmen, Verbraucher & Finanzen, Immobilien, Start-ups) · Tech & KI · Wissenschaft · Gesundheit · Klima & Energie · Sport · Kultur & Unterhaltung · Auto & Mobilität · Region. Du folgst einer ganzen Kategorie oder nur den Unterthemen, die dich interessieren; jede Kategorie zeigt vorab die neuesten Schlagzeilen. |
 | **Suche** | Beliebige Begriffe – „Midterms“, „Rheinmetall Aktie“, „Champions League“, Ticker wie „SLV ETF“ (exakt) – in deiner Ausgabe und auf Englisch (US, UK), **nach Relevanz** sortiert (oder neueste zuerst), Kurs- und Forenseiten raus, mit endlos nachladenden Ergebnissen, letzten Suchen und „Gerade wichtig“. **„Diesem Thema folgen“** macht aus einer Suche ein eigenes Thema im Feed. |
-| **Sprache & Region** | **App-Sprache** (wie das Handy, Deutsch, English, Français, Español, Italiano) und **Nachrichten-Ausgabe** (23 Länder, z. B. Deutschland, Österreich, Schweiz, USA, Großbritannien, Frankreich, Spanien, Italien …) sind getrennt einstellbar. **Lokale Nachrichten** gibt es für jeden Ort der Welt: in Deutschland wohnen und Washington, D.C. folgen bringt die Lokalnachrichten aus den USA, auf Englisch. In deutschen Ausgaben kommt das Thema „Region“ zusätzlich von den Sendern deines Bundeslandes. |
+| **Sprache & Region** | Drei Dinge, die du unabhängig voneinander wählst: die **App-Sprache** (wie das Handy, Deutsch, English, Français, Español, Italiano), die **Nachrichten-Region** (22 Länder, z. B. Deutschland, Österreich, Schweiz, USA, Großbritannien, Frankreich, Spanien, Italien …) und die **Nachrichten-Sprache** (11 Sprachen). Jede Region geht mit jeder Sprache: die USA auf Deutsch, Deutschland auf Englisch, eine deutsche App mit englischen Nachrichten oder umgekehrt. Wo Google News für ein Land keine Ausgabe in der gewählten Sprache hat, sucht die App die Meldungen über das Land in dieser Sprache – die Einstellungen sagen das dazu. **Lokale Nachrichten** gibt es für jeden Ort der Welt, in deiner Nachrichten-Sprache: in Deutschland wohnen und Washington, D.C. folgen bringt Meldungen über Washington auf Deutsch; gibt es über einen Ort zu wenig in deiner Sprache, kommen die Lokalnachrichten in der Sprache seines Landes dazu. Für Deutschland auf Deutsch kommt das Thema „Region“ zusätzlich von den Sendern deines Bundeslandes. |
 | **Artikel lesen** | Ein Tipp öffnet den Artikel **in der App**: Bild, Überschrift und der ganze Text – ohne Werbung, Cookie-Banner, Navigation und ohne doppelte Absätze (Lesemodus nach Mozillas Readability). Die App lädt sichtbare Artikel auf Wunsch vorab (Standard: nur im WLAN), damit sie sofort und offline aufgehen; ein kleines „Volltext“-Zeichen zeigt, dass ein Artikel komplett lesbar ist. Seiten mit Bezahlschranke, Cookie-Wand oder Bot-Sperre erkennt sie. Mit **„Nur vollständige Artikel“** (Standard an) prüft die App jeden Artikel, bevor sie ihn zeigt – in „Für dich“, „Neueste“, den Themenlisten, „Themen entdecken“ und den Schlagzeilen der Morgen-Benachrichtigung: nur was komplett in der App lesbar ist, erscheint; Bezahlschranken, bloße Anrisse, Video- und Startseiten bleiben weg. Dafür lädt sie die nächsten Artikel vorab, auch über mobile Daten; offline zeigt sie nur schon geprüfte. „Zuhören“ liest den ganzen Artikel vor. |
 | **Quellen** | Rund 100 geprüfte Feeds von Redaktionen (deutschsprachig: tagesschau, SPIEGEL, DLF, DW, heise, taz, Handelsblatt, Spektrum, Sportschau …; englisch: BBC, Guardian, NPR, CNBC, The Verge, Ars Technica, NASA …) plus Google News je Ausgabe für Unterthemen, Suche und Lokales. Jede Quelle ist einzeln abschaltbar; eigene Feeds und eigene Themen (Name, Icon, Farbe, Feeds oder Suchbegriff) kommen dazu. |
 | **Einstellungen** | Hell, Dunkel oder wie das System; Akzentfarben; **Effekte** (automatisch je nach Handy, voll oder sparsam – auch einfache Handys wie ein Galaxy A13 laufen flüssig); Meldungen pro Thema; Zeitraum; Bilder; Vorladen; **Vorlesen** (Sprachausgabe wie Samsung oder Google, Sprache automatisch oder fest, Stimme je Sprache mit Probehören, weiblich/männlich, wo die Stimme es verrät, Tempo 0,5×–2× – auch per Chip im Mini-Player – und Tonhöhe); Wetterblöcke; Orte fürs Wetter; Uhrzeit der Morgen-Benachrichtigung; Akku-Optimierung; Updates. |
@@ -54,7 +55,7 @@ Mehr dazu: [Architektur](docs/ARCHITECTURE.md) · [Design](docs/DESIGN.md)
    `DailyBriefing-vX.Y.Z.apk` herunterladen.
 2. Die Datei öffnen. Fragt Android nach „Unbekannte Apps installieren“, für Browser bzw.
    „Eigene Dateien“ **Zulassen** wählen und die Installation bestätigen.
-3. Beim ersten Start **Sprache** und **Nachrichten-Ausgabe** wählen, **Benachrichtigungen
+3. Beim ersten Start **App-Sprache**, **Nachrichten-Region** und **Nachrichten-Sprache** wählen, **Benachrichtigungen
    erlauben** (ab Android 13) und **deinen Ort** wählen.
 
 Spätere Versionen findet die App selbst (siehe [Updates](#updates)). Wer noch das alte
@@ -73,7 +74,7 @@ Einstellungen bleiben erhalten.
   antippen, der ganzen Kategorie oder einzelnen Unterthemen folgen. In den Einstellungen
   legst du außerdem **eigene Themen** an.
 - **Suche** (Suchfeld über den Tabs auf „Heute“): Begriff eingeben, „Diesem Thema folgen“.
-- **Einstellungen → Sprache & Region:** App-Sprache, Nachrichten-Ausgabe, Bundesland, lokale Orte.
+- **Einstellungen → Sprache & Region:** App-Sprache, Nachrichten-Region, Nachrichten-Sprache, Bundesland, lokale Orte.
 - **Einstellungen → Quellen:** je Thema alle Feeds mit Schalter; **„Eigene Quelle“** nimmt eine
   Feed-Adresse oder die Website einer Redaktion und sucht den Feed selbst.
 
@@ -208,7 +209,8 @@ sie in den Einstellungen ab.
   eingegebenen Namen – kein Konto, kein Schlüssel.
 - **Nachrichten:** Die App ruft die Feeds direkt bei den Redaktionen ab, wie ein Feedreader.
   **Google News** erhält dabei die Ausgabe (Land/Sprache), die Suchbegriffe deiner Themen und
-  Suchen sowie die Namen deiner lokalen Orte; die App schickt Googles Cookie für „Alle ablehnen“
+  Suchen – wo es für deine Region keine Ausgabe in deiner Sprache gibt, auch den Namen des Landes –
+  sowie die Namen deiner lokalen Orte; die App schickt Googles Cookie für „Alle ablehnen“
   mit, kein Konto, keine Kennung. Um einen Google-News-Link in den Artikel der Redaktion
   aufzulösen, fragt sie Google News einmal pro Artikel (das Ergebnis bleibt gespeichert).
 - **Artikel und Bilder** lädt die App nur über https direkt vom jeweiligen Verlag – beim Lesen, mit

@@ -174,9 +174,14 @@ gefüllte Pill.
    Status-Pills (Benachrichtigungen, Exakte Uhrzeit, Akku) grün/amber – Antippen behebt.
 2. **Morgenbriefing**: riesige Uhrzeit in Serif („06:30“, antippen → Zeitwahl), Schalter,
    „Nächstes Briefing: morgen · in 9 Std.“, Test-Benachrichtigung als Glas-Pill.
-3. **Sprache & Region**: App-Sprache als Pills (wie das Handy + 5 Sprachen, wirkt sofort),
-   Nachrichten-Ausgabe (Flagge, Land, Sprache → durchsuchbares Glas-Sheet), Bundesland nur für
-   deutsche Ausgaben; darunter „Lokale Nachrichten“ mit Orten aus aller Welt.
+3. **Sprache & Region**: drei getrennte Regler, keiner ändert einen anderen – App-Sprache als
+   Pills (wie das Handy + 5 Sprachen, wirkt sofort), **Nachrichten-Region** (Flaggen-Kachel,
+   Land in Serif → durchsuchbares Glas-Sheet mit Vorschlägen) und **Nachrichten-Sprache**
+   (Kachel mit Sprachkürzel, Sprache in sich selbst → Glas-Sheet: zuerst die Sprachen mit
+   eigener Google-News-Ausgabe für das Land, dann alle weiteren). Darunter eine Zeile, die bei
+   einer Kombination ohne eigene Ausgabe sagt, dass die App Meldungen über das Land sucht.
+   Bundesland nur für Deutschland auf Deutsch; darunter „Lokale Nachrichten“ mit Orten aus
+   aller Welt. Der erste Start zeigt dieselben zwei Zeilen im Schritt „Deine Nachrichten“.
 4. **Deine Themen**: Banner „Themen entdecken“ (Verlauf), gefolgte Themen als Zeilen mit
    Icon-Kachel – ziehen zum Sortieren, ✕ zum Entfernen; „Eigenes Thema“ (Name, Icon aus dem
    Raster, Farbe aus zwölf Perlen, Feeds oder Suchbegriff).

@@ -29,6 +29,37 @@ class SettingsMigrationTest {
     }
 
     @Test
+    fun `stored editions keep their meaning, pairs chosen independently are read back`() {
+        // Whatever an older version stored is the same edition today.
+        for (old in listOf("DE:de", "US:en", "CH:fr", "MX:es", "JP:ja")) {
+            val read = SettingsMigration.edition(old, onboardingDone = true, Locale.US)
+            assertEquals(old, read.key)
+            assertTrue(old, read.isNative)
+        }
+        // Region and language chosen independently: stored as country:language like before.
+        assertEquals(NewsEdition("US", "de"), SettingsMigration.edition("US:de", onboardingDone = true, Locale.US))
+        assertEquals(NewsEdition("DE", "en"), SettingsMigration.edition("DE:en", onboardingDone = true, Locale.GERMANY))
+        assertEquals(NewsEdition("JP", "it"), SettingsMigration.edition("JP:it", onboardingDone = false, Locale.GERMANY))
+    }
+
+    @Test
+    fun `a fresh install starts with the phone's country in the phone's language`() {
+        fun fresh(tag: String) = SettingsMigration.edition(null, onboardingDone = false, Locale.forLanguageTag(tag))
+        assertEquals(NewsEdition.GERMANY, fresh("de-DE"))
+        // An English phone in Germany, a German phone in the USA: both the phone's.
+        assertEquals(NewsEdition("DE", "en"), fresh("en-DE"))
+        assertEquals(NewsEdition("US", "de"), fresh("de-US"))
+        assertEquals(NewsEdition("US", "es"), fresh("es-US"))
+        // A language the app has no news in: the country's main language.
+        assertEquals(NewsEdition("IN", "en"), fresh("hi-IN"))
+        // A country it does not offer: the home edition of the language.
+        assertEquals(NewsEdition.GERMANY, fresh("de-LU"))
+        assertEquals(NewsEdition.USA, fresh("en-NZ"))
+        // Neither: the US edition.
+        assertEquals(NewsEdition.USA, fresh("nb-NO"))
+    }
+
+    @Test
     fun `the old order minus the hidden topics becomes the followed list`() {
         val followed = SettingsMigration.followed(
             stored = null,

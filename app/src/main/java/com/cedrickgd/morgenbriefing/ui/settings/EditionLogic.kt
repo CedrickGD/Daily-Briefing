@@ -13,9 +13,10 @@ import java.text.Normalizer
 import java.util.Locale
 
 /*
- * Pure logic of "Sprache & Region": how a news edition is named in the interface language, the
- * edition picker's search and suggestions, the app-language choice and what changing the
- * edition does to the followed topics. Unit-tested.
+ * Pure logic of "Sprache & Region": three independent choices – the app language, the news
+ * region (a country) and the news language. How regions and languages are named in the
+ * interface language, the two pickers' search and suggestions, and what changing the region
+ * or the language does to the followed topics. Unit-tested.
  */
 
 /** 🇩🇪 for "DE"; empty for unknown codes. */
@@ -25,15 +26,36 @@ internal fun flagEmoji(countryCode: String): String {
     return code.map { String(Character.toChars(0x1F1E6 + (it - 'A'))) }.joinToString("")
 }
 
-/** One row of the edition picker, already worded in the interface language. */
+/** A region and a news language together, worded in the interface language (a place's news, the sources' header). */
 @Immutable
 internal data class EditionOption(
     val edition: NewsEdition,
     val flag: String,
     /** The country in the interface language: "Vereinigte Staaten". */
     val country: String,
-    /** The edition's language in itself: "English", "Français". */
+    /** The news language in itself: "English", "Français". */
     val language: String,
+)
+
+/** One row of the region picker. */
+@Immutable
+internal data class RegionOption(
+    /** ISO 3166-1 alpha-2. */
+    val country: String,
+    val flag: String,
+    /** The country in the interface language: "Vereinigte Staaten". */
+    val name: String,
+)
+
+/** One row of the news-language picker. */
+@Immutable
+internal data class NewsLanguageOption(
+    /** ISO 639-1. */
+    val language: String,
+    /** The language in itself: "English", "Français". */
+    val nativeName: String,
+    /** The language in the interface language: "Englisch". */
+    val name: String,
 )
 
 internal object EditionLabels {
@@ -45,29 +67,41 @@ internal object EditionLabels {
         return name.takeIf { it.isNotBlank() && !it.equals(code, ignoreCase = true) } ?: code
     }
 
-    /** The edition's language in itself, capitalised: "Deutsch", "Français", "日本語". */
-    fun nativeLanguage(edition: NewsEdition): String {
-        val locale = languageLocale(edition.language)
+    /** [language] (ISO 639-1) in itself, capitalised: "Deutsch", "Français", "日本語". */
+    fun nativeLanguage(language: String): String {
+        val locale = languageLocale(language)
         val name = locale.getDisplayLanguage(locale)
-        return name.takeIf { it.isNotBlank() && it != edition.language }?.capitalized(locale) ?: edition.language
+        return name.takeIf { it.isNotBlank() && it != language }?.capitalized(locale) ?: language
     }
 
-    /** The edition's language named in [lang]: "Englisch". */
-    fun languageIn(edition: NewsEdition, lang: AppLanguage): String {
-        val name = languageLocale(edition.language).getDisplayLanguage(lang.locale)
-        return name.takeIf { it.isNotBlank() && it != edition.language }?.capitalized(lang.locale) ?: edition.language
+    /** [language] named in [lang], capitalised for a label: "Englisch", "Anglais". */
+    fun languageIn(language: String, lang: AppLanguage): String =
+        languageInSentence(language, lang).capitalized(lang.locale)
+
+    /** [language] named in [lang] as a sentence writes it: "Englisch", but "anglais", "inglés", "inglese". */
+    fun languageInSentence(language: String, lang: AppLanguage): String {
+        val name = languageLocale(language).getDisplayLanguage(lang.locale)
+        return name.takeIf { it.isNotBlank() && it != language } ?: language
     }
 
     fun option(edition: NewsEdition, lang: AppLanguage): EditionOption =
-        EditionOption(edition, flagEmoji(edition.country), country(edition.country, lang), nativeLanguage(edition))
+        EditionOption(edition, flagEmoji(edition.country), country(edition.country, lang), nativeLanguage(edition.language))
 
-    /** Every edition in [NewsEdition.ALL] order, worded in [lang]. */
-    fun options(lang: AppLanguage): List<EditionOption> = NewsEdition.ALL.map { option(it, lang) }
+    /** Every region in [NewsEdition.COUNTRIES] order, worded in [lang]. */
+    fun regions(lang: AppLanguage): List<RegionOption> = NewsEdition.COUNTRIES.map { region(it, lang) }
+
+    fun region(country: String, lang: AppLanguage): RegionOption = RegionOption(country, flagEmoji(country), country(country, lang))
+
+    /** Every news language in [NewsEdition.LANGUAGES] order, worded in [lang]. */
+    fun languages(lang: AppLanguage): List<NewsLanguageOption> = NewsEdition.LANGUAGES.map { language(it, lang) }
+
+    fun language(language: String, lang: AppLanguage): NewsLanguageOption =
+        NewsLanguageOption(language, nativeLanguage(language), languageIn(language, lang))
 
     /** A locale of just [code]'s country; null for a code the platform rejects. */
     internal fun regionLocale(code: String): Locale? = runCatching { Locale.Builder().setRegion(code).build() }.getOrNull()
 
-    private fun languageLocale(code: String): Locale = runCatching { Locale.Builder().setLanguage(code).build() }.getOrDefault(Locale.ROOT)
+    internal fun languageLocale(code: String): Locale = runCatching { Locale.Builder().setLanguage(code).build() }.getOrDefault(Locale.ROOT)
 
     private fun String.capitalized(locale: Locale): String = replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
 }
@@ -75,43 +109,44 @@ internal object EditionLabels {
 internal object EditionSearch {
 
     /**
-     * The options matching [query]: the country in the interface language, in English or in the
-     * edition's own language, the language's names, or the codes ("us", "en-US"). Accents and
-     * case are ignored; a blank query keeps everything.
+     * The regions matching [query]: the country in the interface language, in English or in
+     * one of its own languages, or its code ("us"). Accents and case are ignored; a blank
+     * query keeps everything.
      */
-    fun filter(options: List<EditionOption>, query: String, lang: AppLanguage): List<EditionOption> {
+    fun filterRegions(options: List<RegionOption>, query: String): List<RegionOption> {
         val needle = fold(query)
         if (needle.isEmpty()) return options
-        return options.filter { option -> haystack(option, lang).any { it.contains(needle) } }
+        return options.filter { option -> regionHaystack(option).any { it.contains(needle) } }
     }
 
     /**
-     * A handful of editions that fit this phone: the current one, the phone's country, the
-     * editions in the interface language and the phone language. At most [MAX_SUGGESTIONS].
+     * A handful of regions that fit: the current one, the phone's country and the countries
+     * Google News has an edition of in the current news language. At most [MAX_SUGGESTIONS].
      */
-    fun suggestions(current: NewsEdition, phone: Locale, lang: AppLanguage): List<NewsEdition> {
-        val picks = LinkedHashSet<NewsEdition>()
-        picks += current
-        NewsEdition.default(phone).let { picks += it }
-        NewsEdition.ALL.filterTo(picks) { it.language == lang.code }
-        NewsEdition.ALL.filterTo(picks) { it.language == phone.language }
+    fun regionSuggestions(current: NewsEdition, phone: Locale): List<String> {
+        val picks = LinkedHashSet<String>()
+        picks += current.country
+        phone.country.uppercase(Locale.ROOT).takeIf { it in NewsEdition.COUNTRIES }?.let { picks += it }
+        NewsEdition.ALL.filter { it.language == current.language }.mapTo(picks) { it.country }
         return picks.take(MAX_SUGGESTIONS)
+    }
+
+    /**
+     * The news languages split for [country]: first the ones Google News has an edition of the
+     * country in (its own languages, the main one first), then all the others.
+     */
+    fun languagesFor(country: String, options: List<NewsLanguageOption>): Pair<List<NewsLanguageOption>, List<NewsLanguageOption>> {
+        val own = NewsEdition.languagesOf(country)
+        val byCode = options.associateBy { it.language }
+        return own.mapNotNull { byCode[it] } to options.filter { it.language !in own }
     }
 
     const val MAX_SUGGESTIONS = 5
 
-    private fun haystack(option: EditionOption, lang: AppLanguage): List<String> {
-        val edition = option.edition
-        return listOf(
-            option.country,
-            option.language,
-            EditionLabels.country(edition.country, AppLanguage.EN),
-            EditionLabels.regionLocale(edition.country)?.getDisplayCountry(edition.locale).orEmpty(),
-            EditionLabels.languageIn(edition, lang),
-            EditionLabels.languageIn(edition, AppLanguage.EN),
-            edition.country,
-            edition.hl,
-        ).map(::fold)
+    private fun regionHaystack(option: RegionOption): List<String> {
+        val region = EditionLabels.regionLocale(option.country)
+        val own = NewsEdition.languagesOf(option.country).map { region?.getDisplayCountry(EditionLabels.languageLocale(it)).orEmpty() }
+        return (listOf(option.name, EditionLabels.country(option.country, AppLanguage.EN), option.country) + own).map(::fold)
     }
 
     /** Lower case without accents: "Österreich" → "osterreich", "España" → "espana". */
@@ -138,20 +173,32 @@ internal object LanguageChoice {
 
 internal object EditionChange {
 
+    /** [settings] with the news region [country]; the news language stays ([apply]). */
+    fun region(settings: AppSettings, country: String): AppSettings =
+        NewsEdition.of(country, settings.edition.language)?.let { apply(settings, it) } ?: settings
+
+    /** [settings] with the news language [language]; the region and the followed topics stay ([apply]). */
+    fun language(settings: AppSettings, language: String): AppSettings =
+        NewsEdition.of(settings.edition.country, language)?.let { apply(settings, it) } ?: settings
+
     /**
-     * [settings] reading [edition]. A feed still on the defaults of the old edition gets the
-     * defaults of the new one (the "Region" topic exists only where its presets do); a feed the
-     * user arranged stays as it is.
+     * [settings] reading [edition]. Another language alone changes nothing else: the topics
+     * are the same in every language. Another region moves a feed that still is the default
+     * one to the defaults of the new edition (the "Region" topic belongs where its presets
+     * are: Germany in German); a feed the user arranged stays as it is.
      */
     fun apply(settings: AppSettings, edition: NewsEdition): AppSettings {
         if (edition == settings.edition) return settings
-        val followed = Topics.followedIds(settings)
-        val untouched = followed == Taxonomy.defaultFollowed(settings.edition)
         val next = settings.copy(edition = edition)
-        return if (untouched) next.copy(followed = Taxonomy.defaultFollowed(edition)) else next
+        if (edition.country == settings.edition.country) return next
+        return if (isDefaultFeed(Topics.followedIds(settings))) next.copy(followed = Taxonomy.defaultFollowed(edition)) else next
     }
 
-    /** Whether the Bundesland presets apply to [edition] (German edition only). */
+    /** Whether [followed] is a default feed, with or without the "Region" topic (a language change keeps it). */
+    private fun isDefaultFeed(followed: List<String>): Boolean =
+        followed - Taxonomy.REGION == Taxonomy.defaultFollowed(NewsEdition.GERMANY) - Taxonomy.REGION
+
+    /** Whether the Bundesland presets apply to [edition] (Germany in German only). */
     fun showsRegionPresets(edition: NewsEdition): Boolean = Regions.servesEdition(edition)
 }
 
@@ -160,7 +207,7 @@ internal object EditionChange {
 internal data class LocalPlaceRow(
     val topicId: String,
     val place: Place,
-    /** The edition its news are read in: its country's, else the main edition. */
+    /** The edition its news are read in: its country in the news language, else the main edition. */
     val edition: NewsEdition,
     val followed: Boolean,
 )

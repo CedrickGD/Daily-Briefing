@@ -10,7 +10,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.cedrickgd.morgenbriefing.MorgenbriefingApp
 import com.cedrickgd.morgenbriefing.data.SettingsRepository
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
-import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.ui.settings.EditionChange
 import com.cedrickgd.morgenbriefing.ui.settings.LanguageChoice
@@ -22,10 +21,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * The first-start sheet's settings: the interface language (applies at once) and the news
- * edition. A fresh install already reads the edition of the phone's country
- * ([com.cedrickgd.morgenbriefing.data.SettingsMigration]); picking another one here also moves
- * the default topics along ([EditionChange]).
+ * The first-start sheet's settings: the interface language (applies at once), the news region
+ * and the news language – three choices that never change one another. A fresh install
+ * already reads the phone's country in the phone's language
+ * ([com.cedrickgd.morgenbriefing.data.SettingsMigration]); picking another region here also
+ * moves the default topics along ([EditionChange]).
  */
 class OnboardingViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
 
@@ -37,7 +37,9 @@ class OnboardingViewModel(private val settingsRepository: SettingsRepository) : 
     /** [picked] as the interface language; the phone's own language means "follow the phone". */
     fun setLanguage(picked: AppLanguage?) = edit { it.copy(uiLanguage = LanguageChoice.preference(picked)) }
 
-    fun setEdition(edition: NewsEdition) = edit { EditionChange.apply(it, edition) }
+    fun setNewsRegion(country: String) = edit { EditionChange.region(it, country) }
+
+    fun setNewsLanguage(language: String) = edit { EditionChange.language(it, language) }
 
     private fun edit(transform: (AppSettings) -> AppSettings) {
         viewModelScope.launch {

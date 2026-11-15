@@ -19,7 +19,6 @@ import com.cedrickgd.morgenbriefing.data.model.EffectsMode
 import com.cedrickgd.morgenbriefing.data.model.FeedSource
 import com.cedrickgd.morgenbriefing.data.model.ListenSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsAge
-import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.Place
 import com.cedrickgd.morgenbriefing.data.model.PrefetchMode
 import com.cedrickgd.morgenbriefing.data.model.SourceStatus
@@ -210,8 +209,11 @@ class SettingsViewModel(
     /** The interface language; null follows the phone. Applies at once (AppRoot provides it). */
     fun setUiLanguage(language: AppLanguage?) = edit { it.copy(uiLanguage = language) }
 
-    /** Where the news come from; a feed still on the old edition's defaults moves along ([EditionChange]). */
-    fun setEdition(edition: NewsEdition) = edit { EditionChange.apply(it, edition) }
+    /** The country the news are about; the news language stays, a feed still on the defaults moves along ([EditionChange]). */
+    fun setNewsRegion(country: String) = edit { EditionChange.region(it, country) }
+
+    /** The language the news are read in; the region and the followed topics stay ([EditionChange]). */
+    fun setNewsLanguage(language: String) = edit { EditionChange.language(it, language) }
 
     fun setNotificationsEnabled(enabled: Boolean) = edit { it.copy(notificationsEnabled = enabled) }
 

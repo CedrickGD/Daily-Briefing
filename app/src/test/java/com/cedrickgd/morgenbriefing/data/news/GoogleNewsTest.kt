@@ -29,6 +29,53 @@ class GoogleNewsTest {
     }
 
     @Test
+    fun `a pair Google News has no edition of asks the edition of its language`() {
+        // hl=de&gl=US&ceid=US:de is redirected to the German edition and loses the country (checked 15.11.2026).
+        val usaInGerman = NewsEdition("US", "de")
+        assertEquals("https://news.google.com/rss?hl=de&gl=DE&ceid=DE:de", GoogleNews.topStoriesUrl(usaInGerman))
+        val search = GoogleNews.searchUrl("USA OR \"Vereinigte Staaten\"", usaInGerman).toHttpUrl()
+        assertEquals(listOf("de", "DE", "DE:de"), listOf("hl", "gl", "ceid").map { search.queryParameter(it) })
+        assertEquals("USA OR \"Vereinigte Staaten\"", search.queryParameter("q"))
+        val germanyInEnglish = GoogleNews.sectionUrl(NewsSection.WORLD, NewsEdition("DE", "en")).toHttpUrl()
+        assertEquals(listOf("en-US", "US", "US:en"), listOf("hl", "gl", "ceid").map { germanyInEnglish.queryParameter(it) })
+        // Every pair asks for an edition Google News has, in the pair's language; its own when it has it.
+        for (country in NewsEdition.COUNTRIES) {
+            for (language in NewsEdition.LANGUAGES) {
+                val edition = NewsEdition(country, language)
+                val url = GoogleNews.topStoriesUrl(edition).toHttpUrl()
+                val asked = NewsEdition(url.queryParameter("gl")!!, url.queryParameter("ceid")!!.substringAfter(':'))
+                assertTrue(edition.key, asked in NewsEdition.ALL)
+                assertEquals(edition.key, language, asked.language)
+                assertEquals(edition.key, asked.country, url.queryParameter("ceid")!!.substringBefore(':'))
+                if (edition.isNative) assertEquals(edition.key, edition, asked)
+            }
+        }
+        // The editions that joined the list keep their country.
+        assertEquals("https://news.google.com/rss?hl=fr-CA&gl=CA&ceid=CA:fr", GoogleNews.topStoriesUrl(NewsEdition("CA", "fr")))
+        assertEquals("https://news.google.com/rss?hl=nl-BE&gl=BE&ceid=BE:nl", GoogleNews.topStoriesUrl(NewsEdition("BE", "nl")))
+        assertEquals("https://news.google.com/rss?hl=es-US&gl=US&ceid=US:es", GoogleNews.topStoriesUrl(NewsEdition("US", "es")))
+    }
+
+    @Test
+    fun `a search can be limited to the last days`() {
+        assertEquals("when:14d \"Washington\"", GoogleNews.recent(" \"Washington\" ", 14))
+        // The limit stays in front, exclusions behind.
+        assertEquals("when:7d USA -site:zeit.de", GoogleNews.buildQuery(GoogleNews.recent("USA", 7), listOf("zeit.de")))
+    }
+
+    @Test
+    fun `exclusions of a pair without an edition are ranked for the edition it reads`() {
+        assertEquals(
+            GoogleNews.rankExclusions(KnownWalls.DOMAINS, NewsEdition.GERMANY),
+            GoogleNews.rankExclusions(KnownWalls.DOMAINS, NewsEdition("US", "de")),
+        )
+        assertEquals(
+            GoogleNews.rankExclusions(KnownWalls.DOMAINS, NewsEdition.USA),
+            GoogleNews.rankExclusions(KnownWalls.DOMAINS, NewsEdition("DE", "en")),
+        )
+    }
+
+    @Test
     fun `queries get exclusions and date windows`() {
         val window = GoogleNews.DateWindow(LocalDate.of(2026, 10, 20), LocalDate.of(2026, 10, 27))
         assertEquals(

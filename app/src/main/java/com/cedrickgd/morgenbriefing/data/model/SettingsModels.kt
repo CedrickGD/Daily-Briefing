@@ -197,7 +197,7 @@ data class AppSettings(
     val weatherCards: Set<WeatherCard> = WeatherCard.ALL,
     /** Interface language; null = follow the phone (see [AppLanguage.resolve]). */
     val uiLanguage: AppLanguage? = null,
-    /** Where the news come from (country + language), independent of [uiLanguage]. */
+    /** The news region (country) and the news language: chosen independently of each other and of [uiLanguage]. */
     val edition: NewsEdition = NewsEdition.GERMANY,
     /**
      * The topics the feed shows, in order: categories (`wirtschaft`), sub-topics

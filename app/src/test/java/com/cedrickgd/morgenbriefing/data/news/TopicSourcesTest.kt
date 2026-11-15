@@ -80,16 +80,191 @@ class TopicSourcesTest {
     }
 
     @Test
-    fun `a place abroad reads the edition of its country`() {
+    fun `a place in a country Google News has in the news language reads its place page`() {
         val id = Topics.localId(dc)
-        val settings = germany.copy(localPlaces = listOf(dc), followed = listOf(id))
+        val settings = usa.copy(localPlaces = listOf(dc), followed = listOf(id))
         val source = TopicSources.resolve(id, settings).single()
         assertEquals(GoogleNews.geoUrl("Washington, District of Columbia", NewsEdition.USA), source.url)
         assertEquals("US:en", source.edition)
+        assertNull(source.fallback)
         assertEquals(NewsEdition.USA, TopicSources.editionFor(id, settings))
         // Older pages search the same place as page one, not every Washington.
         assertEquals(PagingQuery("\"Washington\" \"District of Columbia\"", NewsEdition.USA, "gn:$id@US:en"), TopicSources.pagingQuery(id, settings))
         assertTrue(TopicSources.resolve("local:gibts-nicht", settings).isEmpty())
+        // A country that speaks the news language abroad: its own edition (London for an American, Vienna for a German).
+        val london = Place("London", 51.51, -0.13, "England, Vereinigtes Königreich", "GB")
+        val british = TopicSources.resolve(Topics.localId(london), usa.copy(localPlaces = listOf(london))).single()
+        assertEquals(GoogleNews.geoUrl("London, England", NewsEdition("GB", "en")), british.url)
+        assertNull(british.fallback)
+        // Zurich for a reader of Swiss French stays French; too little in French adds the German page of Switzerland.
+        val zurich = Place("Zürich", 47.37, 8.54, "Zürich, Schweiz", "CH")
+        val swissFrench = AppSettings(edition = NewsEdition("CH", "fr"), localPlaces = listOf(zurich))
+        val french = TopicSources.resolve(Topics.localId(zurich), swissFrench).single()
+        assertEquals(GoogleNews.geoUrl("Zürich", NewsEdition("CH", "fr")), french.url)
+        assertEquals(GoogleNews.geoUrl("Zürich", NewsEdition("CH", "de")), french.fallback!!.url)
+        assertEquals("gn:${Topics.localId(zurich)}@CH:de", french.fallback!!.id)
+    }
+
+    @Test
+    fun `a place abroad is read in the news language - Washington in German`() {
+        val id = Topics.localId(dc)
+        val settings = germany.copy(localPlaces = listOf(dc), followed = listOf(id))
+        val source = TopicSources.resolve(id, settings).single()
+        // The USA in German: no edition of Google News, its place page would be empty – a German search for the name.
+        assertEquals(NewsEdition("US", "de"), TopicSources.editionFor(id, settings))
+        assertEquals("gn:$id@US:de", source.id)
+        assertEquals("US:de", source.edition)
+        val url = source.url.toHttpUrl()
+        assertEquals("/rss/search", url.encodedPath)
+        assertEquals("when:14d \"Washington\"", url.queryParameter("q"))
+        assertEquals(listOf("de", "DE", "DE:de"), listOf("hl", "gl", "ceid").map { url.queryParameter(it) })
+        // Too little in German: the place page in the place's own language is read as well.
+        val fallback = source.fallback!!
+        assertEquals(GoogleNews.geoUrl("Washington, District of Columbia", NewsEdition.USA), fallback.url)
+        assertEquals("gn:$id@US:en", fallback.id)
+        assertEquals("US:en", fallback.edition)
+        assertEquals(id, fallback.topicId)
+        assertNull(fallback.fallback)
+        // Older pages go on in German, by name (German news hardly ever name the state).
+        assertEquals(PagingQuery("\"Washington\"", NewsEdition("US", "de"), "gn:$id@US:de"), TopicSources.pagingQuery(id, settings))
+        // Switching the place's Google News source off switches both off.
+        assertTrue(TopicSources.resolve(id, settings.copy(disabledFeeds = setOf(source.id))).isEmpty())
+    }
+
+    @Test
+    fun `a place at home is read in the news language too - Leipzig in English`() {
+        val leipzig = Place.LEIPZIG
+        val id = Topics.localId(leipzig)
+        val settings = AppSettings(edition = NewsEdition("DE", "en"), localPlaces = listOf(leipzig), home = leipzig)
+        val source = TopicSources.resolve(id, settings).single()
+        val url = source.url.toHttpUrl()
+        assertEquals("when:14d \"Leipzig\"", url.queryParameter("q"))
+        assertEquals(listOf("en-US", "US", "US:en"), listOf("hl", "gl", "ceid").map { url.queryParameter(it) })
+        assertEquals("gn:$id@DE:en", source.id)
+        assertEquals(GoogleNews.geoUrl("Leipzig, Sachsen", NewsEdition.GERMANY), source.fallback!!.url)
+        // The "Region" topic reads the home place the same way – and no German broadcasters in an English feed.
+        val region = TopicSources.resolve(Topics.REGION_ID, settings.copy(region = "sachsen"))
+        assertEquals(listOf("gn:region@DE:en"), region.map { it.id })
+        assertEquals(source.url, region.single().url)
+        assertEquals("\"Leipzig\"", TopicSources.pagingQuery(Topics.REGION_ID, settings)?.query)
+    }
+
+    @Test
+    fun `a place in a country the app does not offer is searched in the main edition`() {
+        val oslo = Place("Oslo", 59.91, 10.75, "Oslo, Norwegen", "NO")
+        val id = Topics.localId(oslo)
+        val settings = germany.copy(localPlaces = listOf(oslo))
+        val source = TopicSources.resolve(id, settings).single()
+        assertEquals(NewsEdition.GERMANY, TopicSources.editionFor(id, settings))
+        assertEquals("when:14d \"Oslo\"", source.url.toHttpUrl().queryParameter("q"))
+        assertEquals("gn:$id@DE:de", source.id)
+        // No edition of its country to fall back to.
+        assertNull(source.fallback)
+    }
+
+    @Test
+    fun `the USA in German - home news are searched by the country's name, the rest reads German`() {
+        val settings = AppSettings(edition = NewsEdition("US", "de"))
+        // Top stories: German top stories are Germany's, so a search for the USA; no German newsroom's front page.
+        val top = TopicSources.resolve("top", settings).single()
+        assertEquals("gn:top@US:de", top.id)
+        assertEquals("US:de", top.edition)
+        val topUrl = top.url.toHttpUrl()
+        assertEquals("/rss/search", topUrl.encodedPath)
+        assertTrue(topUrl.queryParameter("q")!!, topUrl.queryParameter("q")!!.startsWith("when:7d USA OR \"Vereinigte Staaten\" -site:"))
+        assertEquals(listOf("de", "DE", "DE:de"), listOf("hl", "gl", "ceid").map { topUrl.queryParameter(it) })
+        assertNull(TopicSources.pagingQuery("top", settings))
+        // Politics and the economy: the country, then words every country has – not "Bundestag", no tagesschau.
+        val politics = TopicSources.resolve("politik", settings).single()
+        val politicsQuery = politics.url.toHttpUrl().queryParameter("q")!!
+        assertTrue(politicsQuery, politicsQuery.startsWith("USA OR \"Vereinigte Staaten\" Politik OR Regierung OR Parlament"))
+        assertFalse(politicsQuery, "Bundestag" in politicsQuery)
+        val economy = TopicSources.resolve("wirtschaft", settings).single()
+        assertTrue(economy.url.toHttpUrl().queryParameter("q")!!.startsWith("USA OR \"Vereinigte Staaten\" Wirtschaft OR Konjunktur"))
+        // The endless list pages with the same narrowed words.
+        assertEquals(
+            PagingQuery("USA OR \"Vereinigte Staaten\" Wirtschaft OR Konjunktur OR Unternehmen OR Börse OR Inflation OR Arbeitsmarkt", NewsEdition("US", "de"), "gn:wirtschaft@US:de"),
+            TopicSources.pagingQuery("wirtschaft", settings),
+        )
+        // The world, tech and the stock market read the same in German everywhere: section, searches, world desks.
+        val world = TopicSources.resolve("welt", settings)
+        assertEquals("https://news.google.com/rss/headlines/section/topic/WORLD?hl=de&gl=DE&ceid=DE:de", google(world).url)
+        assertTrue("tagesschau-ausland" in world.map { it.id })
+        val boerse = TopicSources.resolve("wirtschaft/boerse", settings)
+        assertEquals(listOf("tagesschau-finanzen", "ntv-boerse"), boerse.filterNot { it.isGoogleNews }.map { it.id })
+        assertTrue(google(boerse).url.toHttpUrl().queryParameter("q")!!.startsWith("DAX OR Börse OR Aktien"))
+        // Nothing bound to Germany, nothing in English.
+        val all = Taxonomy.ALL.flatMap { TopicSources.resolve(it.id, settings) }.filterNot { it.isGoogleNews }.map { it.id }.toSet()
+        assertTrue(all.none { it in setOf("tagesschau-top", "spiegel-top", "tagesschau-inland", "spiegel-politik", "dw", "tagesschau-wirtschaft", "npr-politics", "bbc-top") })
+    }
+
+    @Test
+    fun `Germany in English - English searches for Germany, no German newsroom`() {
+        val settings = AppSettings(edition = NewsEdition("DE", "en"), region = "sachsen")
+        val top = TopicSources.resolve("top", settings).single().url.toHttpUrl()
+        assertEquals("when:7d Germany", top.queryParameter("q")!!.substringBefore(" -site:"))
+        assertEquals(listOf("en-US", "US", "US:en"), listOf("hl", "gl", "ceid").map { top.queryParameter(it) })
+        val politics = TopicSources.resolve("politik/inland", settings).single().url.toHttpUrl().queryParameter("q")!!
+        assertTrue(politics, politics.startsWith("Germany politics OR government OR parliament"))
+        assertFalse(politics, "Congress" in politics)
+        val catalogue = FeedCatalog.entries.associateBy { it.source.id }
+        val feeds = (Taxonomy.ALL.map { it.id }).flatMap { TopicSources.resolve(it, settings, includeDisabled = true) }.filterNot { it.isGoogleNews }
+        assertTrue(feeds.isNotEmpty())
+        feeds.forEach { feed ->
+            val entry = catalogue.getValue(feed.id)
+            assertEquals(feed.id, "en", entry.language)
+            // Desks for American or British readers only stay with them.
+            assertTrue(feed.id, entry.countries.isEmpty())
+        }
+    }
+
+    @Test
+    fun `every region reads every language - in that language, from an edition Google News has, about that region`() {
+        val topics = listOf("top", "politik", "politik/inland", "politik/wahlen", "wirtschaft", "wirtschaft/boerse", "welt", "ki", "sport", "wissenschaft/raumfahrt")
+        val catalogue = FeedCatalog.entries.associateBy { it.source.id }
+        val place = Place("Springfield", 39.8, -89.64, "Illinois, Vereinigte Staaten", "US")
+        for (country in NewsEdition.COUNTRIES) {
+            for (language in NewsEdition.LANGUAGES) {
+                val edition = NewsEdition(country, language)
+                val settings = AppSettings(edition = edition, localPlaces = listOf(place))
+                for (topicId in topics) {
+                    val def = Taxonomy.byId(topicId)!!
+                    val label = "${edition.key} $topicId"
+                    val sources = TopicSources.resolve(topicId, settings)
+                    val gn = google(sources)
+                    assertEquals(label, "gn:$topicId@${edition.key}", gn.id)
+                    assertEquals(label, edition.key, gn.edition)
+                    val url = gn.url.toHttpUrl()
+                    // Google News is asked for an edition it has, in the chosen language.
+                    val asked = NewsEdition(url.queryParameter("gl")!!, url.queryParameter("ceid")!!.substringAfter(':'))
+                    assertTrue(label, asked.isNative)
+                    assertEquals(label, language, asked.language)
+                    assertEquals(label, edition.isNative, asked == edition)
+                    // Publisher feeds are in the chosen language and not bound to another country.
+                    sources.filterNot { it.isGoogleNews }.forEach { feed ->
+                        val entry = catalogue.getValue(feed.id)
+                        assertEquals("$label ${feed.id}", language, entry.language)
+                        assertTrue("$label ${feed.id}", entry.countries.isEmpty() || country in entry.countries)
+                    }
+                    if (!edition.isNative && def.domestic) {
+                        // Home news of a pair without an edition: a search that names the region, no publisher feeds.
+                        assertEquals(label, "/rss/search", url.encodedPath)
+                        assertTrue(label, CountryQuery.terms(country, language) in url.queryParameter("q")!!)
+                        assertEquals(label, 1, sources.size)
+                    }
+                }
+                // A place: the place's country in the chosen language.
+                val id = Topics.localId(place)
+                assertEquals(NewsEdition("US", language), TopicSources.editionFor(id, settings))
+                val local = TopicSources.resolve(id, settings).single()
+                assertEquals("gn:$id@US:$language", local.id)
+                // Its place page where Google News has the USA in that language, else a search for its name;
+                // behind anything but English, the English place page.
+                assertEquals(language in setOf("en", "es"), "/geo/" in local.url)
+                assertEquals(language == "en", local.fallback == null)
+                local.fallback?.let { assertEquals("gn:$id@US:en", it.id) }
+            }
+        }
     }
 
     @Test
@@ -100,6 +275,9 @@ class TopicSourcesTest {
         assertEquals("\"Mumbai\" \"Maharashtra\"", TopicSources.placeQuery(mumbai, NewsEdition("IN", "en")))
         val halle = Place("Halle (Saale)", 51.48, 11.97, "Sachsen-Anhalt, Deutschland", "DE")
         assertEquals("\"Halle (Saale)\" \"Sachsen-Anhalt\"", TopicSources.placeQuery(halle, NewsEdition.GERMANY))
+        // Read in a language Google News has no edition of the country in: the name alone (German news seldom name the state).
+        assertEquals("\"Los Angeles\"", TopicSources.placeQuery(la, NewsEdition("US", "de")))
+        assertEquals("\"Halle (Saale)\"", TopicSources.placeQuery(halle, NewsEdition("DE", "en")))
         // The region of a city state is the city; Britain's "England" and other languages' states narrow nothing.
         assertEquals("\"Wien\"", TopicSources.placeQuery(Place("Wien", 48.2, 16.37, "Wien, Österreich", "AT"), NewsEdition("AT", "de")))
         assertEquals("\"Manchester\"", TopicSources.placeQuery(Place("Manchester", 53.48, -2.24, "England, Vereinigtes Königreich", "GB"), NewsEdition("GB", "en")))

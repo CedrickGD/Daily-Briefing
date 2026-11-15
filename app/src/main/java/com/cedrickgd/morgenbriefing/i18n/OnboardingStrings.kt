@@ -3,7 +3,7 @@ package com.cedrickgd.morgenbriefing.i18n
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 
-/** The first-start sheet: language, news edition, notifications, place. */
+/** The first-start sheet: app language, news (region and language), notifications, place. */
 interface OnboardingStrings {
     val overline: String
     val title: String
@@ -55,7 +55,7 @@ interface OnboardingStrings {
         override val phoneLanguage = "Handy-Sprache"
 
         override val editionTitle = "Deine Nachrichten"
-        override val editionText = "Woher deine Schlagzeilen kommen. Orte überall auf der Welt kannst du später dazunehmen."
+        override val editionText = "Aus welchem Land und in welcher Sprache – beides wählst du getrennt. Orte überall auf der Welt kannst du später dazunehmen."
         override val change = "Ändern"
 
         override val notificationsTitle = "Benachrichtigungen erlauben"
@@ -85,7 +85,7 @@ interface OnboardingStrings {
         override val phoneLanguage = "Phone language"
 
         override val editionTitle = "Your news"
-        override val editionText = "Where your headlines come from. You can add places anywhere in the world later."
+        override val editionText = "Which country and which language – you choose each on its own. You can add places anywhere in the world later."
         override val change = "Change"
 
         override val notificationsTitle = "Allow notifications"
@@ -115,7 +115,7 @@ interface OnboardingStrings {
         override val phoneLanguage = "Langue du téléphone"
 
         override val editionTitle = "Tes actualités"
-        override val editionText = "D'où viennent tes titres. Tu pourras ajouter plus tard des lieux partout dans le monde."
+        override val editionText = "De quel pays et dans quelle langue – tu choisis l'un et l'autre séparément. Tu pourras ajouter plus tard des lieux partout dans le monde."
         override val change = "Changer"
 
         override val notificationsTitle = "Autoriser les notifications"
@@ -145,7 +145,7 @@ interface OnboardingStrings {
         override val phoneLanguage = "Idioma del móvil"
 
         override val editionTitle = "Tus noticias"
-        override val editionText = "De dónde vienen tus titulares. Más adelante puedes añadir lugares de todo el mundo."
+        override val editionText = "De qué país y en qué idioma – eliges cada cosa por separado. Más adelante puedes añadir lugares de todo el mundo."
         override val change = "Cambiar"
 
         override val notificationsTitle = "Permitir notificaciones"
@@ -175,7 +175,7 @@ interface OnboardingStrings {
         override val phoneLanguage = "Lingua del telefono"
 
         override val editionTitle = "Le tue notizie"
-        override val editionText = "Da dove arrivano i tuoi titoli. Più avanti puoi aggiungere luoghi in tutto il mondo."
+        override val editionText = "Da quale paese e in quale lingua – scegli l'uno e l'altra separatamente. Più avanti puoi aggiungere luoghi in tutto il mondo."
         override val change = "Cambia"
 
         override val notificationsTitle = "Consenti le notifiche"

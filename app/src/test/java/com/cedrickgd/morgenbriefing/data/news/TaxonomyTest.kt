@@ -97,6 +97,52 @@ class TaxonomyTest {
         assertEquals(krypto.queries["en"], krypto.queryFor(NewsEdition("NL", "nl")))
         assertFalse(krypto.speaks(NewsEdition("NL", "nl")))
         assertTrue(krypto.speaks(NewsEdition("FR", "fr")))
+        // The editions that joined the list read their own politics, not France's or Spain's.
+        assertTrue(inland.queryFor(NewsEdition("CA", "fr"))!!.contains("Ottawa"))
+        assertTrue(inland.queryFor(NewsEdition("US", "es"))!!.contains("Casa Blanca"))
+    }
+
+    @Test
+    fun `a region Google News has no edition of in the language narrows its home topics to the country`() {
+        val usaInGerman = NewsEdition("US", "de")
+        val germanyInEnglish = NewsEdition("DE", "en")
+        // Top stories have no query of their own: the country.
+        assertEquals("USA OR \"Vereinigte Staaten\"", Taxonomy.byId("top")!!.queryFor(usaInGerman))
+        assertEquals("Germany", Taxonomy.byId("top")!!.queryFor(germanyInEnglish))
+        assertNull(Taxonomy.byId("top")!!.queryFor(NewsEdition.GERMANY))
+        // Politics: words every country has, not the home institutions of the language.
+        val inland = Taxonomy.byId("politik/inland")!!
+        assertEquals("USA OR \"Vereinigte Staaten\" Politik OR Regierung OR Parlament OR Wahl OR Präsident OR Opposition", inland.queryFor(usaInGerman))
+        assertEquals(inland.queryFor(usaInGerman), Taxonomy.byId("politik")!!.queryFor(usaInGerman))
+        assertEquals("Germany politics OR government OR parliament OR election OR president OR \"prime minister\"", inland.queryFor(germanyInEnglish))
+        // The economy: the language's own words behind the country.
+        assertEquals(
+            "Germany economy OR business OR markets OR inflation OR earnings OR jobs",
+            Taxonomy.byId("wirtschaft")!!.queryFor(germanyInEnglish),
+        )
+        // Subjects that read the same everywhere keep the language's query.
+        for (id in listOf("wirtschaft/boerse", "ki", "wissenschaft/raumfahrt", "welt/asien", "sport/fussball", "politik/usa")) {
+            val def = Taxonomy.byId(id)!!
+            assertFalse(id, def.domestic)
+            assertEquals(id, def.queries.getValue("de"), def.queryFor(usaInGerman))
+        }
+        // A language without queries of its own: the country alone, never English words in a Turkish edition.
+        val germanyInTurkish = NewsEdition("DE", "tr")
+        assertEquals(CountryQuery.terms("DE", "tr"), inland.queryFor(germanyInTurkish))
+        assertEquals(CountryQuery.terms("DE", "tr"), Taxonomy.byId("wirtschaft")!!.queryFor(germanyInTurkish))
+        // Home topics exist, and each has the country in front for every pair without an edition.
+        assertTrue(Taxonomy.DOMESTIC.all { Taxonomy.isBuiltIn(it) })
+        for (country in NewsEdition.COUNTRIES) {
+            for (language in NewsEdition.LANGUAGES) {
+                val edition = NewsEdition(country, language)
+                if (edition.isNative) continue
+                Taxonomy.DOMESTIC.forEach { id ->
+                    assertTrue("${edition.key} $id", Taxonomy.byId(id)!!.queryFor(edition)!!.startsWith(CountryQuery.terms(country, language)))
+                }
+            }
+        }
+        // The "abroad" words are a variant, no language of their own.
+        assertTrue(Taxonomy.ALL.flatMap { it.queries.keys }.filter { it.endsWith("_${Taxonomy.ABROAD}") }.all { it.substringBefore('_') in listOf("de", "en", "fr", "es", "it") })
     }
 
     @Test

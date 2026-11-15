@@ -4,9 +4,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import java.util.Locale
 
 /**
- * The languages the app's own interface speaks. The language of the *news* is separate
- * ([com.cedrickgd.morgenbriefing.data.model.NewsEdition]): someone can read the app in German
- * and follow local news from Washington, D.C. in English.
+ * The languages the app's own interface speaks. The region and the language of the *news* are
+ * separate choices ([com.cedrickgd.morgenbriefing.data.model.NewsEdition]): someone can read
+ * the app in German, news about the USA in German and local news from Leipzig in English.
  *
  * Every user-visible text lives in a feature strings interface (`i18n/<Feature>Strings.kt`) with one
  * implementation per entry here, so the compiler refuses a language that misses a text.

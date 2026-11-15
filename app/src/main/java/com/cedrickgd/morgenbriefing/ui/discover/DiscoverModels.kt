@@ -85,7 +85,7 @@ data class CategoryDetailUi(
 data class PlaceUi(
     val topicId: String,
     val place: Place,
-    /** The place's news language and country in the interface language ("Englisch", "Vereinigte Staaten"). */
+    /** The news language the place is read in and its country, in the interface language ("Deutsch", "Vereinigte Staaten"). */
     val language: String,
     val country: String,
     val followed: Boolean,
@@ -106,6 +106,8 @@ data class DiscoverUiState(
     /** Own topics that follow a search ("Midterms"). */
     val searches: List<FollowableUi> = emptyList(),
     val showImages: Boolean = true,
+    /** The news language (ISO 639-1): a place that is added will be read in it. */
+    val newsLanguage: String = NewsEdition.GERMANY.language,
 )
 
 /** What the user picked on the screen; the rest of [DiscoverUiState] follows from the data. */
@@ -196,7 +198,7 @@ internal fun buildDiscoverState(
     val uiLocale = lang.locale
     val places = settings.localPlaces.map { place ->
         val id = Topics.localId(place)
-        // Exactly the edition the engine reads the place in (Zurich in a Swiss French edition: French).
+        // Exactly the edition the engine reads the place in: its country in the news language (Washington, D.C. in German).
         val edition = TopicSources.editionFor(id, settings)
         PlaceUi(
             topicId = id,
@@ -220,6 +222,7 @@ internal fun buildDiscoverState(
         places = places,
         searches = searches,
         showImages = settings.showImages,
+        newsLanguage = settings.edition.language,
     )
 }
 

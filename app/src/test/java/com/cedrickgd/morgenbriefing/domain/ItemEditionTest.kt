@@ -24,13 +24,30 @@ class ItemEditionTest {
     )
 
     @Test
-    fun `Washington local news are English while the main edition is German`() {
+    fun `Washington local news are German for a reader of German news, English for a reader of English ones`() {
         val source = TopicSources.resolve(washingtonId, german).single()
         val local = item(source.id, washingtonId)
-        assertEquals(NewsEdition.USA, ItemEdition.of(local, german))
-        assertEquals("en", ItemEdition.languageOf(local))
+        assertEquals(NewsEdition("US", "de"), ItemEdition.of(local, german))
+        assertEquals("de", ItemEdition.languageOf(local))
         // Paged older articles of the same search carry the paging suffix.
-        assertEquals(NewsEdition.USA, ItemEdition.of(item(source.id + NewsRepository.PAGE_SUFFIX, washingtonId), german))
+        assertEquals(NewsEdition("US", "de"), ItemEdition.of(item(source.id + NewsRepository.PAGE_SUFFIX, washingtonId), german))
+        // What the place page in the place's own language added (too little in German) is known to be English.
+        val added = item(source.fallback!!.id, washingtonId)
+        assertEquals(NewsEdition.USA, ItemEdition.of(added, german))
+        assertEquals("en", ItemEdition.languageOf(added))
+        val english = german.copy(edition = NewsEdition.USA)
+        assertEquals(NewsEdition.USA, ItemEdition.of(item(TopicSources.resolve(washingtonId, english).single().id, washingtonId), english))
+    }
+
+    @Test
+    fun `articles of a region read in another language are in that language`() {
+        val usaInGerman = german.copy(edition = NewsEdition("US", "de"))
+        val top = TopicSources.resolve("top", usaInGerman).single()
+        assertEquals(NewsEdition("US", "de"), ItemEdition.of(item(top.id, "top"), usaInGerman))
+        assertEquals("de", ItemEdition.languageOf(item(top.id, "top")))
+        // A German world desk under it stays German, in the reader's edition.
+        assertEquals(NewsEdition("US", "de"), ItemEdition.of(item("tagesschau-ausland", "welt"), usaInGerman))
+        assertEquals("en", ItemEdition.languageOf(item("gn:top@DE:en", "top")))
     }
 
     @Test
@@ -66,7 +83,7 @@ class ItemEditionTest {
         val custom = FeedSource("custom:abcd1234", "My blog", "https://blog.example/feed", washingtonId, builtIn = false)
         val settings = german.copy(customFeeds = listOf(custom))
         assertNull(ItemEdition.languageOf(item(custom.id, washingtonId)))
-        assertEquals(NewsEdition.USA, ItemEdition.of(item(custom.id, washingtonId), settings))
+        assertEquals(NewsEdition("US", "de"), ItemEdition.of(item(custom.id, washingtonId), settings))
         assertEquals(NewsEdition.GERMANY, ItemEdition.of(item(custom.id, "politik"), settings))
     }
 }
