@@ -150,10 +150,11 @@ class FeedHints(
     fun status(itemId: String): ArticleStatus = statuses.value[itemId] ?: ArticleStatus.UNKNOWN
 
     companion object {
+        // Declared before [None]: companion fields initialise in order, and None's default reads it.
+        private val NO_COVERS: State<Map<String, String>> = mutableStateOf(emptyMap())
+
         /** Nothing known (previews, screens without a prefetcher). */
         val None = FeedHints(mutableStateOf(emptyMap()), mutableStateOf(emptyMap()))
-
-        private val NO_COVERS: State<Map<String, String>> = mutableStateOf(emptyMap())
     }
 }
 
