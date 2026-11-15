@@ -96,6 +96,7 @@ import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.glass.glassContent
 import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import com.cedrickgd.morgenbriefing.ui.nav.DiscoverRoute
+import com.cedrickgd.morgenbriefing.ui.news.FeedGutter
 import com.cedrickgd.morgenbriefing.ui.news.TopicGlyph
 import com.cedrickgd.morgenbriefing.ui.news.iconVector
 import com.cedrickgd.morgenbriefing.ui.news.rememberTopicColors
@@ -216,7 +217,8 @@ fun DiscoverScreen(
     val homeList = rememberLazyListState()
     // Lives as long as the screen: the grid plays its entrance once, not after every category.
     val homeStagger = rememberStagger(enabled = !motionDisabled())
-    val side = 16.dp + pageSideInset()
+    // The app-wide screen-edge gutter (docs/DESIGN.md §5), like the feed.
+    val side = FeedGutter + pageSideInset()
 
     Box(modifier.fillMaxSize()) {
         if (state.loaded) {

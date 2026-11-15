@@ -111,24 +111,28 @@ internal fun listStoryStyle(index: Int, leadFirst: Boolean): StoryStyle =
 
 /** What fills a story's picture slot. */
 enum class StoryVisual {
-    /** The article's picture (its own, or the lead picture the prefetcher found). */
+    /**
+     * The article's picture (its own, or the one found for it) over its generated cover: the
+     * cover shows until the picture is there, and stays when there is none or it fails to load.
+     */
     PICTURE,
 
-    /** No (allowed) picture: a small tile in the topic's color with its icon – never a big cover. */
+    /** "Bilder anzeigen" is off: a small tile in the topic's color with its icon. */
     TOPIC_TILE,
 }
 
-/** The picture a story can show: its own, else the lead picture the prefetcher found ([hero]). */
+/** The picture a story can show: its own, else the one found for it ([hero]: the prefetcher's or the looked-up cover). */
 internal fun storyImageUrl(item: NewsItem, hero: String?): String? =
     item.image?.url?.takeIf { it.isNotBlank() } ?: hero?.takeIf { it.isNotBlank() }
 
 /**
- * Picture or topic tile: a picture only with "Bilder anzeigen" on and an address the app may
- * load ([safeImageUrl]). A lead story without one is laid out like a row (headline beside a
- * small tile), so an image-less story never gets a big generated cover.
+ * Picture slot or topic tile. With "Bilder anzeigen" on every story has its picture slot,
+ * whether or not a picture is known yet: the slot never changes size when the picture arrives,
+ * and a story without one shows its generated cover – never a bare tile beside pictures. With
+ * the setting off a story gets the small topic tile, and a lead story is laid out like a row.
  */
-internal fun storyVisual(showImages: Boolean, imageUrl: String?): StoryVisual =
-    if (showImages && safeImageUrl(imageUrl) != null) StoryVisual.PICTURE else StoryVisual.TOPIC_TILE
+internal fun storyVisual(showImages: Boolean): StoryVisual =
+    if (showImages) StoryVisual.PICTURE else StoryVisual.TOPIC_TILE
 
 /** An entry of a story's ⋮ menu (also opened by a long press). */
 enum class StoryAction {

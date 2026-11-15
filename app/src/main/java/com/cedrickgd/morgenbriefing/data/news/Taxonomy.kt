@@ -76,7 +76,19 @@ object Taxonomy {
 
     val ALL: List<TopicDef> = listOf(
         // Schlagzeilen
-        cat(TOP, TopicIcon.NEWSPAPER, 0xFFB23A48, "📰", topStories = true),
+        // The first page is the edition's top stories; the query only pages into the past (the
+        // endless list): the headline desks of a date window come closest to "top stories then"
+        // (tried in DE, US and FR, 15.11.2026: 100 results per three recent days).
+        cat(
+            TOP, TopicIcon.NEWSPAPER, 0xFFB23A48, "📰", topStories = true,
+            queries = q(
+                de = "Politik OR Wirtschaft OR Ausland OR Bundesregierung OR Bundestag",
+                en = "politics OR economy OR world OR government OR \"breaking news\"",
+                fr = "politique OR économie OR international OR gouvernement OR société",
+                es = "política OR economía OR internacional OR gobierno OR sociedad",
+                it = "politica OR economia OR esteri OR governo OR cronaca",
+            ),
+        ),
 
         // Politik
         cat(

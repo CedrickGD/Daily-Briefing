@@ -146,8 +146,8 @@ class FeedBuildTest {
     @Test
     fun `prefs know which followed topics can page and what to suggest`() {
         val prefs = FeedPrefs(settings(listOf("top", "wirtschaft/boerse", Topics.localId(washington), midterms.id)))
-        // Top stories cannot page; searches, sub-topics and places can.
-        assertFalse("top" in prefs.pageable)
+        // Top stories (with the headline desks' query), searches, sub-topics and places can all page.
+        assertTrue("top" in prefs.pageable)
         assertTrue("wirtschaft/boerse" in prefs.pageable)
         assertTrue(Topics.localId(washington) in prefs.pageable)
         assertTrue(midterms.id in prefs.pageable)

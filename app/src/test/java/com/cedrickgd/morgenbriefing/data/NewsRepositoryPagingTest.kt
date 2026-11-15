@@ -59,6 +59,10 @@ class NewsRepositoryPagingTest {
     @Volatile
     private var stray = false
 
+    /** Google News answers every request with an error status. */
+    @Volatile
+    private var failing = false
+
     /** Requests for which [holdIf] is true wait for [gate]; [held] counts them. */
     @Volatile
     private var holdIf: (String) -> Boolean = { false }
@@ -69,6 +73,7 @@ class NewsRepositoryPagingTest {
     private val dispatcher = object : Dispatcher() {
         override fun dispatch(request: RecordedRequest): MockResponse {
             val q = request.requestUrl!!.queryParameter("q").orEmpty()
+            if (failing) return MockResponse().setResponseCode(503)
             if (holdIf(q)) {
                 held.incrementAndGet()
                 gate.await(20, TimeUnit.SECONDS)
@@ -229,13 +234,72 @@ class NewsRepositoryPagingTest {
 
     @Test
     fun `topics without a search cannot page`() = runTest {
-        assertFalse(repository.canLoadMore(Topics.TOP_ID, settings))
-        assertFalse(repository.loadMore(Topics.TOP_ID, settings))
+        // The top stories of an edition whose language has no headline query.
+        val dutch = settings.copy(edition = NewsEdition("NL", "nl"), followed = listOf(Topics.TOP_ID))
+        assertFalse(repository.canLoadMore(Topics.TOP_ID, dutch))
+        assertEquals(MoreResult.END, repository.loadOlder(Topics.TOP_ID, dutch))
         assertEquals(0, server.requestCount)
         // Google News switched off: nothing to page with.
         val off = settings.copy(disabledFeeds = settings.disabledFeeds + "gn:$KRYPTO@US:en")
         assertFalse(repository.canLoadMore(KRYPTO, off))
         assertFalse(repository.loadMore(KRYPTO, off))
+        assertEquals(MoreResult.END, repository.loadOlder(KRYPTO, off))
+    }
+
+    @Test
+    fun `the top stories page into the past with the headline desks' query`() = runTest {
+        val top = AppSettings(edition = NewsEdition.USA, followed = listOf(Topics.TOP_ID), disabledFeeds = setOf("npr-news", "abc-top", "cbs-latest"))
+        repository.refresh(listOf(Topics.TOP_ID), top)
+        val first = repository.state.value.topics.getValue(Topics.TOP_ID).items
+        assertTrue(first.isNotEmpty())
+        assertTrue(repository.canLoadMore(Topics.TOP_ID, top))
+        assertEquals(MoreResult.GREW, repository.loadOlder(Topics.TOP_ID, top))
+        // The days before the first page's oldest story, asked of the search (the first page has no query).
+        assertTrue(lastQuery(), lastQuery().startsWith("after:2026-11-02 before:2026-11-05 politics OR economy OR world"))
+        val paged = repository.state.value.topics.getValue(Topics.TOP_ID).items
+        assertTrue(paged.size > first.size)
+        assertEquals("gn:top@US:en${NewsRepository.PAGE_SUFFIX}", paged.last().sourceId)
+        // Each story once, the first page untouched.
+        assertEquals(paged.size, paged.map { it.id }.toSet().size)
+        assertEquals(first, paged.take(first.size))
+    }
+
+    @Test
+    fun `quiet days are not a failure - the next call looks further back until the end`() = runTest {
+        repository.refresh(listOf(KRYPTO), settings)
+        var result = repository.loadOlder(KRYPTO, settings)
+        while (result == MoreResult.GREW) result = repository.loadOlder(KRYPTO, settings)
+        // Nothing before October 20th: the windows asked for were empty, the cursor moved on.
+        assertEquals(MoreResult.EMPTY, result)
+        assertTrue(repository.canLoadMore(KRYPTO, settings))
+        val asked = seen.size
+        var rounds = 0
+        while (result == MoreResult.EMPTY) {
+            result = repository.loadOlder(KRYPTO, settings)
+            rounds++
+        }
+        // A year back at the latest the list has its end – within a few calls, the windows widen.
+        assertEquals(MoreResult.END, result)
+        assertTrue("rounds: $rounds", rounds in 1..6)
+        assertTrue(seen.size > asked)
+        assertFalse(repository.canLoadMore(KRYPTO, settings))
+        assertTrue(KRYPTO in repository.state.value.endReached)
+        assertEquals(MoreResult.END, repository.loadOlder(KRYPTO, settings))
+    }
+
+    @Test
+    fun `Google News out of reach is a failure, and the list goes on where it was`() = runTest {
+        repository.refresh(listOf(KRYPTO), settings)
+        val before = items()
+        failing = true
+        assertEquals(MoreResult.FAILED, repository.loadOlder(KRYPTO, settings))
+        assertFalse(repository.loadMore(KRYPTO, settings))
+        assertEquals(before, items())
+        assertTrue(repository.canLoadMore(KRYPTO, settings))
+        assertTrue(repository.state.value.loadingMore.isEmpty())
+        failing = false
+        assertEquals(MoreResult.GREW, repository.loadOlder(KRYPTO, settings))
+        assertTrue(lastQuery(), lastQuery().startsWith("after:2026-11-02 before:2026-11-05 "))
     }
 
     @Test

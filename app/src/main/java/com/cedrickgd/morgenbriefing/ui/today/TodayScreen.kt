@@ -44,8 +44,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,8 +73,12 @@ import com.cedrickgd.morgenbriefing.ui.components.PageFooter
 import com.cedrickgd.morgenbriefing.ui.components.WarningBanner
 import com.cedrickgd.morgenbriefing.ui.components.WeatherCardSkeleton
 import com.cedrickgd.morgenbriefing.ui.components.headerOverlineColor
+import com.cedrickgd.morgenbriefing.perf.Effects
+import com.cedrickgd.morgenbriefing.ui.glass.LocalEffects
 import com.cedrickgd.morgenbriefing.ui.glass.TopGlassBar
 import com.cedrickgd.morgenbriefing.ui.glass.glassContent
+import com.cedrickgd.morgenbriefing.ui.news.CardInset
+import com.cedrickgd.morgenbriefing.ui.news.CoverPreloader
 import com.cedrickgd.morgenbriefing.ui.news.DiscoverInvite
 import com.cedrickgd.morgenbriefing.ui.news.EndAction
 import com.cedrickgd.morgenbriefing.ui.news.FeedActions
@@ -81,6 +87,7 @@ import com.cedrickgd.morgenbriefing.ui.news.FeedBar
 import com.cedrickgd.morgenbriefing.ui.news.FeedFilter
 import com.cedrickgd.morgenbriefing.ui.news.FeedGutter
 import com.cedrickgd.morgenbriefing.ui.news.FeedHints
+import com.cedrickgd.morgenbriefing.ui.news.LeadPictureHeight
 import com.cedrickgd.morgenbriefing.ui.news.ListEndNote
 import com.cedrickgd.morgenbriefing.ui.news.ListTail
 import com.cedrickgd.morgenbriefing.ui.news.LoadOlderRow
@@ -89,6 +96,7 @@ import com.cedrickgd.morgenbriefing.ui.news.NewsFeed
 import com.cedrickgd.morgenbriefing.ui.news.NowListening
 import com.cedrickgd.morgenbriefing.ui.news.SectionUi
 import com.cedrickgd.morgenbriefing.ui.news.TabSwitch
+import com.cedrickgd.morgenbriefing.ui.news.ThumbnailSize
 import com.cedrickgd.morgenbriefing.ui.news.VERIFY_LOW_WATER
 import com.cedrickgd.morgenbriefing.ui.news.YourTopicsSheet
 import com.cedrickgd.morgenbriefing.ui.news.barParked
@@ -109,6 +117,7 @@ import com.cedrickgd.morgenbriefing.ui.news.revealedCount
 import com.cedrickgd.morgenbriefing.ui.news.say
 import com.cedrickgd.morgenbriefing.ui.news.sectionFor
 import com.cedrickgd.morgenbriefing.ui.news.showAllSwitch
+import com.cedrickgd.morgenbriefing.ui.news.storyImageUrl
 import com.cedrickgd.morgenbriefing.ui.news.storyListItems
 import com.cedrickgd.morgenbriefing.ui.news.suggestionItems
 import com.cedrickgd.morgenbriefing.ui.news.tabSwitch
@@ -155,8 +164,15 @@ private const val PREFETCH_SETTLE_MS = 350L
  * the news as glass cards: "Für dich" one card per topic (the first story large, then compact
  * rows, "Alle →" opens the topic's tab), "Neueste" and every topic as one endless card.
  *
+ * Every view is endless: at its end the next stories are revealed, then older ones are loaded
+ * by themselves – a topic's older pages, and for "Neueste" and the list below the "Für dich"
+ * cards the older pages of every topic that can still page (the age setting bounds only the
+ * "Für dich" cards). A retry row shows only after a load that failed.
+ *
  * Articles open in the reader ([onOpenArticle]); the articles on screen are warmed ahead in the
  * reader's cache (as the prefetch setting allows) and the warming stops when the page is left.
+ * The covers of stories without a picture are looked up ahead of the list on any connection,
+ * and the pictures of the next screen are loaded ahead (not with "Bilder anzeigen" off).
  *
  * @param contentPadding top is 0 (the page handles the status bar); bottom leaves room for the
  *   floating chrome and the navigation bar.
@@ -181,7 +197,8 @@ fun TodayScreen(
     val onboarding by viewModel.onboarding.collectAsStateWithLifecycle()
     val images = viewModel.articleImages.collectAsStateWithLifecycle()
     val statuses = viewModel.articleStatus.collectAsStateWithLifecycle()
-    val hints = remember(images, statuses) { FeedHints(images, statuses) }
+    val covers = viewModel.articleCovers.collectAsStateWithLifecycle()
+    val hints = remember(images, statuses, covers) { FeedHints(images, statuses, covers) }
     val listState = rememberLazyListState()
     // After process death the saved position points into the feed; measuring the header and the
     // loading skeleton first would clamp it to their few items. Until weather and news are known
@@ -225,7 +242,9 @@ fun TodayScreen(
         onFollow = viewModel::follow,
         onUnfollow = viewModel::unfollow,
         onLoadMore = viewModel::loadMore,
+        onLoadOlder = viewModel::loadOlder,
         onPrefetch = viewModel::prefetch,
+        onCovers = viewModel::covers,
         onWeatherExpanded = viewModel::setWeatherExpanded,
     )
 
@@ -264,7 +283,9 @@ private class TodayCallbacks(
     val onFollow: (String, Int?) -> Unit,
     val onUnfollow: (String) -> Unit,
     val onLoadMore: (String) -> Unit,
+    val onLoadOlder: () -> Unit,
     val onPrefetch: (List<NewsItem>) -> Unit,
+    val onCovers: (List<NewsItem>) -> Unit,
     val onWeatherExpanded: (Boolean) -> Unit,
 )
 
@@ -376,29 +397,28 @@ private fun TodayContent(
         )
     }
 
-    // Endless lists ("Neueste", a topic): reveal more whenever the end comes into view; once a
-    // topic's loaded articles are all on screen, ask for older ones.
+    // Every view is endless: reveal more whenever the end comes into view; once everything
+    // loaded is on screen, ask for older articles – a topic's own, or (the timeline behind
+    // "Neueste" and below the "Für dich" cards) those of the topics that reach back least far.
     var pages by rememberSaveable(selectedKey) { mutableIntStateOf(1) }
     val topicId = (selected as? FeedFilter.OneTopic)?.topicId
     val total = when (selected) {
-        FeedFilter.Latest -> feed?.latest?.size ?: 0
+        FeedFilter.Latest -> feed?.timeline?.size ?: 0
         is FeedFilter.OneTopic -> feed?.sectionFor(selected.topicId)?.count ?: 0
-        FeedFilter.ForYou -> 0
+        FeedFilter.ForYou -> feed?.more?.size ?: 0
     }
     val revealed = revealedCount(pages, total)
-    val canLoadMore = topicId != null && state.canLoadMore(topicId)
-    val loadingMore = topicId != null && topicId in state.loadingMore
-    val stalled = topicId != null && topicId in state.stalled
+    val canLoadMore = if (topicId != null) state.canLoadMore(topicId) else feed?.olderNext?.isNotEmpty() == true
+    val loadingMore = if (topicId != null) topicId in state.loadingMore else state.loadingOlder
+    val stalled = if (topicId != null) topicId in state.stalled else state.olderStalled
     // "Nur vollständige Artikel": candidates still to check below, and all candidates of the list.
     val waiting = when (selected) {
-        FeedFilter.Latest -> feed?.latestWaiting?.size ?: 0
         is FeedFilter.OneTopic -> feed?.sectionFor(selected.topicId)?.waiting?.size ?: 0
-        FeedFilter.ForYou -> 0
+        FeedFilter.Latest, FeedFilter.ForYou -> feed?.timelineWaiting?.size ?: 0
     }
     val candidates = when (selected) {
-        FeedFilter.Latest -> feed?.latestCandidates ?: 0
         is FeedFilter.OneTopic -> feed?.sectionFor(selected.topicId)?.candidates ?: 0
-        FeedFilter.ForYou -> 0
+        FeedFilter.Latest, FeedFilter.ForYou -> feed?.timelineCandidates ?: 0
     }
     val lowOnCandidates = waiting < VERIFY_LOW_WATER
     val currentCallbacks by rememberUpdatedState(callbacks)
@@ -411,9 +431,40 @@ private fun TodayContent(
         }.filter { (last, count) -> count > 0 && last >= count - REVEAL_AHEAD }.first()
         when (action) {
             EndAction.REVEAL -> pages++
-            EndAction.LOAD_MORE -> topicId?.let(currentCallbacks.onLoadMore)
+            EndAction.LOAD_MORE -> if (topicId != null) currentCallbacks.onLoadMore(topicId) else currentCallbacks.onLoadOlder()
             EndAction.NONE -> Unit
         }
+    }
+
+    // Covers ahead of the list, on any connection: the stories on screen and the next page get
+    // theirs looked up (the ones whose feed carried no picture), and the pictures of the next
+    // screen are loaded in the size their cards will ask for – as soon as an address is known.
+    val context = LocalContext.current
+    val preloader = remember(context) { CoverPreloader(context) }
+    val preloadAhead = if (LocalEffects.current == Effects.FULL) COVER_PRELOAD_AHEAD else COVER_PRELOAD_AHEAD_LIGHT
+    val thumbnailPx = with(density) { ThumbnailSize.roundToPx() }
+    val leadHeightPx = with(density) { LeadPictureHeight.roundToPx() }
+    val leadInsetPx = with(density) { 2 * (pageSide.roundToPx() + FeedGutter.roundToPx() + CardInset.roundToPx()) }
+    LaunchedEffect(listState, feed, selected, revealed, showImages, preloadAhead, leadInsetPx) {
+        val current = feed ?: return@LaunchedEffect
+        if (!showImages) return@LaunchedEffect
+        val stories = viewStories(selected, current, revealed)
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key } }
+            .distinctUntilChanged()
+            .collectLatest { keys ->
+                delay(COVER_SETTLE_MS)
+                val window = coverWindow(stories, keys, COVER_LOOKUP_AHEAD)
+                if (window.isEmpty()) return@collectLatest
+                currentCallbacks.onCovers(window.map { it.item })
+                val leadWidthPx = listState.layoutInfo.viewportSize.width - leadInsetPx
+                val near = coverWindow(stories, keys, preloadAhead)
+                snapshotFlow { near.mapNotNull { story -> storyImageUrl(story.item, hints.heroImage(story.item.id))?.let { it to story.lead } } }
+                    .collect { pictures ->
+                        for ((url, lead) in pictures) {
+                            if (lead) preloader.preload(url, leadWidthPx, leadHeightPx) else preloader.preload(url, thumbnailPx, thumbnailPx)
+                        }
+                    }
+            }
     }
 
     // Once the list rests for a moment: verify the candidates ahead ("nur vollständige Artikel"),
@@ -471,8 +522,9 @@ private fun TodayContent(
                     TodayTop(
                         date = state.today,
                         greeting = greeting,
+                        // The greeting lines up with the text inside the cards below it.
                         modifier = Modifier
-                            .padding(start = 20.dp, end = FeedGutter)
+                            .padding(start = FeedGutter + CardInset, end = FeedGutter)
                             .padding(top = statusTop + 12.dp, bottom = 14.dp),
                     )
                 }
@@ -586,7 +638,7 @@ private fun TodayContent(
                             strings = strings,
                             onShowAll = { section -> switchTo(showAllSwitch(section)) },
                             onOpenDiscover = callbacks.onOpenDiscover,
-                            onLoadOlder = { topicId?.let(callbacks.onLoadMore) },
+                            onLoadOlder = { if (topicId != null) callbacks.onLoadMore(topicId) else callbacks.onLoadOlder() },
                             onBackToTop = { scrollToBar(true) },
                             suggestions = { suggestionItems(prefs.suggestions, prefs.subtitles, callbacks.onOpenDiscover) },
                         )
@@ -653,6 +705,12 @@ private fun TodayContent(
 /** How close to the end (in items) the next page of an endless list is revealed. */
 private const val REVEAL_AHEAD = 4
 
+/** The list must rest this long before covers are looked up (a fling passes many stories). */
+private const val COVER_SETTLE_MS = 150L
+
+/** Key prefix of the endless list below the "Für dich" cards. */
+private const val MORE_KEY = "foryou-more"
+
 /**
  * List index of the feed bar: the header, the one weather item (card, skeleton or error) and the
  * warnings, when they show, come before it. Must mirror the item order of [TodayContent].
@@ -661,8 +719,8 @@ internal fun feedBarIndex(warningsShown: Boolean): Int = 2 + if (warningsShown) 
 
 /** The articles of the current view, top to bottom, as far as they are revealed (for prefetching). */
 internal fun viewItems(selected: FeedFilter, feed: NewsFeed, revealed: Int): List<NewsItem> = when (selected) {
-    FeedFilter.ForYou -> feed.sections.flatMap { it.top }
-    FeedFilter.Latest -> feed.latest.take(revealed).map { it.item }
+    FeedFilter.ForYou -> feed.sections.flatMap { it.top } + feed.more.take(revealed).map { it.item }
+    FeedFilter.Latest -> feed.timeline.take(revealed).map { it.item }
     is FeedFilter.OneTopic -> feed.sectionFor(selected.topicId)?.all?.take(revealed).orEmpty()
 }
 
@@ -718,26 +776,44 @@ private fun LazyListScope.feedItems(
                 verifyOffline = view.verifyOffline,
             )
             suggestions()
+            // Below the cards the feed goes on: everything else, newest first, endless.
+            if (feed.more.isNotEmpty() || view.tail != ListTail.END) {
+                item(key = "$MORE_KEY-intro", contentType = "feed-intro") {
+                    MoreIntro(strings.latest, Modifier.animateItem().padding(horizontal = FeedGutter))
+                }
+                storyListItems(
+                    articles = feed.more.take(view.revealed),
+                    now = view.now,
+                    listening = view.listening,
+                    actions = actions,
+                    hints = hints,
+                    showImages = view.showImages,
+                    keyPrefix = MORE_KEY,
+                    showTopic = true,
+                    leadFirst = false,
+                )
+                tailItems(view.tail, feed.timeline.size, MORE_KEY, strings, onLoadOlder, onBackToTop)
+            }
         }
 
         FeedFilter.Latest -> {
-            if (feed.latest.isEmpty()) {
+            if (feed.timeline.isEmpty()) {
                 val loading = view.loadingTopics.isNotEmpty()
-                val checking = feed.latestWaiting.isNotEmpty()
+                val checking = feed.timelineWaiting.isNotEmpty()
                 noteCardItem(
                     key = "latest-empty",
                     text = when {
                         loading -> strings.loadingArticles
                         checking && view.verifyOffline -> strings.verifyOffline
                         checking -> strings.verifying
-                        feed.verifying && feed.latestCandidates > 0 -> strings.noneComplete
+                        feed.verifying && feed.timelineCandidates > 0 -> strings.noneComplete
                         else -> strings.noArticlesYet
                     },
                     loading = loading || (checking && !view.verifyOffline),
                 )
             } else {
                 storyListItems(
-                    articles = feed.latest.take(view.revealed),
+                    articles = feed.timeline.take(view.revealed),
                     now = view.now,
                     listening = view.listening,
                     actions = actions,
@@ -747,7 +823,7 @@ private fun LazyListScope.feedItems(
                     showTopic = true,
                     leadFirst = false,
                 )
-                tailItems(view.tail, feed.latest.size, "latest", strings, onLoadOlder, onBackToTop)
+                tailItems(view.tail, feed.timeline.size, "latest", strings, onLoadOlder, onBackToTop)
             }
         }
 
@@ -813,7 +889,7 @@ private fun TopicListIntro(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .padding(start = 4.dp),
+            .padding(start = CardInset),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -835,6 +911,28 @@ private fun TopicListIntro(
                 modifier = Modifier.semantics { contentDescription = fullLabel },
             )
         }
+    }
+}
+
+/** On the sky above the endless list that follows the "Für dich" cards: its name as an overline, on the cards' text line. */
+@Composable
+private fun MoreIntro(title: String, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .padding(start = CardInset, top = 12.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = title.uppercase(LocalAppLanguage.current.locale),
+            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = OverlineLetterSpacing),
+            color = headerOverlineColor(colors.onSurfaceVariant, colors.onSurface),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.semantics { heading() },
+        )
     }
 }
 

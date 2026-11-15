@@ -197,7 +197,12 @@ class SearchViewModel(
     val state: StateFlow<SearchUiState> = combine(
         settingsFlow.filterNotNull(),
         results,
-        combine(container.prefetcher.images, container.prefetcher.status, ::Pair),
+        // A result's picture: the lead picture the prefetcher read, else the cover looked up for it.
+        combine(
+            combine(container.prefetcher.images, container.covers.covers) { images, covers -> if (covers.isEmpty()) images else covers + images },
+            container.prefetcher.status,
+            ::Pair,
+        ),
         container.news.state,
         options,
     ) { settings, current, (images, statuses), news, chosen ->
@@ -287,12 +292,16 @@ class SearchViewModel(
     /**
      * Warms the reader for [items]: those on screen and, with "only readable articles", the
      * next results to verify ([SearchUiState.candidates], in list order) – only verified ones show.
+     * Their covers are looked up as well (Google News results carry no picture) – on any
+     * connection, and also for the results just below the screen ([upcoming]); not with
+     * "Bilder anzeigen" off.
      */
-    fun prefetch(items: List<NewsItem>) {
+    fun prefetch(items: List<NewsItem>, upcoming: List<NewsItem> = emptyList()) {
         val settings = settingsFlow.value ?: return
         if (items.isEmpty()) return
         items.forEach { prefetched += it.id }
         container.prefetcher.prefetch(items, settings)
+        if (settings.showImages) container.covers.request(items + upcoming, settings.edition.language)
     }
 
     /** Orders the results as ranked or newest first (no new search). */
@@ -384,6 +393,7 @@ class SearchViewModel(
 
     override fun onCleared() {
         container.prefetcher.cancel(prefetched)
+        container.covers.stop()
         super.onCleared()
     }
 

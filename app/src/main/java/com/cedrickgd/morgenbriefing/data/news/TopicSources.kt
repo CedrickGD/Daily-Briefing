@@ -63,12 +63,14 @@ object TopicSources {
     /**
      * The search behind [topicId]'s endless list: the topic's query in its edition (places:
      * [placeQuery] – the place's name in the edition's language, "Milano" not "Mailand"), or null
-     * when the topic cannot page (top stories, own feeds only, or its Google News source is
-     * switched off – the older pages would be Google News articles).
+     * when the topic cannot page (own feeds only, or its Google News source is switched off – the
+     * older pages would be Google News articles). The top stories page with the headline desks'
+     * query of the edition's language ([Taxonomy]); editions in other languages cannot (the
+     * English fallback finds sports results there, checked 15.11.2026).
      */
     fun pagingQuery(topicId: String, settings: AppSettings): PagingQuery? {
-        if (topicId == Topics.TOP_ID) return null
         val edition = editionFor(topicId, settings)
+        if (topicId == Topics.TOP_ID && Taxonomy.byId(topicId)?.speaks(edition) != true) return null
         val sourceId = googleNewsId(topicId, edition)
         if (sourceId in settings.disabledFeeds) return null
         val query = when {

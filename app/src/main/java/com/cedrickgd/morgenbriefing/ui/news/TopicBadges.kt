@@ -108,8 +108,8 @@ internal fun TopicBadge(
 }
 
 /**
- * The picture slot of a story without a picture: a small tile in the topic's own gradient with
- * its icon in white – color in the list, never a big generated cover. Decorative.
+ * The picture slot of a story while "Bilder anzeigen" is off: a small tile in the topic's own
+ * gradient with its icon in white – color in the list without a download. Decorative.
  */
 @Composable
 internal fun TopicThumbnail(topic: Topic, modifier: Modifier = Modifier, size: Dp = 80.dp, corner: Dp = 14.dp) {
