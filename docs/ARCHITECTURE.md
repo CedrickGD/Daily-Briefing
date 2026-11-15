@@ -122,6 +122,15 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
   Repo-Name leitet weiter), lädt die APK, prüft die Signatur und übergibt sie dem Installer.
 * **Standort**: `LocationFinder` holt einen groben Fix über `LocationManager` (ohne Play
   Services) und den Ortsnamen über Androids `Geocoder`.
+* **Lesemodus – nichts doppelt**: `ArticleCleaner.clean` räumt auf, was die Seite selbst doppelt
+  sagt (im Cache, `ArticleContent.FORMAT` = 5), `ArticleCleaner.arrange` passt den Text unter den
+  Kopf des Lesers: Dort wird **einmal** entschieden, welches Bild oben steht (Feed-Bild, sonst
+  `og:image`, sonst ein Bild der ersten drei Blöcke → `ArticleUiState.hero`), und jede Kopie davon
+  fliegt aus dem Text (`ImageMatch`: gleiche Datei ohne Größenangaben, gleiche Id, ARD/ZDF-Varianten
+  nach der Tilde). `showsAlt` (ui/article) druckt den Alt-Text nur ohne echte Bildunterschrift.
+  Gemessen wird mit `ArticleDuplicateSurvey` (`MB_SURVEY_DIR`, aus dem normalen Testlauf heraus):
+  echte Seiten speichern, offline durch die Pipeline schicken, alles Gezeigte auf Wiederholungen
+  prüfen (Bilder auch per Pixel-Hash) und zwei Stände vergleichen (was fiel weg, steht es noch da?).
 
 ## Module (`app/src/main/java/com/cedrickgd/morgenbriefing`)
 

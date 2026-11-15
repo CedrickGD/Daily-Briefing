@@ -176,11 +176,12 @@ object ArticleExtractor {
     /** Short lines newsrooms sprinkle between paragraphs: teasers, share bars, notices. */
     private val JUNK = Regex(
         "(?i)^(anzeige|werbung|advertisement|lesen sie auch|lese-tipp|lesetipp|mehr zum thema|auch interessant|" +
-            "zur startseite|artikel teilen|teilen|drucken|jetzt abonnieren|newsletter|alle rechte vorbehalten|" +
+            "zur startseite|artikel teilen|teilen|drucken|jetzt abonnieren|newsletter|alle rechte vorbehalten|weiterlesen nach der anzeige|" +
             "folgen sie uns|zum thema|weitere artikel|mehr dazu|das könnte sie auch interessieren|" +
             "empfehlungen|bildergalerie|video|quelle|read more|related|recommended|advertisement - scroll to continue)[:\\s.…!-]*$",
     )
 
+    private val CAPTION_LABEL = Regex("(?i)^image (caption|source)\\s*,\\s*")
     private val HEADINGS = setOf("h1", "h2", "h3", "h4", "h5", "h6")
     private val SKIPPED = setOf("script", "style", "iframe", "form", "nav", "aside", "footer", "header", "button", "svg", "noscript", "template", "video", "audio")
     private val BLOCKS = setOf("p", "div", "section", "article", "main", "ul", "ol", "blockquote", "figure", "table", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "picture", "img", "hr", "br", "li", "dl")
@@ -401,7 +402,8 @@ object ArticleExtractor {
         private fun add(url: String, alt: String, caption: String?) {
             if (!seenImages.add(url)) return
             out += ArticleBlock.image(url, alt)
-            val text = clean(caption.orEmpty())
+            // The BBC labels its captions for screen readers: "Image caption, Officers are appealing …".
+            val text = CAPTION_LABEL.replace(clean(caption.orEmpty()), "")
             if (text.isNotEmpty() && text != alt) out += ArticleBlock.caption(text)
         }
 

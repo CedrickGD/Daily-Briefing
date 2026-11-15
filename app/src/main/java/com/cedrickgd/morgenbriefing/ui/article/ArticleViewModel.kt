@@ -73,6 +73,11 @@ data class ArticleUiState(
      * replaced so it never repeats the text below.
      */
     val teaser: String = item.summary,
+    /**
+     * The picture under the status bar (null = the topic's cover): the feed's until the article
+     * is here, then the one the text was arranged around – no block of [content] shows it again.
+     */
+    val hero: String? = item.image?.url,
     val loading: Boolean = true,
     /** Why the article could not be loaded; null while loading or on success. */
     val failure: ArticleFailure? = null,
@@ -148,7 +153,10 @@ class ArticleViewModel(
                     }
                     ensureActive()
                     _state.update { s ->
-                        s.copy(item = shown, content = arranged.content, teaser = arranged.teaser, loading = false, failure = null, now = clock(), partial = partial)
+                        s.copy(
+                            item = shown, content = arranged.content, teaser = arranged.teaser, hero = arranged.hero,
+                            loading = false, failure = null, now = clock(), partial = partial,
+                        )
                     }
                 },
                 onFailure = { e ->
@@ -168,14 +176,16 @@ class ArticleViewModel(
 
         /**
          * [content] arranged under the reader's head for [item]: the teaser is the feed's (else
-         * the page's `og:description`), the hero the feed's picture (else the page's lead picture).
+         * the page's `og:description`), the hero the feed's picture, else the page's lead picture,
+         * else a picture that opens the text – taken out of the text wherever it stands.
          */
         internal fun arrange(content: ArticleContent, item: NewsItem): ArticleCleaner.Arranged =
             ArticleCleaner.arrange(
                 content = content,
                 teaser = item.summary.ifBlank { content.description },
                 headline = item.headline,
-                hero = item.image?.url ?: content.image,
+                hero = item.image?.url?.takeIf { it.isNotBlank() } ?: content.image,
+                heroFromBlocks = HERO_FROM_BLOCKS,
             )
 
         /**

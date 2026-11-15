@@ -23,7 +23,7 @@ internal object ImageMatch {
         "^(\\d+x\\d+|\\d+to\\d+|[whqc]\\d+|\\d+[wh]|fp[xy]\\d+|r\\d+|ci\\d+x\\d+|" +
             "jpe?g|png|webp|avif|gif|heic|auto|crop|cropped|resize|resized|scale|scaled|thumb|thumbnail|" +
             "original|large|medium|small|big|xl|xxl|lg|md|sm|retina|hd|hq|lq|full|wide|square|portrait|landscape|" +
-            "hero|teaser|standard|default|download|image|img|bild|foto|photo|v|t)$",
+            "hero|teaser|standard|default|maxresdefault|hqdefault|mqdefault|sddefault|download|image|img|bild|foto|photo|v|t)$",
     )
     private val SIZE_QUERY = setOf(
         "w", "h", "width", "height", "q", "quality", "fit", "crop", "auto", "format", "fm", "dpr", "resize", "size",
@@ -38,7 +38,7 @@ internal object ImageMatch {
         val ub = unwrap(b) ?: return false
         if (base(ua) == base(ub)) return true
         val sa = stem(ua)
-        if (sa.length >= 4 && sa == stem(ub)) return true
+        if (sa.length >= MIN_STEM && sa == stem(ub)) return true
         val ia = ids(ua)
         return ia.isNotEmpty() && ids(ub).any { it in ia }
     }
@@ -64,11 +64,18 @@ internal object ImageMatch {
         return url.host.removePrefix("www.") + url.encodedPath.lowercase(Locale.ROOT) + if (kept.isEmpty()) "" else "?$kept"
     }
 
-    /** The file name without extension and rendition words: `tastatur-laptop-100`. */
+    /**
+     * The file name without extension and rendition words: `tastatur-laptop-100`. The ARD and ZDF
+     * newsrooms name the rendition after a tilde (`moritz-mueller-148~_v-gseagaleriexl.jpg` in the
+     * feed, `moritz-mueller-148~_v-fullhd.jpg` on the page, `keyvisual-100~384x216`): it goes.
+     */
     private fun stem(url: HttpUrl): String {
-        val file = url.pathSegments.lastOrNull { it.isNotBlank() }?.lowercase(Locale.ROOT) ?: return ""
+        val name = url.pathSegments.lastOrNull { it.isNotBlank() }?.lowercase(Locale.ROOT) ?: return ""
+        val file = name.substringBefore('~').takeIf { it.length >= MIN_STEM } ?: name
         return SPLIT.split(file).filter { it.isNotEmpty() && !RENDITION.matches(it) }.joinToString(" ")
     }
+
+    private const val MIN_STEM = 4
 
     /** Ids in the path: UUIDs and long hex hashes (one per picture, unlike account or shoot numbers). */
     private fun ids(url: HttpUrl): Set<String> {
