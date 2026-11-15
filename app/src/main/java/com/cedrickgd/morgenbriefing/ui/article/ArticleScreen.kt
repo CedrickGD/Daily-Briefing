@@ -88,6 +88,15 @@ import com.cedrickgd.morgenbriefing.ui.news.rememberTopicColors
 import com.cedrickgd.morgenbriefing.util.rememberLinkActions
 import com.cedrickgd.morgenbriefing.util.statusBarTop
 
+/** Distance of the reader's text (head, paragraphs, captions, end note) from the screen's edge. */
+private val TextGutter = 16.dp
+
+/** Pictures in the text and the failure panel reach closer to the edge than the text; the hero is edge to edge. */
+private val ImageGutter = 10.dp
+
+/** The floating controls (back, listen, share, browser) sit this far from the edge. */
+private val ControlsGutter = 10.dp
+
 /**
  * The article reader (docs/DESIGN.md §7): the article's own text and pictures on a calm, opaque
  * surface — no ads, no cookie banners, no navigation. The feed's picture (or the page's lead
@@ -125,7 +134,6 @@ fun ArticleScreen(
         val heroHeight = minOf(statusTop + maxWidth * 0.72f, maxHeight * 0.5f)
         val listState = rememberLazyListState()
         val content = state.content
-        val hero = remember(state.item.image, content) { pickHero(state.item.image?.url, content) }
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -134,13 +142,13 @@ fun ArticleScreen(
                 .glassContent(),
             contentPadding = PaddingValues(bottom = navBottom + 32.dp + playerLift),
         ) {
-            item(key = "hero") { Hero(state, hero, heroHeight) }
+            item(key = "hero") { Hero(state, heroHeight) }
             item(key = "head") { Head(state) }
             when {
                 content != null -> {
                     itemsIndexed(content.blocks, key = { index, _ -> "block$index" }, contentType = { _, block -> block.type }) { index, block ->
-                        // A picture that became the hero does not show a second time.
-                        if (index != hero.skipBlock) BlockView(block, showImages = state.showImages)
+                        // The picture on top is not among the blocks (ArticleCleaner.arrange took it out).
+                        BlockView(block, showImages = state.showImages, showAlt = showsAlt(content.blocks, index))
                     }
                     item(key = "end") { EndNote(state, content, onOpenExternal = openExternal) }
                 }
@@ -162,7 +170,7 @@ fun ArticleScreen(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .padding(top = statusTop + 8.dp, start = 12.dp, end = 12.dp),
+                .padding(top = statusTop + 8.dp, start = ControlsGutter, end = ControlsGutter),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -183,11 +191,11 @@ fun ArticleScreen(
 }
 
 @Composable
-private fun Hero(state: ArticleUiState, hero: HeroPick, height: Dp) {
+private fun Hero(state: ArticleUiState, height: Dp) {
     val item = state.item
-    // The feed's picture, else the page's lead picture (see pickHero) — through the same loader and cover.
-    val visualItem = remember(item, hero.url) {
-        val url = hero.url
+    // The feed's picture, else the page's lead picture (ArticleUiState.hero) — through the same loader and cover.
+    val visualItem = remember(item, state.hero) {
+        val url = state.hero
         if (item.image == null && url != null) item.copy(image = ArticleImage(url)) else item
     }
     val background = MaterialTheme.colorScheme.background
@@ -232,7 +240,7 @@ private fun Head(state: ArticleUiState) {
         val source = item.source.trim().ifEmpty { item.publisherDomain.ifBlank { hostOf(item.url) } }
         listOfNotNull(Fmt.relative(item.publishedAt, state.now, lang), source.ifBlank { null }).joinToString(" · ")
     }
-    Column(Modifier.padding(horizontal = 20.dp)) {
+    Column(Modifier.padding(horizontal = TextGutter)) {
         Text(
             text = meta.uppercase(lang.locale),
             style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp),
@@ -260,7 +268,7 @@ private fun Head(state: ArticleUiState) {
 }
 
 @Composable
-private fun BlockView(block: ArticleBlock, showImages: Boolean) {
+private fun BlockView(block: ArticleBlock, showImages: Boolean, showAlt: Boolean) {
     val colors = MaterialTheme.colorScheme
     val body = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif, fontSize = 18.sp, lineHeight = 29.sp)
     when (block.type) {
@@ -268,19 +276,19 @@ private fun BlockView(block: ArticleBlock, showImages: Boolean) {
             text = block.text,
             style = body,
             color = colors.onSurface,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = TextGutter, vertical = 8.dp),
         )
 
         ArticleBlock.HEADING -> Text(
             text = block.text,
             style = MaterialTheme.typography.headlineSmall,
             color = colors.onSurface,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 4.dp),
+            modifier = Modifier.padding(start = TextGutter, end = TextGutter, top = 20.dp, bottom = 4.dp),
         )
 
         ArticleBlock.QUOTE -> Row(
             Modifier
-                .padding(horizontal = 20.dp, vertical = 10.dp)
+                .padding(horizontal = TextGutter, vertical = 10.dp)
                 .height(IntrinsicSize.Min),
         ) {
             Box(
@@ -297,7 +305,7 @@ private fun BlockView(block: ArticleBlock, showImages: Boolean) {
             )
         }
 
-        ArticleBlock.LIST -> Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ArticleBlock.LIST -> Column(Modifier.padding(horizontal = TextGutter, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             block.items.forEach { entry ->
                 Row {
                     Text("•", style = body, color = colors.primary, modifier = Modifier.width(22.dp))
@@ -307,7 +315,7 @@ private fun BlockView(block: ArticleBlock, showImages: Boolean) {
         }
 
         ArticleBlock.IMAGE -> if (showImages) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Column(Modifier.padding(horizontal = ImageGutter, vertical = 12.dp)) {
                 AsyncImage(
                     model = block.url,
                     contentDescription = block.alt.ifBlank { null },
@@ -317,12 +325,13 @@ private fun BlockView(block: ArticleBlock, showImages: Boolean) {
                         .heightIn(min = 120.dp)
                         .clip(GlassShapes.tile),
                 )
-                if (block.alt.isNotBlank()) {
+                // Only without a caption below (showsAlt): the alt text often is the caption in other words.
+                if (showAlt) {
                     Text(
                         text = block.alt,
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 6.dp),
+                        modifier = Modifier.padding(start = TextGutter - ImageGutter, end = TextGutter - ImageGutter, top = 6.dp),
                     )
                 }
             }
@@ -332,7 +341,7 @@ private fun BlockView(block: ArticleBlock, showImages: Boolean) {
             text = block.text,
             style = MaterialTheme.typography.bodySmall,
             color = colors.onSurfaceVariant,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = TextGutter, end = TextGutter, bottom = 8.dp),
         )
     }
 }
@@ -341,7 +350,7 @@ private fun BlockView(block: ArticleBlock, showImages: Boolean) {
 private fun EndNote(state: ArticleUiState, content: ArticleContent, onOpenExternal: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val reader = readerStrings()
-    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp)) {
+    Column(Modifier.padding(start = TextGutter, end = TextGutter, top = 24.dp)) {
         if (state.partial) {
             Text(
                 text = reader.truncatedNote,
@@ -366,7 +375,7 @@ private fun EndNote(state: ArticleUiState, content: ArticleContent, onOpenExtern
 @Composable
 private fun BodySkeleton() {
     Column(
-        Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+        Modifier.padding(horizontal = TextGutter, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         listOf(1f, 0.94f, 0.98f, 0.62f, 1f, 0.9f, 0.97f, 0.48f).forEach { width ->
@@ -395,7 +404,7 @@ private fun LoadFailed(failure: ArticleFailure?, accent: TopicColors, onRetry: (
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 20.dp)
+            .padding(horizontal = ImageGutter, vertical = 20.dp)
             .clip(GlassShapes.card)
             .background(accent.container.copy(alpha = if (dark) 0.55f else 0.7f))
             .padding(horizontal = 24.dp, vertical = 28.dp),

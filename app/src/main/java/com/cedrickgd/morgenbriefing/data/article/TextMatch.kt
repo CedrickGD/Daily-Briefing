@@ -108,6 +108,42 @@ internal object TextMatch {
         return wt.size > full.size && wt[full.size].startsWith(cut)
     }
 
+    /**
+     * The longest run of words [a] and [b] have in common, in words: two versions of one headline
+     * ("JP Kraemer spricht nach 11 Wochen: 231 Mal „Ich“, aber kein Wort über sein Opfer" and
+     * "Ehefrau misshandelt: JP Kraemer sagt 231 Mal „Ich“, aber kein Wort über sein Opfer") share
+     * a long one, two different sentences hardly more than a name.
+     */
+    fun sharedRun(a: String, b: String): Int {
+        val wa = words(a)
+        val wb = words(b)
+        if (wa.isEmpty() || wb.isEmpty()) return 0
+        var best = 0
+        var previous = IntArray(wb.size + 1)
+        for (x in wa.indices) {
+            val current = IntArray(wb.size + 1)
+            for (y in wb.indices) {
+                if (wa[x] == wb[y]) {
+                    current[y + 1] = previous[y] + 1
+                    if (current[y + 1] > best) best = current[y + 1]
+                }
+            }
+            previous = current
+        }
+        return best
+    }
+
+    private val SENTENCE_BREAK = Regex("(?<=[.!?…])[\"“”»«')\\]]*\\s+")
+
+    /** [text] cut into its sentences (at ". ", "! ", "? ", "… ", closing quotes kept with their sentence). */
+    fun sentences(text: String): List<String> = SENTENCE_BREAK.split(text.trim()).filter { it.isNotBlank() }
+
+    /** True when the words [part] stand in [whole] in this order, one after the other. */
+    fun containsRun(whole: List<String>, part: List<String>): Boolean {
+        if (part.isEmpty() || part.size > whole.size) return false
+        return " ${whole.joinToString(" ")} ".contains(" ${part.joinToString(" ")} ")
+    }
+
     /** Number of words, as the reader counts them. */
     fun wordCount(text: String): Int = text.split(' ').count { it.isNotBlank() }
 }

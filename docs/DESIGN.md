@@ -164,6 +164,17 @@ Untertitel und Zähler (gefolgt/Unterthemen). Antippen → Kategorie: farbiger K
 Kategorie folgen“, die drei neuesten Schlagzeilen, darunter die Unterthemen als Zeilen mit
 Icon-Kachel und Folgen-Knopf. Darunter „Lokal“ (Orte) und „Deine Suchen“.
 
+**Leser** – über die Seite geschoben, ruhige deckende Fläche: das Bild **randlos** unter der
+Statusleiste, darunter Quelle · Zeit, die Serif-Überschrift, der Teaser und der Text. Der Text
+nutzt die Breite: Kopf, Absätze, Bildunterschriften und Ausklang stehen **16 dp** vom Rand, Bilder
+im Text und die „nicht lesbar“-Karte **10 dp**, die schwebenden Glas-Knöpfe (Zurück, Zuhören,
+Teilen, Browser; je 48 dp) **10 dp**. **Nichts steht doppelt:** Das Bild oben wird einmal
+bestimmt (Feed-Bild, sonst das Aufmacherbild der Seite, sonst das erste Bild im Text) und
+verschwindet überall aus dem Text, auch in anderer Größe; Überschrift und Teaser stehen nur im
+Kopf (wiederholt der Text den Teaser, bleibt der Text und der Teaser schrumpft oder entfällt);
+unter einem Bild steht die Bildunterschrift der Redaktion – der Alt-Text nur, wenn es keine gibt
+(oder nur die Bildquelle) und er nicht wiederholt, was daneben ohnehin steht.
+
 **Suche** – Glas-Suchfeld oben, letzte Suchen als Chips, „Gerade wichtig“, Ergebnisse als
 große redaktionelle Einträge ohne Kartenrahmen (Bild in voller Breite, Serif-Headline, Lead mit
 „… Weiterlesen“, Meta-Zeile mit „Zuhören“, Teilen und ⋮), endlos; „Diesem Thema folgen“ als

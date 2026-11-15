@@ -18,6 +18,17 @@ import com.cedrickgd.morgenbriefing.data.model.ArticleContent
  * - pull quotes that repeat a sentence of the text, with their attribution line,
  * - the same paragraph twice, the same picture twice, a caption that repeats the alt text.
  *
+ * And in the survey of 15.11.2026 (`ArticleDuplicateSurvey`, 132 readable pages, 35 with a repeat):
+ *
+ * - the hero picture again far below the lead (after the byline, as a video still), in a
+ *   rendition the URL rules did not know,
+ * - the headline and standfirst again behind a box the page keeps above its own headline
+ *   (ANSA's subscription offer), in a breadcrumb, as another version of the headline,
+ * - a teaser that is the headline, that ends in the feed's "The post … appeared first on …",
+ *   that is a heading of the text or the first sentences of its paragraphs,
+ * - alt texts printed although the caption, a paragraph next to the picture or the headline
+ *   says the same; captions and credits set as paragraphs; pull quotes set as paragraphs.
+ *
  * [clean] works on what the page itself says (stored in the cache); [arrange] on what the
  * reader shows around it (the feed's headline, teaser and picture).
  */
@@ -34,6 +45,40 @@ internal object ArticleCleaner {
     private const val CAPTION_LINE_WORDS = 30
     private const val AUTHOR_TAIL_BLOCKS = 5
     private const val CONSENT_TAIL_SHARE = 0.35
+    private const val HEADLINE_SEARCH = 30
+    private const val ALT_NEIGHBOURS = 2
+    private const val ECHO_MIN_WORDS = 8
+    private const val ECHO_GAIN_WORDS = 4
+    private const val HEADING_ECHO_BLOCKS = 3
+    private const val HEADING_ECHO_EXTRA = 4
+    private const val BARE_CREDIT_WORDS = 8
+    private const val TEASER_REST_WORDS = 8
+    private const val DATELINE_WORDS = 7
+    private val YEAR = Regex("\\b(19|20)\\d{2}\\b")
+    private const val CREDIT_ONLY_WORDS = 6
+    private val CREDIT_ONLY = Regex("(?i)^(©|\\(c\\)|(foto|fotos|bild|bilder|bildquelle|bildrechte|quelle|photo|image|credit)\\s*:)")
+
+    /** "Follow" boxes of a newsroom's account system (The Verge): one per author and topic of the story. */
+    private val FOLLOW_BOX = Regex("(?i)posts from this (author|topic) will be added to your|follow topics and authors from this story")
+
+    /** A caption that carries its own switch: "… Nina Riggio for NPR hide caption", "Show Caption Hide Caption …" (a video's). */
+    private val CAPTION_TOGGLE = Regex("(?is)^show caption hide caption\\b.*$|\\s*\\bhide caption\\b.{0,60}$")
+
+    /**
+     * A photo credit and nothing else: a name and the newsroom or agency it worked for ("Bree Lamb
+     * for NPR", "Gerald Herbert/AP"). Only with a known one – "Tips for Parents" is a subheading.
+     */
+    private val BARE_CREDIT = Regex(
+        "^\\p{Lu}[\\p{L}.'’-]*(\\s\\p{Lu}[\\p{L}.'’-]*){0,3}(\\sfor\\s|\\s?/\\s?)(The\\s)?(AP|AFP|dpa|Reuters|Getty Images|EPA|NPR|ANSA|IMAGO|imago|picture alliance|Bloomberg|" +
+            "KFF Health News|ProPublica|New York Times|Washington Post|Wall Street Journal|Guardian|Texas Tribune|NBC News|ABC News|CBS News|CNN|TIME|WIRED)( via .{1,30})?$",
+    )
+
+    /** Alt texts that describe nothing: a player's label, a file name, a browser notice. */
+    private val GENERIC_ALT = Regex(
+        "(?i)^(video ?player|video|audio|player|bild|image|img|foto|photo|picture|grafik|logo|icon|thumbnail|placeholder|teaser(bild)?|" +
+            "artikelbild|titelbild|beitragsbild|symbolbild|cover|untitled|null|undefined)$|browser does not support|\\.(jpe?g|png|webp|gif|avif)$",
+    )
+    private const val TITLE_RUN_WORDS = 5
 
     /**
      * The word that opens a date line: "Stand: …", "Veröffentlicht am 5. November 2026",
@@ -133,6 +178,16 @@ internal object ArticleCleaner {
     private val SENTENCE_STOP = Regex("[.!?]$")
     private val TEASER_TAIL = Regex("(?i)\\s*(continue reading|read more|weiterlesen|mehr lesen|lesen sie mehr|\\[…]|\\[\\.\\.\\.])\\s*(\\.{3}|…)?\\s*$")
 
+    /**
+     * What WordPress appends to every feed teaser: "The post <headline> appeared first on <site>.",
+     * "Der Artikel <headline> erschien zuerst auf <site>." – the headline a second time.
+     */
+    private val FEED_TAIL = Regex(
+        "(?is)\\s*(the post\\b.{1,300}?\\b(appeared first on|first appeared on)\\b|der (artikel|beitrag)\\b.{1,300}?\\berschien zuerst (auf|bei)\\b|" +
+            "l[’']article\\b.{1,300}?\\best apparu en premier sur\\b|la entrada\\b.{1,300}?\\bse publicó primero en\\b|" +
+            "l[’']articolo\\b.{1,300}?\\b(proviene da|sembra essere il primo su)\\b).{0,80}$",
+    )
+
     // ---------------------------------------------------------------------------------- page
 
     /** Cleans the blocks of a page whose headline is [title] and whose own teaser is [description]. */
@@ -140,19 +195,22 @@ internal object ArticleCleaner {
         var out = dropLeadNoise(blocks, listOf(title), description)
         out = out.filterNot { block ->
             val text = block.type == ArticleBlock.PARAGRAPH || block.type == ArticleBlock.HEADING
-            (text && (isRelatedLink(block.text) || isMediaNoise(block.text))) || isLinkList(block)
+            (text && (isRelatedLink(block.text) || isMediaNoise(block.text) || FOLLOW_BOX.containsMatchIn(block.text))) ||
+                isLinkList(block) || (block.type == ArticleBlock.LIST && block.items.any { FOLLOW_BOX.containsMatchIn(it) })
         }
         out = dropPullQuotes(out)
         out = dropRepeatedText(out)
         out = dropRepeatedImages(out)
         out = creditsToCaptions(out)
         out = fixCaptions(out)
+        out = settleAlts(out, listOf(title, description))
         out = dropTailNoise(out)
         return dropOrphanCaptions(out)
     }
 
     /** The headline, meta lines, author boxes and breadcrumbs before the text proper. */
-    private fun dropLeadNoise(blocks: List<ArticleBlock>, titles: List<String>, description: String): List<ArticleBlock> {
+    private fun dropLeadNoise(all: List<ArticleBlock>, titles: List<String>, description: String): List<ArticleBlock> {
+        val blocks = dropBeforeHeadline(all, titles)
         val long = firstLong(blocks, description)
         val lead = minOf(if (long < 0) blocks.size else long + 1, LEAD_BLOCKS, blocks.size)
         val dropped = BooleanArray(blocks.size)
@@ -164,8 +222,11 @@ internal object ArticleCleaner {
                     val text = block.text
                     when {
                         titles.any { isTitle(text, it) } -> dropped[i] = true
+                        // Another version of the headline (the page's own, the feed's): they share most of their words in a row.
+                        block.type == ArticleBlock.HEADING && (long < 0 || i < long) &&
+                            titles.any { TextMatch.sharedRun(text, it) >= TITLE_RUN_WORDS } -> dropped[i] = true
                         // The first long paragraph is text, even when it opens with a dateline.
-                        i != long && isNoise(text) -> {
+                        (i != long && isNoise(text)) || AUTHOR_LINKS.containsMatchIn(text) -> {
                             dropped[i] = true
                             noiseTexts += text
                         }
@@ -177,9 +238,12 @@ internal object ArticleCleaner {
                         // Before the text: "Expert comment", "Size", "Small Standard Large", an author's name – widget and kicker lines.
                         long >= 0 && i < long && block.type == ArticleBlock.PARAGRAPH && TextMatch.wordCount(text) <= SNIPPET_WORDS &&
                             !SENTENCE_END.containsMatchIn(text.trim()) -> dropped[i] = true
+                        // A dateline in any language: "ROMA, 15 novembre 2026, 11:34", "Publié le 15/11/2026 à 12:30".
+                        long >= 0 && i < long && block.type == ArticleBlock.PARAGRAPH && TextMatch.wordCount(text) <= DATELINE_WORDS &&
+                            !SENTENCE_END.containsMatchIn(text.trim()) && YEAR.containsMatchIn(text) -> dropped[i] = true
                     }
                 }
-                ArticleBlock.LIST -> if (isBreadcrumb(block) || (block.items.size == 1 && TextMatch.wordCount(block.items[0]) <= SNIPPET_WORDS)) dropped[i] = true
+                ArticleBlock.LIST -> if (isBreadcrumb(block) || endsInTitle(block, titles) || (block.items.size == 1 && TextMatch.wordCount(block.items[0]) <= SNIPPET_WORDS)) dropped[i] = true
             }
         }
         // The caption line above a picture credit ("A Wendy's restaurant sign …" + "… | Getty Images") goes with it.
@@ -204,7 +268,36 @@ internal object ArticleCleaner {
         return blocks.filterIndexed { i, _ -> !dropped[i] }
     }
 
-    /** Blocks up to and including the first long paragraph (at most [LEAD_BLOCKS]). */
+    /**
+     * Some pages keep a box above their own headline inside the article's container – ANSA its
+     * subscription offer ("Se hai scelto di non accettare i cookie …", a dozen blocks), others
+     * a breadcrumb or a newsletter note. The headline as a heading among the first
+     * [HEADLINE_SEARCH] blocks says where the article begins: the text before it goes (pictures
+     * stay – a lead picture often sits above the headline), and so does the heading, which the
+     * reader prints itself. Only the whole headline counts, not a part of it: a subheading may
+     * well quote some of the headline's words further down.
+     */
+    private fun dropBeforeHeadline(blocks: List<ArticleBlock>, titles: List<String>): List<ArticleBlock> {
+        val at = blocks.take(HEADLINE_SEARCH).indexOfFirst { block ->
+            block.type == ArticleBlock.HEADING && titles.any { isWholeTitle(block.text, it) }
+        }
+        if (at <= 0) return blocks
+        return blocks.filterIndexed { i, block -> i > at || (i < at && (block.type == ArticleBlock.IMAGE || block.type == ArticleBlock.CAPTION)) }
+    }
+
+    /** The headline itself, or the headline with its kicker – never just a part of it. */
+    private fun isWholeTitle(text: String, title: String): Boolean {
+        if (title.isBlank() || text.isBlank()) return false
+        if (TextMatch.same(text, title)) return true
+        val hw = TextMatch.words(title).size
+        return hw >= 3 && TextMatch.covers(text, title) && TextMatch.words(text).size <= hw + 6
+    }
+
+    /** A breadcrumb that ends in the page's own headline: "rbb24 > Panorama > Wetter in Berlin …". */
+    private fun endsInTitle(block: ArticleBlock, titles: List<String>): Boolean =
+        block.items.size in 2..8 && block.items.dropLast(1).all { TextMatch.wordCount(it) <= SNIPPET_WORDS } &&
+            titles.any { isWholeTitle(block.items.last(), it) }
+
     /**
      * The first long paragraph: where the text proper begins. The page's own teaser
      * ([description]) printed above the byline does not count – the text starts after it.
@@ -213,6 +306,8 @@ internal object ArticleCleaner {
         blocks.indices.firstOrNull { i ->
             val block = blocks[i]
             block.type == ArticleBlock.PARAGRAPH && TextMatch.wordCount(block.text) >= LONG_PARAGRAPH_WORDS &&
+                // An author box with the author's bio is long, but not the text.
+                !AUTHOR_LINKS.containsMatchIn(block.text) &&
                 !(description.isNotBlank() && i < LEAD_BLOCKS && (TextMatch.same(block.text, description) || TextMatch.covers(block.text, TextMatch.withoutEllipsis(description))))
         } ?: -1
 
@@ -235,9 +330,25 @@ internal object ArticleCleaner {
         val words = TextMatch.wordCount(text)
         if (words == 0 || words > CREDIT_MAX_WORDS) return false
         val t = text.trim()
-        if (CREDIT_TAIL.containsMatchIn(t) || CREDIT_HEAD.containsMatchIn(t)) return true
+        if (CREDIT_TAIL.containsMatchIn(t) || CREDIT_HEAD.containsMatchIn(t) || isBareCredit(t)) return true
         // "Mike Campbell | Nurphoto | Getty Images", "© Max Muster / dpa"
         return words <= AGENCY_CREDIT_WORDS && AGENCY_TAIL.containsMatchIn(t) && CREDIT_MARK.containsMatchIn(t)
+    }
+
+    /** A photographer's credit standing alone: no caption, no sentence. */
+    internal fun isBareCredit(text: String): Boolean {
+        val t = text.trim()
+        return TextMatch.wordCount(t) <= BARE_CREDIT_WORDS && BARE_CREDIT.matches(t)
+    }
+
+    /**
+     * A caption that only names where the picture comes from ("Bildquelle: IMAGO/Chris Emil
+     * Janßen", "© ANSA/EPA", "Gerald Herbert/AP"): it does not say what the picture shows – the
+     * reader then prints the picture's alt text as well.
+     */
+    fun isCreditOnly(text: String): Boolean {
+        val t = text.trim()
+        return TextMatch.wordCount(t) <= CREDIT_ONLY_WORDS && (CREDIT_ONLY.containsMatchIn(t) || isBareCredit(t))
     }
 
     /** "Stand: …", a date, "Von …", "Lesezeit: …", an author box. */
@@ -330,6 +441,26 @@ internal object ArticleCleaner {
                 }
             }
         }
+        // A paragraph whose words all stand, in a row, inside a longer paragraph somewhere else: a
+        // pull quote or a picture's caption set as a paragraph. The longer one says it anyway.
+        val paragraphs = texts.filter { (i, block) -> block.type == ArticleBlock.PARAGRAPH && !dropped[i] }.map { (i, block) -> i to TextMatch.words(block.text) }
+        for ((i, words) in paragraphs) {
+            if (words.size < ECHO_MIN_WORDS) continue
+            if (paragraphs.any { (j, other) -> j != i && !dropped[j] && other.size >= words.size + ECHO_GAIN_WORDS && TextMatch.containsRun(other, words) }) dropped[i] = true
+        }
+        // The heading again as a short line right below it ("<heading> Vai al contenuto": the anchor link of a live blog's entry).
+        for ((x, entry) in texts.withIndex()) {
+            val (i, block) = entry
+            if (block.type != ArticleBlock.PARAGRAPH || dropped[i]) continue
+            val words = TextMatch.words(block.text)
+            val echo = (maxOf(0, x - HEADING_ECHO_BLOCKS) until x).any { y ->
+                val (_, earlier) = texts[y]
+                val heading = TextMatch.words(earlier.text)
+                earlier.type == ArticleBlock.HEADING && heading.size >= 4 && words.size <= heading.size + HEADING_ECHO_EXTRA &&
+                    words.size >= heading.size && words.subList(0, heading.size) == heading
+            }
+            if (echo) dropped[i] = true
+        }
         return blocks.filterIndexed { i, _ -> !dropped[i] }
     }
 
@@ -373,9 +504,31 @@ internal object ArticleCleaner {
         var i = 0
         while (i < blocks.size) {
             val block = blocks[i]
+            if (block.type == ArticleBlock.PARAGRAPH && CAPTION_TOGGLE.containsMatchIn(block.text)) {
+                // "<caption> <credit> hide caption" under a picture, then the credit once more.
+                val text = CAPTION_TOGGLE.replace(block.text, "").trim()
+                if (text.isNotEmpty() && out.lastOrNull()?.type == ArticleBlock.IMAGE) out += ArticleBlock.caption(text)
+                i++
+                val next = blocks.getOrNull(i)
+                if (next != null && next.type == ArticleBlock.PARAGRAPH && TextMatch.wordCount(next.text) <= BARE_CREDIT_WORDS &&
+                    TextMatch.containsRun(TextMatch.words(text), TextMatch.words(next.text))
+                ) {
+                    i++
+                }
+                continue
+            }
+            if (block.type == ArticleBlock.CAPTION && CAPTION_TOGGLE.containsMatchIn(block.text)) {
+                // In a <figcaption>: "<caption> <credit> hide caption <credit>".
+                val text = CAPTION_TOGGLE.replace(block.text, "").trim()
+                if (text.isNotEmpty()) out += ArticleBlock.caption(text)
+                i++
+                continue
+            }
             out += block
             i++
             if (block.type != ArticleBlock.IMAGE) continue
+            // A caption with its own switch is taken apart above, on the next round.
+            if (blocks.getOrNull(i)?.let { it.type == ArticleBlock.PARAGRAPH && CAPTION_TOGGLE.containsMatchIn(it.text) } == true) continue
             for (span in 1..CAPTION_PARTS) {
                 val parts = blocks.subList(i, minOf(blocks.size, i + span))
                 if (parts.size < span || parts.any { it.type != ArticleBlock.PARAGRAPH }) break
@@ -388,7 +541,8 @@ internal object ArticleCleaner {
                 }
             }
         }
-        return out
+        // A credit that found no picture (the picture went, or never was in the text) describes nothing.
+        return out.filterNot { it.type == ArticleBlock.PARAGRAPH && isBareCredit(it.text) }
     }
 
     /** Player and gallery leftovers between paragraphs: "Audio starten, abbrechen mit Escape". */
@@ -424,6 +578,42 @@ internal object ArticleCleaner {
         }
         return out
     }
+
+    /**
+     * The reader prints a picture's alt text under it when the picture has no caption. An alt
+     * text that only says again what stands on the screen anyway goes: the headline or the teaser
+     * ([above]) – a video still or the lead picture is often described by the headline –, a
+     * paragraph next to the picture, the alt text of an earlier picture, a word that describes
+     * nothing ("Videoplayer"). A short paragraph right under the picture that repeats the alt
+     * text (often with the credit: "Leone XIV in volo … (VATICAN MEDIA)") is the picture's caption.
+     */
+    internal fun settleAlts(blocks: List<ArticleBlock>, above: List<String>): List<ArticleBlock> {
+        val out = blocks.toMutableList()
+        val seen = HashSet<String>()
+        for (i in out.indices) {
+            val block = out[i]
+            if (block.type != ArticleBlock.IMAGE || block.alt.isBlank()) continue
+            val alt = block.alt
+            val next = out.getOrNull(i + 1)
+            if (next != null && next.type == ArticleBlock.PARAGRAPH && TextMatch.wordCount(next.text) <= CREDIT_MAX_WORDS && saysAgain(next.text, alt)) {
+                out[i + 1] = ArticleBlock.caption(next.text)
+                out[i] = block.copy(alt = "")
+                continue
+            }
+            val repeated = !seen.add(TextMatch.normalize(alt))
+            val near = (i - ALT_NEIGHBOURS..i + ALT_NEIGHBOURS).any { k ->
+                val other = out.getOrNull(k)
+                k != i && other != null && other.type in TEXT && saysAgain(other.text, alt)
+            }
+            if (repeated || near || GENERIC_ALT.containsMatchIn(alt.trim()) || above.any { it.isNotBlank() && saysAgain(it, alt) }) {
+                out[i] = block.copy(alt = "")
+            }
+        }
+        return out
+    }
+
+    /** True when [text] says what [alt] says (and maybe more). */
+    private fun saysAgain(text: String, alt: String): Boolean = TextMatch.same(text, alt) || TextMatch.covers(text, alt)
 
     private fun dropTailNoise(blocks: List<ArticleBlock>): List<ArticleBlock> {
         var end = blocks.size
@@ -494,25 +684,42 @@ internal object ArticleCleaner {
 
     // -------------------------------------------------------------------------------- reader
 
-    /** What the reader shows: the teaser above the text (maybe shortened, maybe empty) and the text. */
-    data class Arranged(val teaser: String, val content: ArticleContent)
+    /**
+     * What the reader shows: the teaser above the text (maybe shortened, maybe empty), the text
+     * and the picture on top ([hero]; null = none, the reader draws the topic's cover).
+     */
+    data class Arranged(val teaser: String, val content: ArticleContent, val hero: String? = null)
 
     /**
-     * Fits [content] under the reader's head: drops the [headline] when the text repeats it, the
-     * first picture when it is the [hero] the reader already shows, and settles the [teaser]
-     * against the lead paragraphs so the same words never appear twice:
+     * Fits [content] under the reader's head: drops the [headline] when the text repeats it, every
+     * copy of the picture the reader shows on top, and settles the [teaser] against the lead
+     * paragraphs so the same words never appear twice:
      *
-     * - the lead paragraph says what the teaser says → the paragraph goes,
+     * - the teaser only repeats the headline → no teaser,
+     * - the lead paragraph (or a heading before the text) says what the teaser says → it goes,
      * - the teaser holds the paragraph and more (standfirst + first paragraphs) → the teaser is
      *   cut before it (or hidden when nothing else is left),
      * - the paragraph holds the teaser and more (the feed cut it) → the full paragraph becomes
-     *   the teaser when it is short, else the teaser is hidden.
+     *   the teaser when it is short, else the teaser is hidden,
+     * - the teaser is put together from sentences of the first paragraphs → the teaser is hidden.
+     *
+     * The picture on top is [hero] (the feed's picture, else the page's announced lead picture);
+     * without one, a picture among the first [heroFromBlocks] blocks of the text moves up. It is
+     * decided here, once, so the text below never shows it again – wherever it stands.
      */
-    fun arrange(content: ArticleContent, teaser: String, headline: String = "", hero: String? = null): Arranged {
+    fun arrange(content: ArticleContent, teaser: String, headline: String = "", hero: String? = null, heroFromBlocks: Int = 0): Arranged {
         var blocks = dropLeadNoise(content.blocks, listOf(headline, content.title), "")
+        val titles = listOf(headline, content.title).filter { TextMatch.words(it).size >= 3 }
         var shown = cleanTeaser(teaser)
+        // "Nearly 1,500 migrants reach …" under the headline "Nearly 1,500 migrants reach …": a video page's description.
+        if (listOf(headline, content.title).any { it.isNotBlank() && (TextMatch.same(shown, it) || TextMatch.covers(it, shown)) }) shown = ""
         if (TextMatch.words(shown).size >= 4) {
+            // A heading before the text that is the teaser ("Was heute wichtig war"): once is enough.
+            val firstText = blocks.indexOfFirst { it.type == ArticleBlock.PARAGRAPH || it.type == ArticleBlock.QUOTE }.let { if (it < 0) blocks.size else it }
+            val heading = blocks.take(firstText).indexOfFirst { it.type == ArticleBlock.HEADING && TextMatch.same(it.text, TextMatch.withoutEllipsis(shown)) }
+            if (heading >= 0) blocks = blocks.filterIndexed { k, _ -> k != heading }
             val candidates = blocks.withIndex().filter { it.value.type == ArticleBlock.PARAGRAPH || it.value.type == ArticleBlock.QUOTE }.take(TEASER_CANDIDATES)
+            var settled = false
             for ((i, block) in candidates) {
                 val text = block.text
                 val bare = TextMatch.withoutEllipsis(shown)
@@ -526,7 +733,6 @@ internal object ArticleCleaner {
                         shown = cutBefore(shown, text)
                     }
                     TextMatch.covers(text, bare) || TextMatch.startsWithCut(text, shown) -> {
-                        val titles = listOf(headline, content.title).filter { TextMatch.words(it).size >= 3 }
                         if (titles.any { TextMatch.covers(text, it) }) {
                             // Headline + teaser in one block: the page's own header box, not text.
                             blocks = blocks.filterIndexed { k, _ -> k != i }
@@ -537,26 +743,63 @@ internal object ArticleCleaner {
                             shown = ""
                         }
                     }
-                    i == candidates.first().index && TextMatch.paraphrase(text, bare) &&
-                        listOf(headline, content.title).none { TextMatch.words(it).size >= 3 && TextMatch.covers(text, it) } -> {
+                    i == candidates.first().index && TextMatch.paraphrase(text, bare) && titles.none { TextMatch.covers(text, it) } -> {
                         // The lead paragraph rewords the teaser: say it once, in the page's own words.
                         if (TextMatch.wordCount(text) <= PROMOTE_MAX_WORDS) shown = text
                         blocks = blocks.filterIndexed { k, _ -> k != i }
                     }
                     else -> continue
                 }
+                settled = true
                 break
+            }
+            if (settled && shown.isNotBlank()) {
+                // The standfirst a second time among the lead paragraphs (once in the page's header box, once in the text).
+                val again = blocks.withIndex().filter { it.value.type == ArticleBlock.PARAGRAPH || it.value.type == ArticleBlock.QUOTE }.take(TEASER_CANDIDATES)
+                    .filter { TextMatch.same(it.value.text, shown) }.map { it.index }.toSet()
+                if (again.isNotEmpty()) blocks = blocks.filterIndexed { k, _ -> k !in again }
+            } else if (!settled) {
+                // The teaser's sentences that the lead prints again, word for word, go ("The pattern has reached the
+                // top of the scale. Only three others have." – the first sentences of two paragraphs; the first
+                // point of the page's summary list); what is left stays when it still says something.
+                val firstLong = blocks.indexOfFirst { it.type == ArticleBlock.PARAGRAPH && TextMatch.wordCount(it.text) >= LONG_PARAGRAPH_WORDS }
+                val points = blocks.take(if (firstLong < 0) LEAD_BLOCKS else minOf(firstLong, LEAD_BLOCKS)).filter { it.type == ArticleBlock.LIST }.flatMap { it.items }
+                shown = withoutRepeatedSentences(shown, candidates.map { it.value.text } + points)
             }
         } else {
             shown = shown.takeIf { TextMatch.words(it).isNotEmpty() }.orEmpty()
         }
-        blocks = dropHero(blocks, hero)
-        return Arranged(shown.trim(), content.copy(blocks = dropOrphanCaptions(blocks)))
+        val top = hero?.takeIf { it.isNotBlank() }
+            ?: blocks.take(heroFromBlocks).firstOrNull { it.type == ArticleBlock.IMAGE && it.url.startsWith("https://") }?.url
+        blocks = dropHero(blocks, top)
+        blocks = settleAlts(blocks, listOf(headline, content.title, shown))
+        return Arranged(shown.trim(), content.copy(blocks = dropOrphanCaptions(blocks)), top)
+    }
+
+    /**
+     * [teaser] without the sentences (of at least [TextMatch.MIN_FUZZY_WORDS] words) that stand
+     * word for word in one of the [lead] texts (or that one of them makes up but for a word or
+     * two); empty when no real sentence is left (a tail like "(ANSA)" is none).
+     */
+    internal fun withoutRepeatedSentences(teaser: String, lead: List<String>): String {
+        val texts = lead.map(TextMatch::words)
+        val sentences = TextMatch.sentences(TextMatch.withoutEllipsis(teaser))
+        val kept = sentences.filterNot { sentence ->
+            val words = TextMatch.words(sentence)
+            words.size >= TextMatch.MIN_FUZZY_WORDS && texts.any { text ->
+                // The sentence stands in the text – or the text (a point of a summary list) is the sentence but for a word or two.
+                TextMatch.containsRun(text, words) ||
+                    (text.size >= TextMatch.MIN_FUZZY_WORDS && text.size * 10 >= words.size * 7 && TextMatch.containsRun(words, text))
+            }
+        }
+        if (kept.size == sentences.size) return teaser
+        // What is left must still say something by itself ("Platz zwei holt erstmals die AfD." alone does not).
+        return if (kept.sumOf { TextMatch.words(it).size } >= TEASER_REST_WORDS) kept.joinToString(" ").trim() else ""
     }
 
     /** The feed teaser without its "Continue reading…" / "[…]" tail. */
     internal fun cleanTeaser(teaser: String): String {
-        var t = teaser.trim()
+        var t = FEED_TAIL.replace(teaser.trim(), "").trim()
         while (true) {
             val next = TEASER_TAIL.replace(t, "").trim()
             if (next == t) break
@@ -581,13 +824,28 @@ internal object ArticleCleaner {
         return ""
     }
 
-    /** The first picture goes when it is the one the reader shows on top. */
+    /**
+     * Every copy of the picture the reader shows on top goes, with its caption – not only the
+     * lead picture: newsrooms repeat it after the byline, in a gallery, as the still of a video
+     * further down (BBC, Fox News, ANSA put a dozen blocks between the top and that picture).
+     */
     private fun dropHero(blocks: List<ArticleBlock>, hero: String?): List<ArticleBlock> {
         if (hero.isNullOrBlank()) return blocks
-        val index = blocks.take(4).indexOfFirst { it.type == ArticleBlock.IMAGE }
-        if (index < 0 || !ImageMatch.same(blocks[index].url, hero)) return blocks
-        val captionFollows = blocks.getOrNull(index + 1)?.type == ArticleBlock.CAPTION
-        return blocks.filterIndexed { k, _ -> k != index && !(captionFollows && k == index + 1) }
+        val out = ArrayList<ArticleBlock>(blocks.size)
+        var skipCaption = false
+        for (block in blocks) {
+            if (block.type == ArticleBlock.IMAGE && ImageMatch.same(block.url, hero)) {
+                skipCaption = true
+                continue
+            }
+            if (block.type == ArticleBlock.CAPTION && skipCaption) {
+                skipCaption = false
+                continue
+            }
+            skipCaption = false
+            out += block
+        }
+        return out
     }
 
     private val TEXT = setOf(ArticleBlock.PARAGRAPH, ArticleBlock.HEADING, ArticleBlock.QUOTE)
