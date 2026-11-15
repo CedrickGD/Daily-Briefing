@@ -122,6 +122,7 @@ import com.cedrickgd.morgenbriefing.ui.discover.rememberNow
 import com.cedrickgd.morgenbriefing.ui.glass.GlassCard
 import com.cedrickgd.morgenbriefing.ui.glass.GlassLevel
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
+import com.cedrickgd.morgenbriefing.ui.glass.SkyTextInset
 import com.cedrickgd.morgenbriefing.ui.glass.blockTouchesBehind
 import com.cedrickgd.morgenbriefing.ui.glass.glass
 import com.cedrickgd.morgenbriefing.ui.glass.glassContent
@@ -565,7 +566,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.suggestions(
     onOpenArticle: (NewsItem) -> Unit,
 ) {
     item(key = "hint", contentType = "hint") {
-        Row(Modifier.padding(start = 4.dp, end = 4.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = SkyTextInset, end = SkyTextInset, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             AccentIconTile(Icons.Rounded.TravelExplore, size = 48.dp)
             Spacer(Modifier.width(14.dp))
             Column {
@@ -623,7 +624,7 @@ private fun RecentSearches(
     onClear: () -> Unit,
 ) {
     Column(Modifier.padding(top = 16.dp)) {
-        Row(Modifier.padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = SkyTextInset), verticalAlignment = Alignment.CenterVertically) {
             Overline(strings.recentOverline, Modifier.weight(1f))
             Text(
                 text = strings.clearRecent,
@@ -687,7 +688,7 @@ private fun Searching(text: String) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(start = 4.dp, top = 12.dp, bottom = 4.dp)
+            .padding(start = SkyTextInset, top = 12.dp, bottom = 4.dp)
             .semantics { liveRegion = LiveRegionMode.Polite },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -700,16 +701,19 @@ private fun Searching(text: String) {
 /** "TREFFER · 23 Meldungen" and the follow button. */
 @Composable
 private fun ResultsHeader(strings: SearchStrings, count: Int, followed: Boolean, onToggleFollow: () -> Unit) {
-    Column(Modifier.padding(start = 4.dp, top = 12.dp)) {
-        Overline(strings.resultsOverline)
+    Column(Modifier.padding(top = 12.dp)) {
+        // The text on the cards' text line, the button below on the cards' edge like the pills under it.
+        Overline(strings.resultsOverline, Modifier.padding(horizontal = SkyTextInset))
         Text(
             text = strings.resultCount(count),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.semantics {
-                heading()
-                liveRegion = LiveRegionMode.Polite
-            },
+            modifier = Modifier
+                .padding(horizontal = SkyTextInset)
+                .semantics {
+                    heading()
+                    liveRegion = LiveRegionMode.Polite
+                },
         )
         Spacer(Modifier.height(12.dp))
         GlassPillButton(

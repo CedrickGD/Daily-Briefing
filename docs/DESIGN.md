@@ -31,7 +31,9 @@ für Android.
   Mini-Player, Leser-Steuerung) zeigt Himmel **und** Inhalt – Bilder gleiten farbig verschwommen
   darunter durch. Ab Android 12 mit vollen Effekten echte Unschärfe; darunter oder mit
   sparsamen Effekten (§9) kein Haze, sondern ein milchiger Tint:
-  im Inhalt dichter (Tint + 30 %), schwebend praktisch deckend (97 %), damit kein Text durchscheint.
+  im Inhalt dichter (Tint + 30 %), schwebend deckend (100 %), damit kein Text durchscheint – bei
+  97 % blieben Überschriften hinter der angehefteten Feed-Leiste, der Kopfleiste und dem Indikator
+  noch lesbar.
 * Tint: hell = `surface`; dunkel = ein **gehobener Nachtton** (`surfaceContainerHighest` + Hauch
   `primaryContainer`, etwas Weiß) – dunkles Glas ist heller als der Himmel dahinter, nie ein Loch.
 * Stufen (Licht / Dunkel):
@@ -95,9 +97,18 @@ für Android.
     Ausschnitt, 3-Tasten-Leiste im Querformat); auf breiten Fenstern bleibt die Spalte bei
     höchstens 680 dp.
   * **In Karten 16 dp** bis zum Text, **zwischen Karten 12 dp**.
-  * Text, der frei auf dem Himmel steht (Gruß und Datum auf „Heute“, Overlines über einer Liste),
-    beginnt auf der **Textkante der Karten** (10 + 16 = 26 dp) – eine durchgehende linke Linie
-    für alles Lesbare; Knöpfe daneben enden an der Kartenkante.
+  * Text, der frei auf dem Himmel steht, beginnt auf der **Textkante der Karten**
+    (10 + 16 = 26 dp, `SkyTextInset`) – eine durchgehende linke Linie für alles Lesbare, auf
+    jeder Seite gleich: Gruß und Datum auf „Heute“, Seitentitel und Abschnittsüberschriften
+    (Overline + Titel) in Einstellungen, Entdecken und Suche, Overlines über einer Liste, der
+    kleine Titel in der Glas-Kopfleiste, und bei Einträgen ohne Kartenrahmen (Suchtreffer)
+    Überschrift, Vorspann und Meta-Zeile unter dem Bild. Bilder, Kacheln, Pills und Knöpfe
+    bleiben auf der Kartenkante (10 dp); Knöpfe neben Text enden an der Kartenkante.
+    (Die Karten der Einstellungen haben noch 20 dp Innenabstand: ihr Text steht 4 dp weiter
+    innen als die Überschriften darüber.)
+  * Listen enden über dem schwebenden Indikator: unten bleibt Platz für Systemleiste + 12 dp +
+    Indikator + 12 dp (+ Mini-Player), darüber noch 24–32 dp Luft; über die Seite geschobene
+    Seiten (Entdecken, Suche, Leser) haben keinen Indikator und enden über der Systemleiste.
   * Touch-Ziele bleiben ≥ 48 dp, mit Abstand zueinander; nichts wird am Rand beschnitten.
 * Jede Sektion hat eine Overline + Titel; nie zwei gleich aussehende Blöcke direkt
   untereinander ohne Hierarchie.
@@ -192,12 +203,19 @@ Icon-Kachel und Folgen-Knopf. Darunter „Lokal“ (Orte) und „Deine Suchen“
 Statusleiste, darunter Quelle · Zeit, die Serif-Überschrift, der Teaser und der Text. Der Text
 nutzt die Breite: Kopf, Absätze, Bildunterschriften und Ausklang stehen **16 dp** vom Rand, Bilder
 im Text und die „nicht lesbar“-Karte **10 dp**, die schwebenden Glas-Knöpfe (Zurück, Zuhören,
-Teilen, Browser; je 48 dp) **10 dp**. **Nichts steht doppelt:** Das Bild oben wird einmal
+Teilen, Browser; je 48 dp) **10 dp**. Die Knöpfe sind eine Stufe dunkler (hell) bzw. heller
+(dunkel) als die Seite getönt (`surfaceContainerHighest`), damit sie auf der weißen Seite, auf
+der Leiste und über jedem Foto sichtbar sind. Über dem Bild schweben sie allein; sobald der Text
+sie erreicht, liegt hinter ihnen eine **Glas-Kopfleiste** (Statusleiste + 64 dp, Haarlinie und
+weicher Schatten an der unteren Kante, die Quelle klein in Serif) – Text läuft nie unter der Uhr
+oder den Knöpfen durch. **Nichts steht doppelt:** Das Bild oben wird einmal
 bestimmt (Feed-Bild, sonst das Aufmacherbild der Seite, sonst das erste Bild im Text) und
 verschwindet überall aus dem Text, auch in anderer Größe; Überschrift und Teaser stehen nur im
 Kopf (wiederholt der Text den Teaser, bleibt der Text und der Teaser schrumpft oder entfällt);
 unter einem Bild steht die Bildunterschrift der Redaktion – der Alt-Text nur, wenn es keine gibt
-(oder nur die Bildquelle) und er nicht wiederholt, was daneben ohnehin steht.
+(oder nur die Bildquelle) und er nicht wiederholt, was daneben ohnehin steht. Steht der Alt-Text
+als Zeile unter dem Bild, ist er nicht zugleich dessen Content-Description (TalkBack liest ihn
+einmal).
 
 **Suche** – Glas-Suchfeld oben, letzte Suchen als Chips, „Gerade wichtig“, Ergebnisse als
 große redaktionelle Einträge ohne Kartenrahmen (Bild in voller Breite, Serif-Headline, Lead mit

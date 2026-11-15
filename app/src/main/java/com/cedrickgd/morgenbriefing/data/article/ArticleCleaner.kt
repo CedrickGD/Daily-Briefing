@@ -29,6 +29,14 @@ import com.cedrickgd.morgenbriefing.data.model.ArticleContent
  * - alt texts printed although the caption, a paragraph next to the picture or the headline
  *   says the same; captions and credits set as paragraphs; pull quotes set as paragraphs.
  *
+ * And on the emulator on 15.11.2026 (19 articles read in the app):
+ *
+ * - the placeholder a page shows instead of an embed until the reader consents (t3n's video
+ *   player with its provider's name three times, T-Online's Instagram post),
+ * - "show our articles first on Google" (t3n, WELT; Sportschau with a whole box at the end),
+ * - what taz hangs under its text after "Inhaltlichen Fehler melden": teasers for other articles
+ *   and a subscription offer – and above it the author's box with a bare name as alt text.
+ *
  * [clean] works on what the page itself says (stored in the cache); [arrange] on what the
  * reader shows around it (the feed's headline, teaser and picture).
  */
@@ -176,6 +184,48 @@ internal object ArticleCleaner {
     private val CONSENT_BUTTON = Regex("(?i)^(zustimmen|akzeptieren|einverstanden|accept|accept all|agree|i agree)[.!]?$")
     private const val CONSENT_LINE_WORDS = 6
     private val SENTENCE_STOP = Regex("[.!?]$")
+
+    /**
+     * The placeholder a page shows where an embed (a video player, a post) waits for the reader's
+     * consent – lines that speak to the reader about "external content", never about the story:
+     * "Empfohlene redaktionelle Inhalte", "Hier findest du externe Inhalte von …", "Mit dem Klick
+     * auf "Inhalte anzeigen" erklärst du dich einverstanden …", "Dabei können personenbezogene
+     * Daten an … übermittelt werden", "… deine Consent-Einstellungen …" (t3n); "Wir benötigen Ihre
+     * Einwilligung, um den von unserer Redaktion eingebundenen Instagram-Inhalt anzuzeigen",
+     * "Instagram-Inhalte immer anzeigen" (T-Online).
+     */
+    private val EMBED_CONSENT = Regex(
+        "(?i)^empfohlene[rn]? (redaktionelle[rn]? |externe[rn]? )?inhalte?$|" +
+            "\\b(hier|an dieser stelle) (findest du|finden sie)\\b.{0,30}\\bexterne[nr]? inhalte?\\b|" +
+            "\\bklick auf .{0,3}inhalte anzeigen\\b|" +
+            "\\b(dabei|damit) können personenbezogene daten an\\b|" +
+            "\\b(deine|ihre) consent-einstellungen\\b|" +
+            "^hinweis zum datenschutz$|" +
+            "^leider ist etwas schief ?gelaufen\\W{0,5}$|" +
+            "\\bbenötigen ihre einwilligung, um den von unserer redaktion eingebundenen\\b|" +
+            "^\\S+-inhalte? immer anzeigen$",
+    )
+    private const val EMBED_MAX_WORDS = 60
+
+    /**
+     * "Show our articles first on Google": "Als bevorzugte Quelle auf Google hinzufügen" (t3n),
+     * "Klicken Sie hier, um sich Artikel von WELT in der Google-Suche bevorzugt anzeigen zu
+     * lassen." (WELT), "Unsere Artikel gezielt bei Google anzeigen lassen", "SWR Sport als
+     * bevorzugte Quelle einstellen" (Sportschau). Not a sentence about a preferred source of
+     * energy, nor one about what Google Maps can show.
+     */
+    private val SOURCE_PROMO = Regex(
+        "(?i)\\bals bevorzugte quelle\\b.{0,40}\\b(hinzufügen|einstellen|festlegen|auswählen)\\b|" +
+            "\\b(artikel|inhalte|beiträge|nachrichten)\\b.{0,40}\\bgoogle(-suche)?\\b.{0,20}\\banzeigen (zu )?lassen\\b",
+    )
+    private const val SOURCE_PROMO_WORDS = 20
+
+    /** "Inhaltlichen Fehler melden" (taz), "Fehler gefunden?": the link under an article's last line. */
+    private val ERROR_REPORT = Regex("(?i)^(einen )?(inhaltlichen )?fehler (im (text|artikel|beitrag) )?(melden|gefunden)\\W{0,2}$")
+    private const val ERROR_REPORT_WORDS = 6
+
+    /** An error-report link closes the article only once this share of the words stands before it. */
+    private const val END_MARK_MIN_SHARE = 0.3
     private val TEASER_TAIL = Regex("(?i)\\s*(continue reading|read more|weiterlesen|mehr lesen|lesen sie mehr|\\[…]|\\[\\.\\.\\.])\\s*(\\.{3}|…)?\\s*$")
 
     /**
@@ -193,9 +243,11 @@ internal object ArticleCleaner {
     /** Cleans the blocks of a page whose headline is [title] and whose own teaser is [description]. */
     fun clean(blocks: List<ArticleBlock>, title: String, description: String = ""): List<ArticleBlock> {
         var out = dropLeadNoise(blocks, listOf(title), description)
+        out = cutClosingBoxes(out)
+        out = dropEmbedPlaceholders(out)
         out = out.filterNot { block ->
             val text = block.type == ArticleBlock.PARAGRAPH || block.type == ArticleBlock.HEADING
-            (text && (isRelatedLink(block.text) || isMediaNoise(block.text) || FOLLOW_BOX.containsMatchIn(block.text))) ||
+            (text && (isRelatedLink(block.text) || isMediaNoise(block.text) || FOLLOW_BOX.containsMatchIn(block.text) || isSourcePromo(block.text) || isErrorReport(block.text))) ||
                 isLinkList(block) || (block.type == ArticleBlock.LIST && block.items.any { FOLLOW_BOX.containsMatchIn(it) })
         }
         out = dropPullQuotes(out)
@@ -387,6 +439,62 @@ internal object ArticleCleaner {
 
     private fun isBreadcrumb(block: ArticleBlock): Boolean =
         block.items.size in 2..8 && block.items.all { TextMatch.wordCount(it) <= 12 } && block.items.any { BREADCRUMB.containsMatchIn(it.trim()) }
+
+    /** A line of an embed's consent placeholder (see [EMBED_CONSENT]). */
+    internal fun isEmbedConsent(text: String): Boolean =
+        TextMatch.wordCount(text) <= EMBED_MAX_WORDS && EMBED_CONSENT.containsMatchIn(text.trim())
+
+    /** The newsroom asking to be shown first on Google (see [SOURCE_PROMO]). */
+    internal fun isSourcePromo(text: String): Boolean =
+        TextMatch.wordCount(text) <= SOURCE_PROMO_WORDS && SOURCE_PROMO.containsMatchIn(text.trim())
+
+    /** "Inhaltlichen Fehler melden": a link, not a sentence. */
+    internal fun isErrorReport(text: String): Boolean =
+        TextMatch.wordCount(text) <= ERROR_REPORT_WORDS && ERROR_REPORT.matches(text.trim())
+
+    /**
+     * The placeholder of an embed that waits for consent goes, line by line – and with it the
+     * provider's name, which pages set as a line of its own between two of them ("Hier findest du
+     * externe Inhalte von" · "TargetVideo GmbH" · ", die unser redaktionelles Angebot …").
+     */
+    private fun dropEmbedPlaceholders(blocks: List<ArticleBlock>): List<ArticleBlock> {
+        val box = BooleanArray(blocks.size) { i ->
+            val block = blocks[i]
+            (block.type == ArticleBlock.PARAGRAPH || block.type == ArticleBlock.HEADING) && isEmbedConsent(block.text)
+        }
+        if (box.none { it }) return blocks
+        return blocks.filterIndexed { i, block ->
+            val between = i in 1 until blocks.lastIndex && box[i - 1] && box[i + 1] && block.type == ArticleBlock.PARAGRAPH &&
+                TextMatch.wordCount(block.text) <= SNIPPET_WORDS && !SENTENCE_STOP.containsMatchIn(block.text.trim())
+            !box[i] && !between
+        }
+    }
+
+    /**
+     * What a page hangs under its text, from its first line on:
+     *
+     * - "Inhaltlichen Fehler melden" (taz) closes the article – after it come teasers for other
+     *   articles with their pictures and a subscription offer. Only once a good part of the words
+     *   stands before it ([END_MARK_MIN_SHARE]): a page that puts the link on top keeps its text.
+     * - "Unsere Artikel gezielt bei Google anzeigen lassen" (Sportschau) opens a box that explains
+     *   itself in a paragraph and ends in link fragments ("hier", ". → Hier können Sie"). Only in
+     *   the closing part of the text; further up the line goes alone (t3n and WELT set it under
+     *   the teaser).
+     */
+    private fun cutClosingBoxes(blocks: List<ArticleBlock>): List<ArticleBlock> {
+        val sizes = blocks.map { TextMatch.wordCount(it.text) + it.items.sumOf(TextMatch::wordCount) }
+        val total = sizes.sum()
+        var before = 0
+        for ((k, block) in blocks.withIndex()) {
+            if (block.type == ArticleBlock.PARAGRAPH || block.type == ArticleBlock.HEADING) {
+                val closes = (isErrorReport(block.text) && before >= total * END_MARK_MIN_SHARE) ||
+                    (isSourcePromo(block.text) && total - before <= total * CONSENT_TAIL_SHARE)
+                if (closes) return blocks.subList(0, k)
+            }
+            before += sizes[k]
+        }
+        return blocks
+    }
 
     /** A pull quote repeats a sentence of the text; its attribution line goes with it. */
     private fun dropPullQuotes(blocks: List<ArticleBlock>): List<ArticleBlock> {
@@ -652,16 +760,26 @@ internal object ArticleCleaner {
      * that starts with the name ("Kyle Orland Senior Gaming Editor", "Kyle Orland has been …")
      * or an author link ("Posts from this author"). "Foto von der Unfallstelle" or "Bild von
      * Demonstranten vor dem Reichstag" are pictures of the story.
+     *
+     * An alt text that is just a name ("Dominic Johnson", taz) is a portrait only with the name
+     * and the role as the line right under it ("Dominic Johnson Ressortleiter Ausland") – a
+     * picture of a person in the story is followed by sentences.
      */
     internal fun opensAuthorBox(blocks: List<ArticleBlock>, index: Int, end: Int = blocks.size): Boolean {
         val image = blocks[index]
         if (image.type != ArticleBlock.IMAGE) return false
         val alt = image.alt.trim()
-        val name = AUTHOR_PHOTO.find(alt)?.groupValues?.get(3)?.trim()?.trimEnd('.') ?: return false
+        val labelled = AUTHOR_PHOTO.find(alt)?.groupValues?.get(3)?.trim()?.trimEnd('.')
+        val name = labelled ?: alt.takeIf { TextMatch.wordCount(it) >= 2 } ?: return false
         if (!isPersonName(name)) return false
         val after = blocks.subList(index + 1, end).filter { it.type == ArticleBlock.PARAGRAPH || it.type == ArticleBlock.HEADING }
-        if (after.any { AUTHOR_LINKS.containsMatchIn(it.text) }) return true
         val nameKey = TextMatch.normalize(name)
+        if (labelled == null) {
+            val role = after.firstOrNull() ?: return false
+            return blocks[index + 1] === role && TextMatch.normalize(role.text).startsWith("$nameKey ") &&
+                TextMatch.wordCount(role.text) <= ROLE_LINE_WORDS && !SENTENCE_STOP.containsMatchIn(role.text.trim())
+        }
+        if (after.any { AUTHOR_LINKS.containsMatchIn(it.text) }) return true
         val next = after.take(2)
         val aboutTheName = next.filter { TextMatch.normalize(it.text).startsWith(nameKey) }
         if (aboutTheName.isEmpty()) return false

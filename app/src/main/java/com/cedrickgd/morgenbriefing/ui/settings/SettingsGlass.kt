@@ -103,6 +103,7 @@ import androidx.core.view.WindowCompat
 import com.cedrickgd.morgenbriefing.ui.glass.GlassLevel
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
 import com.cedrickgd.morgenbriefing.ui.glass.LocalGlassState
+import com.cedrickgd.morgenbriefing.ui.glass.SkyTextInset
 import com.cedrickgd.morgenbriefing.ui.glass.glassBlurEnabled
 import com.cedrickgd.morgenbriefing.ui.glass.glass
 import com.cedrickgd.morgenbriefing.ui.glass.glassEdgeBrush
@@ -120,14 +121,14 @@ import kotlinx.coroutines.delay
 /**
  * The outer margin of the settings page, the first-start sheet and their picker sheets: narrow,
  * so the cards use the width of the screen (the owner found 16 dp "small"). Cards keep their
- * inner padding; headings and sheet titles sit a few dp further in.
+ * inner padding; headings stand on the cards' text line ([SkyTextInset]).
  */
 internal val SettingsGutter = 10.dp
 
 /** Overline + serif title above a section (docs/DESIGN.md §5: every section has both). */
 @Composable
 internal fun SectionHeading(overline: String, title: String, modifier: Modifier = Modifier, top: Dp = 36.dp) {
-    Column(modifier.padding(start = 4.dp, end = 4.dp, top = top, bottom = 14.dp)) {
+    Column(modifier.padding(start = SkyTextInset, end = SkyTextInset, top = top, bottom = 14.dp)) {
         Overline(overline)
         Text(
             text = title,

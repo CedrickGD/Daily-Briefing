@@ -57,7 +57,8 @@ fun FeedViewIntro(
     action: (@Composable () -> Unit)? = null,
 ) {
     val language = LocalAppLanguage.current
-    Column(modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+    // On the sky: on the text line of the cards (docs/DESIGN.md §5).
+    Column(modifier.fillMaxWidth().padding(horizontal = CardInset)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (topic != null) {
                 TopicTile(topic, diameter = 48.dp)

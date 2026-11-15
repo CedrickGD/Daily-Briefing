@@ -205,4 +205,90 @@ class ArticleCleanerTest {
         assertTrue(ArticleCleaner.isTitle("Rechtsextremismus Bundestag debattiert über Aufarbeitung der NSU-Verbrechen", "Rechtsextremismus - Bundestag debattiert über Aufarbeitung der NSU-Verbrechen"))
         assertFalse(ArticleCleaner.isTitle("Wer gewann wo?", "US-Zwischenwahl: Demokraten erobern Mehrheit im Senat"))
     }
+
+    @Test
+    fun `the consent placeholder of an embed goes with its provider's name, the text around it stays (t3n, T-Online)`() {
+        val before = ArticleBlock.paragraph("„Sie entstammen der Physik des frühen Universums noch vor den ersten Sternen“, erklärt Studienautor Valerio De Luca laut einer Mitteilung der Johns Hopkins University in Baltimore vom Montag.")
+        val after = ArticleBlock.paragraph("In ihren Berechnungen schlossen die Forscher:innen zunächst aus, dass solche Urzeit-Löcher schon bei ihrer Geburt Millionen Sonnenmassen wogen.")
+        val t3n = listOf(
+            ArticleBlock.paragraph("Empfohlene redaktionelle Inhalte"),
+            ArticleBlock.paragraph("Hier findest du externe Inhalte von"),
+            ArticleBlock.paragraph("TargetVideo GmbH"),
+            ArticleBlock.paragraph(", die unser redaktionelles Angebot auf t3n.de ergänzen. Mit dem Klick auf \"Inhalte anzeigen\" erklärst du dich einverstanden, dass wir dir jetzt und in Zukunft Inhalte von"),
+            ArticleBlock.paragraph("TargetVideo GmbH"),
+            ArticleBlock.paragraph("auf unseren Seiten anzeigen dürfen. Dabei können personenbezogene Daten an Plattformen von Drittanbietern übermittelt werden."),
+            ArticleBlock.paragraph("Hinweis zum Datenschutz"),
+            ArticleBlock.paragraph("Leider ist etwas schief gelaufen..."),
+            ArticleBlock.paragraph("An dieser Stelle findest du normalerweise externe Inhalte von"),
+            ArticleBlock.paragraph("TargetVideo GmbH"),
+            ArticleBlock.paragraph(", jedoch konnten wir deine Consent-Einstellungen nicht abrufen."),
+            ArticleBlock.paragraph("Lade die Seite neu oder passe deine Consent-Einstellungen manuell an."),
+        )
+        assertEquals(listOf(before, after).map { it.text }, ArticleCleaner.clean(listOf(before) + t3n + after, "Little Red Dots").map { it.text })
+
+        val tonline = listOf(
+            ArticleBlock.paragraph(
+                "Wir benötigen Ihre Einwilligung, um den von unserer Redaktion eingebundenen Instagram-Inhalt anzuzeigen. Sie können diesen (und damit " +
+                    "auch alle weiteren Instagram-Inhalte auf t-online.de) mit einem Klick anzeigen lassen und auch wieder deaktivieren.",
+            ),
+            ArticleBlock.paragraph("Instagram-Inhalte immer anzeigen"),
+        )
+        assertEquals(listOf(before, after).map { it.text }, ArticleCleaner.clean(listOf(before) + tonline + after, "Sterban").map { it.text })
+
+        // A company's name between two paragraphs of the story is no leftover, nor is a sentence about consent.
+        val story = listOf(before, ArticleBlock.paragraph("TargetVideo GmbH"), after)
+        assertEquals(3, ArticleCleaner.clean(story, "Little Red Dots").size)
+        assertFalse(ArticleCleaner.isEmbedConsent("Die Datenschützer kritisieren, dass externe Inhalte von YouTube ohne Einwilligung der Nutzer geladen werden."))
+        assertFalse(ArticleCleaner.isEmbedConsent("Empfohlene Inhalte wählt bei Netflix ein Algorithmus aus."))
+    }
+
+    @Test
+    fun `a newsroom asking to be preferred on Google goes, with its whole box at the end (t3n, WELT, Sportschau)`() {
+        val text = (1..5).map { ArticleBlock.paragraph("Absatz $it erzählt in aller Ruhe, wie die Adler Mannheim das Spiel gegen Ingolstadt gedreht haben und was das für die Tabelle heißt.") }
+        // Under the teaser: only the line goes.
+        val welt = ArticleBlock.paragraph("Klicken Sie hier, um sich Artikel von WELT in der Google-Suche bevorzugt anzeigen zu lassen.")
+        val t3n = ArticleBlock.paragraph("Als bevorzugte Quelle auf Google hinzufügen")
+        assertEquals(text.map { it.text }, ArticleCleaner.clean(listOf(welt) + text, "Eishockey").map { it.text })
+        assertEquals(text.map { it.text }, ArticleCleaner.clean(text.take(1) + t3n + text.drop(1), "Eishockey").map { it.text })
+        // At the end: the box explains itself and trails off in link fragments.
+        val box = listOf(
+            ArticleBlock.heading("Unsere Artikel gezielt bei Google anzeigen lassen"),
+            ArticleBlock.paragraph("Wenn Sie bei Google nach Informationen suchen, werden Ihnen bestimmte Nachrichten in der sogenannten Schlagzeilen-Box angezeigt. Wie das genau geht, erklären wir Ihnen"),
+            ArticleBlock.paragraph("hier"),
+            ArticleBlock.paragraph(". → Hier können Sie"),
+            ArticleBlock.paragraph("SWR Sport als bevorzugte Quelle einstellen"),
+        )
+        assertEquals(text.map { it.text }, ArticleCleaner.clean(text + box, "Eishockey").map { it.text })
+
+        assertFalse(ArticleCleaner.isSourcePromo("Wasserkraft ist in Norwegen die bevorzugte Quelle für Strom."))
+        assertFalse(ArticleCleaner.isSourcePromo("Nutzer können sich bei Google Maps die Staus auf ihrer Strecke anzeigen lassen."))
+    }
+
+    @Test
+    fun `what taz hangs under its text goes - author box, error link, teasers and the subscription offer`() {
+        val text = (1..5).map { ArticleBlock.paragraph("Absatz $it erzählt in aller Ruhe, was die Unterhändler in Abu Dhabi besprochen haben und warum daraus so schnell nichts folgen wird.") }
+        val tail = listOf(
+            ArticleBlock.image("https://img.example.com/johnson.jpg", alt = "Dominic Johnson"),
+            ArticleBlock.paragraph("Dominic Johnson Ressortleiter Ausland"),
+            ArticleBlock.paragraph("Seit 2011 Co-Leiter des taz-Auslandsressorts und seit 1990 Afrikaredakteur der taz."),
+            ArticleBlock.paragraph("Inhaltlichen Fehler melden"),
+            ArticleBlock.paragraph("Stadtgespräch aus Moskau Von Lügen und Siegesfantasien Kolumne Stadtgespräch von Vera Bessonova Die Ohren spitzen genügt."),
+            ArticleBlock.image("https://img.example.com/rekruten.jpg", alt = "Junge Rekruten stehen mit ernstem Gesichtsausdruck und Gewehr in der Hand in Formation"),
+            ArticleBlock.paragraph("3 Monate wochentaz für nur 15 Euro Die Wochenzeitung mit taz-Blick Unsere wochentaz bietet jeden Samstag Journalismus, der es nicht allen recht macht."),
+            ArticleBlock.image("https://img.example.com/packshot.jpg", alt = "Ein Packshot der Wochentaz-Zeitung mit einer neutralen Illustration auf der Titelseite."),
+        )
+        assertEquals(text.map { it.text }, ArticleCleaner.clean(text + tail, "Die Nebelkerze vom Donbass").map { it.text })
+
+        // The link on top of a page closes nothing: only the line itself goes.
+        val top = ArticleCleaner.clean(listOf(ArticleBlock.paragraph("Fehler melden")) + text, "Die Nebelkerze vom Donbass")
+        assertEquals(text.map { it.text }, top.map { it.text })
+        assertFalse(ArticleCleaner.isErrorReport("Fehler melden die Prüfer in jedem dritten Bericht."))
+
+        // A person of the story near the end, named in the alt text and written about in sentences, is no author box.
+        val person = listOf(
+            ArticleBlock.image("https://img.example.com/selenskyj.jpg", alt = "Wolodymyr Selenskyj"),
+            ArticleBlock.paragraph("Wolodymyr Selenskyj will die Antwort seiner Gesellschaft überlassen."),
+        )
+        assertEquals(7, ArticleCleaner.clean(text + person, "Die Nebelkerze vom Donbass").size)
+    }
 }

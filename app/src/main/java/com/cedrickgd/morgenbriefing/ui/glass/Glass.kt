@@ -120,7 +120,8 @@ fun glassStyle(level: GlassLevel = GlassLevel.Regular, tint: Color? = null, floa
         tints = listOf(HazeTint(base.copy(alpha = alpha))),
         blurRadius = level.blur,
         noiseFactor = level.noise,
-        fallbackTint = HazeTint(base.copy(alpha = fallbackAlpha(alpha, floating = false))),
+        // What Haze paints by itself wherever it does not blur: floating glass is opaque there too.
+        fallbackTint = HazeTint(base.copy(alpha = fallbackAlpha(alpha, floating))),
     )
 }
 
@@ -128,12 +129,13 @@ fun glassStyle(level: GlassLevel = GlassLevel.Regular, tint: Color? = null, floa
  * Without blur, whatever lies under the glass would show through. Glass inside the content only
  * ever covers the smooth sky: a denser, milky tint is enough and the sky still glows through a
  * little. [floating] glass (top bars, page indicator, mini player, sheets, dialogs) covers
- * scrolling text and pictures: it becomes practically opaque, so nothing ghosts through.
+ * scrolling text and pictures: it is opaque, so no headline ghosts through a pinned bar or the
+ * page indicator (at 97 % the text underneath was still readable).
  */
 internal fun fallbackAlpha(alpha: Float, floating: Boolean): Float =
     if (floating) FLOATING_FALLBACK_ALPHA else (alpha + 0.30f).coerceAtMost(0.92f)
 
-private const val FLOATING_FALLBACK_ALPHA = 0.97f
+private const val FLOATING_FALLBACK_ALPHA = 1f
 
 /** Lowest tint of floating glass with real blur (light / dark). */
 private const val FLOATING_MIN_LIGHT = 0.62f
@@ -173,8 +175,7 @@ fun Modifier.glassContent(zIndex: Float = 1f): Modifier = composed {
  * Turns any element into frosted glass: the blurred sky (and, for glass floating above a page,
  * the blurred content) behind, tint, grain, a soft inner sheen at the top and a light-catching
  * 1 dp edge. Set [floating] for glass that hovers over scrolling content: without real blur
- * (Android < 12, light effects) it then turns practically opaque instead of letting text ghost
- * through.
+ * (Android < 12, light effects) it then turns opaque instead of letting text ghost through.
  */
 fun Modifier.glass(
     shape: Shape = GlassShapes.card,

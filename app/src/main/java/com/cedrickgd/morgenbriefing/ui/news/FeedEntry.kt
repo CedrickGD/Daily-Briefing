@@ -235,20 +235,23 @@ fun FeedEntry(
                 )
             }
             Spacer(Modifier.height(16.dp))
-            if (showTopic) {
-                TopicOverline(article)
-                Spacer(Modifier.height(6.dp))
-            }
-            Text(
-                text = item.headline,
-                style = Reading.feedHeadline(language = textLanguage),
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.semantics { heading() },
-            )
-            if (teaser.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                LeadText(teaser, more = strings.readMore, language = textLanguage)
+            // The picture reaches the cards' edge; the text stands on their text line (docs/DESIGN.md §5).
+            Column(Modifier.padding(horizontal = CardInset)) {
+                if (showTopic) {
+                    TopicOverline(article)
+                    Spacer(Modifier.height(6.dp))
+                }
+                Text(
+                    text = item.headline,
+                    style = Reading.feedHeadline(language = textLanguage),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() },
+                )
+                if (teaser.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    LeadText(teaser, more = strings.readMore, language = textLanguage)
+                }
             }
         }
         FeedMetaRow(
@@ -257,7 +260,8 @@ fun FeedEntry(
             listening = listening,
             paused = paused,
             actions = actions,
-            modifier = Modifier.padding(top = 4.dp),
+            // The buttons at its end keep reaching the picture's edge.
+            modifier = Modifier.padding(start = CardInset, top = 4.dp),
         )
     }
 }

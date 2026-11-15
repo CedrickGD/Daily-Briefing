@@ -103,7 +103,7 @@ data class ArticleContent(
         const val SHORT_WORDS = 120
 
         /** Current [format]; bump it whenever the extraction or cleanup changes what is stored. */
-        const val FORMAT = 5
+        const val FORMAT = 6
     }
 }
 

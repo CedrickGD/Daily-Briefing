@@ -146,7 +146,14 @@ fun GlassPillButton(
     }
 }
 
-/** A round frosted-glass icon button ([size] ≥ 48 dp keeps the touch target accessible). */
+/**
+ * A round frosted-glass icon button ([size] ≥ 48 dp keeps the touch target accessible).
+ *
+ * @param container tints the glass with this colour instead of the theme surface – for buttons on
+ *   a surface of that very colour (the reader's page), where plain glass would not show.
+ * @param floating the button hovers over scrolling text and pictures: its glass keeps the tint
+ *   floor of floating glass and is opaque without real blur (see [glass]).
+ */
 @Composable
 fun GlassIconButton(
     icon: ImageVector,
@@ -156,6 +163,8 @@ fun GlassIconButton(
     size: Dp = 48.dp,
     level: GlassLevel = GlassLevel.Thin,
     tint: Color = MaterialTheme.colorScheme.onSurface,
+    container: Color? = null,
+    floating: Boolean = false,
 ) {
     val interaction = remember { MutableInteractionSource() }
     Box(
@@ -163,7 +172,7 @@ fun GlassIconButton(
             .size(size)
             .pressScale(interaction, pressedScale = 0.92f)
             .shadow(10.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.10f))
-            .glass(shape = GlassShapes.pill, level = level)
+            .glass(shape = GlassShapes.pill, level = level, tint = container, floating = floating)
             .clickable(
                 interactionSource = interaction,
                 indication = ripple(),
