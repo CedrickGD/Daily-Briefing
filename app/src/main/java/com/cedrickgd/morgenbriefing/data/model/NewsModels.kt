@@ -167,7 +167,17 @@ data class TopicNews(
     /** Newest first; articles without a date follow the dated ones. */
     val items: List<NewsItem> = emptyList(),
     val sources: List<SourceStatus> = emptyList(),
+    /**
+     * How the topic was put together ([FORMAT]); 0 for what earlier versions cached, which
+     * [com.cedrickgd.morgenbriefing.data.NewsRepository.upgraded] cleans up when it is read.
+     */
+    val format: Int = 0,
 ) {
     val failedSources: List<SourceStatus> get() = sources.filter { !it.ok }
     val allFailed: Boolean get() = sources.isNotEmpty() && sources.all { !it.ok }
+
+    companion object {
+        /** 1: older pages are asked for without `-site:` exclusions and keep to their date window. */
+        const val FORMAT = 1
+    }
 }

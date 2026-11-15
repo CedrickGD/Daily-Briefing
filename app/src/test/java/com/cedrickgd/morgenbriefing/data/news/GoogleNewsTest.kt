@@ -162,6 +162,29 @@ class GoogleNewsTest {
         // Never down to nothing.
         assertEquals("SZ.de", GoogleNews.stripPublisher("SZ.de - SZ.de", "SZ.de", "sueddeutsche.de"))
         assertEquals("Politik", GoogleNews.stripPublisher("Politik - SZ.de - SZ.de", "SZ.de"))
+        // The site names itself otherwise than Google News does: its desk gives the tail away.
+        assertEquals(
+            "Iran greift Ziele in Bahrain mit Drohnen an",
+            GoogleNews.stripPublisher("Iran greift Ziele in Bahrain mit Drohnen an - Politik - Pforzheimer-Zeitung - PZ-news.de", "PZ-news.de", "pz-news.de"),
+        )
+        // A dash in the headline is no such tail.
+        assertEquals(
+            "Technische Störung - Flugverbot in den USA wieder aufgehoben",
+            GoogleNews.stripPublisher("Technische Störung - Flugverbot in den USA wieder aufgehoben - Deutschlandfunk", "Deutschlandfunk", "deutschlandfunk.de"),
+        )
+    }
+
+    @Test
+    fun `share pages and programme listings are no articles`() {
+        assertTrue(GoogleNews.isQuotePage("Rheinmetall Aktien-Dossier"))
+        assertTrue(GoogleNews.isQuotePage("Rodeln: Weltcup im TV - Sendung"))
+        assertTrue(GoogleNews.isQuotePage("Skeleton-Weltcup im TV - Sendung"))
+        assertFalse(GoogleNews.isQuotePage("Rodeln: Weltcup im TV - Sendung fällt wegen Sturm aus"))
+        assertFalse(GoogleNews.isQuotePage("Rheinmetall-Aktie: Dossier der Bafin belastet den Kurs"))
+        // A site's front page (seen at the end of "Schlagzeilen", 259 days old).
+        assertTrue(GoogleNews.isQuotePage("Homepage | Arbeit und Rente in Deutschland und im vertragslosen Ausland"))
+        assertTrue(GoogleNews.isQuotePage("Startseite | Bundesagentur für Arbeit"))
+        assertFalse(GoogleNews.isQuotePage("Homepage der Bundesregierung nach Hackerangriff nicht erreichbar"))
     }
 
     @Test

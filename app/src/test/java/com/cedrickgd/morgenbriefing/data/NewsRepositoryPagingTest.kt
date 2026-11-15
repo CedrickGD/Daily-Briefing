@@ -4,6 +4,7 @@ import com.cedrickgd.morgenbriefing.data.local.NewsCache
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsEdition
 import com.cedrickgd.morgenbriefing.data.model.Topic
+import com.cedrickgd.morgenbriefing.data.model.TopicNews
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.news.RssParser
 import com.cedrickgd.morgenbriefing.data.remote.GoogleNewsFixtures
@@ -63,6 +64,10 @@ class NewsRepositoryPagingTest {
     @Volatile
     private var failing = false
 
+    /** Google News pads the windows with what it added on 15.11.2026 when it answered loosely: pages from outside them, reference works. */
+    @Volatile
+    private var loose = false
+
     /** Requests for which [holdIf] is true wait for [gate]; [held] counts them. */
     @Volatile
     private var holdIf: (String) -> Boolean = { false }
@@ -101,7 +106,13 @@ class NewsRepositoryPagingTest {
                 )
                 // Nothing older than October 20th.
                 before < "2026-10-20" -> emptyList()
-                else -> listOf(story("Crypto story from the week before $before", after!!))
+                else -> listOf(story("Crypto story from the week before $before", after!!)) + if (!loose) emptyList() else listOf(
+                    story("Alaska", "2011-10-01", site = "https://de.wikipedia.org", publisher = "Wikipedia"),
+                    story("Rundschreibendatenbank des Landes Berlin", "2009-10-30", site = "https://www.berlin.de", publisher = "Berlin.de"),
+                    story("Bitcoin in the encyclopedia, edited this week", after, site = "https://en.wikipedia.org", publisher = "Wikipedia"),
+                    story("A crypto story from well after the window", "${LocalDate.parse(before).plusDays(5)}"),
+                    story("A walled crypto story from the window", after, site = "https://www.wsj.com", publisher = "WSJ"),
+                )
             }
             return MockResponse().setBody(GoogleNewsFixtures.feed(*items.toTypedArray()))
         }
@@ -180,9 +191,55 @@ class NewsRepositoryPagingTest {
     fun `a stray old hit on the first page does not make paging skip the months after it`() = runTest {
         stray = true
         repository.refresh(listOf(KRYPTO), settings)
-        assertTrue(items().any { it.headline.startsWith("An old story") })
+        // Seven months old among this week's stories: it is not listed (older articles come with the endless list) …
+        assertFalse(items().any { it.headline.startsWith("An old story") })
+        // … and paging starts right behind the first page, not behind it.
         assertTrue(repository.loadMore(KRYPTO, settings))
         assertTrue(lastQuery(), lastQuery().startsWith("after:2026-11-02 before:2026-11-05 "))
+    }
+
+    @Test
+    fun `older pages are asked for without site exclusions and keep to their window`() = runTest {
+        repository.refresh(listOf(KRYPTO), settings)
+        // The first page leaves walled sites out in the query …
+        assertTrue(seen.first { it.contains("/rss/search") }.toHttpUrl().queryParameter("q")!!.contains("-site:"))
+        // … a page of older articles does not: with a `-site:` Google News answers loosely and ignores the window.
+        loose = true
+        assertTrue(repository.loadMore(KRYPTO, settings))
+        assertTrue(lastQuery(), lastQuery().startsWith("after:2026-11-02 before:2026-11-05 "))
+        assertFalse(lastQuery(), lastQuery().contains("site:"))
+        // Should it answer loosely all the same: what lies outside the window, and what is no news, never reaches the list.
+        assertEquals(
+            listOf("Bitcoin jumps after the election results came in", "Ethereum upgrade goes live on the main network", "Crypto story from the week before 2026-11-05"),
+            items().map { it.headline },
+        )
+        // A walled site among the answers still goes by its domain.
+        assertTrue(items().none { it.publisherDomain == "wsj.com" || it.publisherDomain.endsWith("wikipedia.org") })
+        // The next window follows on this one.
+        assertTrue(repository.loadMore(KRYPTO, settings))
+        assertTrue(lastQuery(), lastQuery().startsWith("after:2026-10-27 before:2026-11-02 "))
+    }
+
+    @Test
+    fun `a cache of an earlier version loses its paged articles when it is read`() = runTest {
+        repository.refresh(listOf(KRYPTO), settings)
+        assertTrue(repository.loadMore(KRYPTO, settings))
+        val cache = NewsCache(temp.root, AppJson)
+        val written = cache.load(KRYPTO)!!
+        assertEquals(TopicNews.FORMAT, written.format)
+        assertTrue(written.items.any { it.sourceId.endsWith(NewsRepository.PAGE_SUFFIX) })
+        // As version 3.3 left it: no format, its pages padded with whatever Google News added.
+        cache.save(written.copy(format = 0))
+        val restarted = NewsRepository(RssClient(GoogleNewsFixtures.redirectingClient(server, seen), RssParser { KXmlParser() }), cache, clock = { now })
+        restarted.warm()
+        val read = restarted.state.value.topics.getValue(KRYPTO)
+        assertTrue(read.items.isNotEmpty())
+        assertTrue(read.items.none { it.sourceId.endsWith(NewsRepository.PAGE_SUFFIX) })
+        // What this version wrote is read as it is.
+        cache.save(written)
+        val again = NewsRepository(RssClient(GoogleNewsFixtures.redirectingClient(server, seen), RssParser { KXmlParser() }), cache, clock = { now })
+        again.warm()
+        assertEquals(written.items.size, again.state.value.topics.getValue(KRYPTO).items.size)
     }
 
     @Test

@@ -226,7 +226,19 @@ object GoogleNews {
             rest = shorter
             stripped++
         }
-        return if (stripped >= 2) withoutSuffix(rest, DESKS) ?: rest else rest
+        if (stripped >= 2) return withoutSuffix(rest, DESKS) ?: rest
+        return if (stripped == 1) withoutDeskTail(rest) ?: rest else rest
+    }
+
+    /**
+     * [title] without a page title's tail of a desk and the site under another name than Google
+     * News gives it: "Iran greift Ziele in Bahrain mit Drohnen an - Politik - Pforzheimer-Zeitung"
+     * (from PZ-news.de). Null when it does not end so.
+     */
+    private fun withoutDeskTail(title: String): String? {
+        val cut = title.lastIndexOf(" - ")
+        if (cut <= 0 || title.length - cut - 3 !in 2..40) return null
+        return withoutSuffix(title.substring(0, cut), DESKS)
     }
 
     /** [title] without one of [suffixes] at its end (after a separator), or null when it ends in none or would be empty. */
@@ -296,6 +308,11 @@ object GoogleNews {
         Regex("(?i)\\betf-profil\\b|\\bdividenden, renditen\\b"),
         // "Aktueller SLV ETF | SLV Kurs & Chart", "SLV – iShares Silver Trust – ETF Stock Quote", "USO vs SLV - ETF Comparison".
         Regex("(?i)\\bkurs (&|und) chart\\b|\\b(etf |fund )?stock quote\\b|\\b(etf|fund|stock) comparison\\s*$"),
+        // Seen deep in "Neueste" (15.11.2026): Finanzen100's "… Aktien-Dossier" and TV Spielfilm's
+        // programme pages "Rodeln: Weltcup im TV - Sendung" – a share's page, a listing.
+        Regex("(?i)\\baktien-dossier\\b|\\bim TV - Sendung\\s*$"),
+        // A site's front page among the answers of a search: "Homepage | Arbeit und Rente in Deutschland …".
+        Regex("(?i)^\\s*(homepage|startseite)\\s*[|:–-]"),
     )
 
     /** True for search hits that are a quote or product page ("DAX Turbo … | Kurs, Chart | DE000…"), not an article. */

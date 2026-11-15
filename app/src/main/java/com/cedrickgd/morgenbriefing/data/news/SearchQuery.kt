@@ -233,9 +233,14 @@ class SearchQuery private constructor(
             return SearchQuery(text, google.joinToString(" "), groups, excluded, sites)
         }
 
-        /** Lower case, accents and punctuation removed, single spaces: "„Börse: DAX-Rekord!“" → "borse dax rekord". */
+        /**
+         * Lower case, accents and punctuation removed, single spaces: "„Börse: DAX-Rekord!“" →
+         * "borse dax rekord". Soft hyphens and zero-width characters go without a trace: some
+         * sites put them into their headlines ("Bah­rain"), and as punctuation they would
+         * split the word, so the same headline from two feeds would not compare equal.
+         */
         fun fold(text: String): String =
-            Normalizer.normalize(text, Normalizer.Form.NFD)
+            Normalizer.normalize(text.replace(INVISIBLE, ""), Normalizer.Form.NFD)
                 .replace(MARKS, "")
                 .lowercase(Locale.ROOT)
                 .replace("ß", "ss")
@@ -359,6 +364,9 @@ class SearchQuery private constructor(
 
         private val WHITESPACE = Regex("\\s+")
         private val MARKS = Regex("\\p{M}+")
+
+        /** Soft hyphen, zero-width space / non-joiner / joiner, word joiner, byte order mark. */
+        private val INVISIBLE = Regex("[\\u00AD\\u200B-\\u200D\\u2060\\uFEFF]")
         private val NON_WORD = Regex("[^\\p{L}\\p{N}]+")
         private val SPLIT = Regex("[^\\p{L}\\p{N}]+")
 

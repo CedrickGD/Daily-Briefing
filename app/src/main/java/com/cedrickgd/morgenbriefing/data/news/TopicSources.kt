@@ -261,8 +261,10 @@ object TopicSources {
     }
 
     /**
-     * The `-site:` exclusions of [topicId]'s Google News search (its first page and its endless
-     * list): none for a followed search – any `site:` operator makes Google News answer loosely,
+     * The `-site:` exclusions of the first page of [topicId]'s Google News search (its endless
+     * list asks without any: a loose answer ignores the date window too, see
+     * [com.cedrickgd.morgenbriefing.data.NewsRepository.loadMore]): none for a followed search –
+     * any `site:` operator makes Google News answer loosely,
      * 100 results whatever the query ("Bundestagswahl": 18 results, 15 naming it; with one
      * `-site:` 100 results, 4 naming it; checked 05.11.2026), and a followed search has no
      * ranking to sort that out. Walled sites still go by domain ([com.cedrickgd.morgenbriefing.data.NewsRepository.readable]).

@@ -19,7 +19,8 @@ keine Cloud und keine KI. (Paket und applicationId heißen aus Update-Gründen w
         │     · FeedCatalog: Redaktions-Feeds der Ausgabe (Sprache/Land), dem (Unter-)Thema zugeordnet
         │     · GoogleNews: Rubrik, Top-Meldungen oder Suche (Taxonomy-Suchbegriff je Sprache,
         │       Ort mit Bundesstaat, eigener Suchbegriff) in der Ausgabe des Themas;
-        │       mit „nur lesbar“ als -site:-Ausschlüsse (KnownWalls + gelernte Seiten)
+        │       mit „nur lesbar“ als -site:-Ausschlüsse (KnownWalls + gelernte Seiten; nur die
+        │       erste Seite – ältere Zeitfenster ohne, sonst ignoriert Google das Fenster)
         │     · Region × Sprache ohne eigene Google-News-Ausgabe (USA auf Deutsch): Ausgabe der
         │       Sprache; Heimat-Themen und Orte als Suche nach dem Namen (CountryQuery)
         │     · Regions: Sender des Bundeslandes (nur Deutschland auf Deutsch) · eigene Feeds
@@ -104,10 +105,21 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
   `GoogleNews` baut die URLs und liest Herausgeber und Domain aus `<source url>`; aus dem Titel
   fällt der angehängte Herausgeber, auch wenn die Seite ihn schon selbst im Titel trägt
   („… - Politik - SZ.de - SZ.de“, „… - boerse.de - boerse.de“ → nur die Überschrift). Artikel-Ids
-  sind ein Hash des normalisierten Links. Was ein Verlags-Feed nur mitschleppt, bleibt draußen
-  (`NewsRepository.current`): Rubrik- und Themenseiten (`/thema/…`) und alles, was älter als 60
-  Tage ist (gemessen 15.11.2026: bei ZDFheute 25 von 205 Einträgen, 70 bis 2579 Tage alt) –
-  außer der Feed hat nichts Neueres. Google News und selbst hinzugefügte Feeds behalten alles.
+  sind ein Hash des normalisierten Links. Was eine erste Seite nur mitschleppt, bleibt draußen
+  (`NewsRepository.current`, Verlags-Feeds wie Google News): alles, was älter als 60 Tage ist
+  (gemessen 15.11.2026: bei ZDFheute 25 von 205 Einträgen, 70 bis 2579 Tage alt; die Suche
+  „KI“ bringt 7 Produkt- und Hilfeseiten von vor Jahren unter 100 Treffern) – außer die Quelle
+  hat nichts Neueres; Älteres kommt über die endlose Liste. **Nie in einer Liste**
+  (`isNoNews`): Rubrik- und Themenseiten (`/thema/…`), Nachschlagewerke (wikipedia.org) und
+  alles, was älter ist, als das Blättern je reicht (395 Tage = 365 Tage Historie + letztes
+  Fenster). Selbst hinzugefügte Feeds behalten alles.
+  **Blättern ohne `-site:`**: die Zeitfenster der endlosen Liste werden ohne Ausschlüsse
+  angefragt – mit ihnen antwortet Google News locker und füllt jede Seite mit Seiten weit
+  außerhalb des Fensters auf (Wikipedia-Artikel von 2011, Uni-, Job- und Shopseiten: 1 bis 42
+  je Fenster, ohne `-site:` keine einzige; 15.11.2026). Gesperrte Seiten fallen danach nach
+  Domain weg, und `pageOf` lässt nur durch, was im Fenster liegt (± 2 Tage). Seiten, die
+  frühere Versionen so geholt haben, wirft `upgraded` beim Lesen des Caches einmal weg
+  (`TopicNews.format`).
 * **Feed-Logik** (`ui/news/FeedLogic.kt`, `NewsModels.kt`): pro gefolgtem Thema eine Sektion
   („Für dich“), „Neueste“ über alle Themen ohne Doppelte, je Thema eine endlose Liste mit
   `loadMore` am Ende. Auch „Neueste“ und das Ende von „Für dich“ sind endlos (`FeedTimeline.kt`):

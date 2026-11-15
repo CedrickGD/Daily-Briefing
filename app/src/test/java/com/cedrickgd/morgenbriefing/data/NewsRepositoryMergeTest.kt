@@ -124,12 +124,66 @@ class NewsRepositoryMergeTest {
         // A quiet desk with nothing newer keeps what it has.
         val quiet = listOf(item("q1", a, "2026-06-01T09:00:00+02:00"), item("q2", a, "2026-03-01T09:00:00+01:00"))
         assertEquals(quiet, NewsRepository.current(a, quiet, now))
-        // Google News keeps old articles (a small town's place page, the stray hits paging counts on), and so does a feed the user added.
+        // A feed the user added keeps everything: the user chose it.
         val mine = FeedSource("custom:1", "Mein Blog", "https://blog.example/feed", "ki", builtIn = false)
         val mixed = listOf(item("new", mine, "2026-10-28T09:00:00+01:00"), item("old", mine, "2025-01-01T09:00:00+01:00", url = "https://blog.example/tag/old"))
         assertEquals(mixed, NewsRepository.current(mine, mixed, now))
-        val found = listOf(googleItem("g1", "Eine neue Meldung von heute früh", "x.de"), googleItem("g2", "Eine alte Meldung vom Januar", "x.de", at = "2026-01-10T10:00:00+01:00"))
-        assertEquals(found, NewsRepository.current(gn, found, now))
+    }
+
+    @Test
+    fun `a Google News first page loses its old strays and what is no news`() {
+        // A search answers by relevance: today's stories, and product, help and reference pages of years ago.
+        val today = googleItem("today", "OpenAI stellt ein neues Sprachmodell für Entwickler vor", "heise.de")
+        val recent = googleItem("recent", "Wie ChatGPT den Schulalltag in Hessen verändert hat", "hr.de", at = "2026-09-20T10:00:00+02:00")
+        val help = googleItem("help", "Von OpenAI generierte Inhalte verifizieren", "openai.com", at = "2026-05-19T10:00:00+02:00")
+        val product = googleItem("product", "Forschung und Bereitstellung bei OpenAI", "openai.com", at = "2024-05-27T10:00:00+02:00")
+        val wiki = googleItem("wiki", "Künstliche Intelligenz in der Wikipedia", "de.wikipedia.org", at = "2026-10-28T10:00:00+01:00")
+        val undated = googleItem("undated", "Eine Meldung ganz ohne Datum im Feed", "golem.de", at = null)
+        val merged = NewsRepository.merge("ki", null, listOf(ok(gn, today, recent, help, product, wiki, undated)), now)
+        assertEquals(listOf("today", "recent", "undated"), merged.items.map { it.id })
+
+        // A small town's place page with nothing from the last two months keeps what it has – but nothing older than paging reaches.
+        val quiet = listOf(
+            googleItem("spring", "Das Stadtfest im Mai lockt viele Besucher an", "lokal.de", at = "2026-05-10T10:00:00+02:00"),
+            googleItem("winter", "Der neue Bürgermeister tritt sein Amt im Rathaus an", "lokal.de", at = "2026-01-15T10:00:00+01:00"),
+            googleItem("ancient", "Alaska", "de.wikipedia.org", at = "2011-10-01T10:00:00+02:00"),
+            googleItem("old", "Rundschreibendatenbank des Landes Berlin", "berlin.de", at = "2009-10-30T10:00:00+01:00"),
+        )
+        assertEquals(listOf("spring", "winter"), NewsRepository.current(gn, quiet, now).map { it.id })
+        assertEquals(395, NewsRepository.NEVER_OLDER.toDays())
+
+        // What is no news at all: reference works, anything older than the lists reach – but not in a feed the user added.
+        assertTrue(NewsRepository.isNoNews(wiki, now))
+        assertTrue(NewsRepository.isNoNews(googleItem("w2", "Preußen", "wikipedia.org"), now))
+        assertTrue(NewsRepository.isNoNews(quiet[3], now))
+        assertFalse(NewsRepository.isNoNews(quiet[1], now))
+        assertFalse(NewsRepository.isNoNews(undated, now))
+        assertFalse(NewsRepository.isNoNews(googleItem("wk", "Wikipedianer streiten über KI-Texte in Artikeln", "netzpolitik.org"), now))
+        val mine = FeedSource("custom:1", "Mein Blog", "https://blog.example/feed", "ki", builtIn = false)
+        assertFalse(NewsRepository.isNoNews(item("mine", mine, "2011-10-01T10:00:00+02:00"), now))
+    }
+
+    @Test
+    fun `paged articles that are no news leave with the next refresh, and an old cache loses its pages once`() {
+        val first = googleItem("first", "Die Meldung der ersten Seite von heute", "a.de")
+        val previous = TopicNews(
+            "ki", "2026-10-29T08:00:00+01:00",
+            listOf(first, paged("p1", "2026-10-27T10:00:00+01:00"), paged("stray", "2011-10-01T10:00:00+02:00"), paged("wiki", "2026-10-26T10:00:00+01:00").copy(publisherDomain = "de.wikipedia.org")),
+        )
+        val merged = NewsRepository.merge("ki", previous, listOf(ok(gn, first)), now)
+        assertEquals(listOf("first", "p1"), merged.items.map { it.id })
+        assertEquals(TopicNews.FORMAT, merged.format)
+
+        // Pages read by an earlier version were padded with pages from outside their window: they all go when the cache is read.
+        assertEquals(0, previous.format)
+        val upgraded = NewsRepository.upgraded(previous)
+        assertEquals(listOf("first"), upgraded.items.map { it.id })
+        assertEquals(TopicNews.FORMAT, upgraded.format)
+        // What this version wrote stays as it is.
+        assertEquals(merged, NewsRepository.upgraded(merged))
+        val (grown, added) = NewsRepository.appendPage("ki", merged, listOf(paged("p2", "2026-10-24T10:00:00+02:00")), now)
+        assertEquals(1, added)
+        assertEquals(grown, NewsRepository.upgraded(grown))
     }
 
     @Test
@@ -158,16 +212,35 @@ class NewsRepositoryMergeTest {
     }
 
     @Test
+    fun `the same agency headline from several publishers shows once, soft hyphens or not`() {
+        // Seen three times in a row (15.11.2026): PZ-news.de, Die Rheinpfalz, SZ.de – one of them with soft hyphens in the words.
+        val pz = googleItem("pz", "Iran greift Ziele in Bahrain mit Drohnen an", "pz-news.de")
+        val rheinpfalz = googleItem("rp", "Iran greift Zie­le in Bah­rain mit Droh­nen an", "rheinpfalz.de")
+        val sz = googleItem("sz", "Iran greift Ziele in Bahrain mit Drohnen an", "sueddeutsche.de")
+        assertEquals(listOf("pz"), NewsRepository.dedupe(listOf(pz, rheinpfalz, sz)).map { it.id })
+        assertEquals("iran greift ziele in bahrain mit drohnen an", NewsRepository.normalizeText(rheinpfalz.headline))
+        assertEquals(NewsRepository.headlineKey(pz), NewsRepository.headlineKey(rheinpfalz))
+        // Another publisher's own wording of the story stays a card of its own.
+        val welt = googleItem("welt", "Nahost: Iran greift Ziele in Bahrain mit Drohnen an – USA drohen", "welt.de")
+        assertEquals(listOf("pz", "welt"), NewsRepository.dedupe(listOf(pz, welt)).map { it.id })
+    }
+
+    @Test
     fun `a page of older articles keeps to its days`() {
         val window = GoogleNews.DateWindow(LocalDate.of(2026, 10, 20), LocalDate.of(2026, 10, 23))
+        // What Google News added to the windows of the headline search when it answered loosely (15.11.2026).
         val page = listOf(
             paged("in", "2026-10-21T08:00:00+02:00"),
-            // Time zones and updated stories: two days of slack.
+            // Time zones and updated stories: two days of slack on either side.
             paged("edge", "2026-10-18T12:00:00+02:00"),
-            paged("stray", "2026-04-02T08:00:00+02:00"),
+            paged("late", "2026-10-25T20:00:00+02:00"),
+            paged("stray", "2026-04-30T08:00:00+02:00"),
+            paged("ancient", "2011-09-30T08:00:00+02:00"),
+            paged("newer", "2026-11-09T08:00:00+01:00"),
+            paged("wiki", "2026-10-21T09:00:00+02:00").copy(publisherDomain = "de.wikipedia.org"),
             paged("undated", null),
         )
-        assertEquals(listOf("in", "edge", "undated"), NewsRepository.inWindow(page, window).map { it.id })
+        assertEquals(listOf("in", "edge", "late", "undated"), NewsRepository.pageOf(page, window).map { it.id })
     }
 
     @Test

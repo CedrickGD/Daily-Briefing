@@ -62,6 +62,9 @@ class SearchQueryTest {
         assertTrue(etf.matchesAll("Citi empfiehlt Kunden Bitcoin-ETFs trotz Abflüssen", ""))
         // Accents and case fold.
         assertTrue(SearchQuery.parse("borse").matchesAll("Börse: DAX auf Rekordhoch", ""))
+        // Soft hyphens and zero-width characters in a headline do not split its words.
+        assertEquals("iran greift ziele in bahrain an", SearchQuery.fold("Iran greift Zie­le in Bah­rain​ an"))
+        assertEquals(SearchQuery.fold("Bundestagswahl"), SearchQuery.fold("Bundes­tags­wahl"))
         // Short words are exact: "US" is not in "uses".
         assertFalse(SearchQuery.parse("US").matchesAll("Everyone uses it", ""))
     }

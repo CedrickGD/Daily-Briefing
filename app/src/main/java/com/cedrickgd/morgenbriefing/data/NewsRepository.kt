@@ -151,7 +151,8 @@ class NewsRepository(
                 Log.w(TAG, "News cache unreadable", e)
                 emptyMap()
             }
-            _state.update { s -> s.copy(topics = cached + s.topics, warmed = true) }
+            val topics = cached.mapValues { upgraded(it.value) }
+            _state.update { s -> s.copy(topics = topics + s.topics, warmed = true) }
         }
     }
 
@@ -211,6 +212,14 @@ class NewsRepository(
      * [MAX_HISTORY_DAYS] back). Returns whether anything
      * new came; false at the end of the list, for topics without a search (own feeds only)
      * and when Google News is not reachable (try again later). [loadOlder] tells these apart.
+     *
+     * The windows are asked without `-site:` exclusions. With them Google News answers loosely:
+     * a hundred results whatever the window says, among them pages that are no news and far
+     * outside it – of nine windows of the headline search, each read both ways on 15.11.2026,
+     * eight came back with 1 to 42 hits older than the window (Wikipedia articles dated 2011,
+     * university, job and shop pages) and up to 18 newer ones; without exclusions not one was
+     * outside. Walled sites go by domain afterwards ([readable]), and what still lies outside
+     * the window is dropped ([pageOf]).
      */
     suspend fun loadMore(topicId: String, settings: AppSettings): Boolean = loadOlder(topicId, settings) == MoreResult.GREW
 
@@ -242,7 +251,6 @@ class NewsRepository(
         var cursor = synchronized(cursors) { cursors[topicId] }?.takeIf { it.paging == paging }
             ?: PageCursor(paging, before = initialCursor(previous, paging, today), days = FIRST_WINDOW_DAYS)
         val blocked = blockedDomains().toSet()
-        val exclusions = TopicSources.searchExclusions(topicId, settings, paging.edition, blocked)
         repeat(MAX_EMPTY_WINDOWS) {
             if (cursor.before.isBefore(today.minusDays(MAX_HISTORY_DAYS))) {
                 remember(topicId, cursor)
@@ -253,7 +261,7 @@ class NewsRepository(
             val source = FeedSource(
                 id = paging.sourceId + PAGE_SUFFIX,
                 name = GoogleNews.SOURCE_NAME,
-                url = GoogleNews.searchUrl(GoogleNews.buildQuery(paging.query, exclusions, window), paging.edition),
+                url = GoogleNews.searchUrl(GoogleNews.buildQuery(paging.query, window = window), paging.edition),
                 topicId = topicId,
                 kind = SourceKind.GOOGLE_NEWS,
                 edition = paging.edition.key,
@@ -270,7 +278,7 @@ class NewsRepository(
             // Refreshes wait for this lock before they publish, so the topic is still as read here.
             val current = _state.value.topics[topicId] ?: previous
             val (merged, added) = withContext(compute) {
-                val page = inWindow(if (settings.readableOnly) readable(fetched, blocked) else fetched, window)
+                val page = pageOf(if (settings.readableOnly) readable(fetched, blocked) else fetched, window)
                 appendPage(topicId, current, page, clock().toInstant(), resolvedUrl)
             }
             // A thin window widens the next window; a full one keeps it.
@@ -499,8 +507,19 @@ class NewsRepository(
         /** First path segments of rubric and topic pages (`zdfheute.de/thema/sachsen-news-100.html`). */
         private val INDEX_SEGMENTS = setOf("thema", "themen", "topic", "topics", "tag", "tags")
 
-        /** A page of older articles may reach this far before its window (time zones, a story updated since). */
+        /** A page of older articles may reach this far beyond its window (time zones, a story updated since). */
         private const val WINDOW_SLACK_DAYS = 2L
+
+        /**
+         * No list holds anything older: the endless lists page [MAX_HISTORY_DAYS] back, the last
+         * window may start [MAX_WINDOW_DAYS] before that, and a page may reach
+         * [WINDOW_SLACK_DAYS] beyond its window. What is older was never asked for – a stray hit
+         * of a search ("Alaska - Wikipedia", dated 2011, at the end of "Schlagzeilen").
+         */
+        internal val NEVER_OLDER: Duration = Duration.ofDays(MAX_HISTORY_DAYS + MAX_WINDOW_DAYS + WINDOW_SLACK_DAYS)
+
+        /** Reference works Google News lists among its search results: never news, whatever the date. */
+        private val REFERENCE_SITES = setOf("wikipedia.org", "wikimedia.org", "wiktionary.org", "wikidata.org")
 
         /** Articles of a failed source are kept from the last fetch for this long. */
         private val KEEP_FAILED_FOR: Duration = Duration.ofDays(3)
@@ -519,10 +538,11 @@ class NewsRepository(
         /**
          * Merges fetch results into the topic's articles: failed sources keep what they delivered
          * before ([previous], up to [KEEP_FAILED_FOR]), articles [loadMore] appended stay while
-         * they still join the topic's Google News first page ([pagedToKeep]), the leftovers of
-         * publishers' feeds go ([current]), articles of [blocked] sites go (except from feeds the user added: the user chose them), the same
-         * story shows once ([dedupe]), the newest article comes first and undated ones follow the
-         * dated ones. A source's status counts the articles of it that can show. Pure.
+         * they still join the topic's Google News first page ([pagedToKeep]), what a feed only
+         * drags along goes ([current], [isNoNews]), articles of [blocked] sites go (except from
+         * feeds the user added: the user chose them), the same story shows once ([dedupe]), the
+         * newest article comes first and undated ones follow the dated ones. A source's status
+         * counts the articles of it that can show. Pure.
          */
         internal fun merge(
             topicId: String,
@@ -546,7 +566,7 @@ class NewsRepository(
             }
             val items = perSource.flatMap { it.second }.toMutableList()
             results.filter { it.source.isGoogleNews }.forEach { result ->
-                val paged = pagedToKeep(result, before)
+                val paged = pagedToKeep(result, before).filterNot { isNoNews(it, now) }
                 items += if (blocked == null) paged else readable(paged, blocked)
             }
             // A round in which no source answered is not a fetch: the topic stays as old as it was,
@@ -557,8 +577,23 @@ class NewsRepository(
                 fetchedAt = if (reached || previous == null) RssDates.format(now) else previous.fetchedAt,
                 items = newestFirst(dedupe(items, resolved)).take(MAX_PER_TOPIC),
                 sources = statuses,
+                format = TopicNews.FORMAT,
             )
         }
+
+        /**
+         * A cached topic as this version reads it. The articles earlier versions paged in
+         * ([TopicNews.format] below 1) were asked for with `-site:` exclusions, which made Google
+         * News pad every page with pages that are no news and far outside its window (see
+         * [loadMore]); nothing tells those from the real ones, so they all go once and the
+         * endless list starts again from the first page.
+         */
+        internal fun upgraded(news: TopicNews): TopicNews =
+            if (news.format >= TopicNews.FORMAT) {
+                news
+            } else {
+                news.copy(items = news.items.filterNot { it.sourceId.endsWith(PAGE_SUFFIX) }, format = TopicNews.FORMAT)
+            }
 
         /**
          * The paged articles of the Google News source of [result] that stay. When the source
@@ -602,23 +637,41 @@ class NewsRepository(
             val merged = newestFirst(dedupe(before + page, resolved)).take(MAX_PER_TOPIC)
             val known = before.mapTo(HashSet()) { it.id }
             val added = merged.count { it.id !in known }
-            val news = previous?.copy(items = merged) ?: TopicNews(topicId, RssDates.format(now), merged)
+            val news = previous?.copy(items = merged, format = TopicNews.FORMAT)
+                ?: TopicNews(topicId, RssDates.format(now), merged, format = TopicNews.FORMAT)
             return news to added
         }
 
         /**
-         * What [source] delivered without the leftovers of a publisher's feed: rubric and topic
-         * pages ([isIndexPage]) and articles older than [STALE_AFTER] – such a feed lists them
-         * among today's news, and at the end of an endless list they read as a dead end
-         * ("Nachrichten aus Sachsen", 800 days old). A feed with nothing newer keeps what it has
-         * (a quiet desk is not stale) and undated articles stay. Google News keeps everything (a
-         * small town's place page is months deep, and paging asks for old articles on purpose),
-         * and so do the feeds the user added. Pure.
+         * What [source] delivered (a first page: a publisher's feed, Google News' top stories, a
+         * section, a place page or a search) without what it only drags along:
+         *
+         * - what is no news at all ([isNoNews]: rubric pages, reference works, anything older
+         *   than paging ever reaches), and
+         * - articles older than [STALE_AFTER] – a publisher's feed lists them among today's news
+         *   ("Nachrichten aus Sachsen", 800 days old), a Google News search answers by relevance
+         *   and mixes in product and help pages of years ago (7 of the 100 answers of the "KI"
+         *   search, 15.11.2026). Older articles belong to the endless list, which asks for them
+         *   day by day. A source with nothing newer keeps what it has: a quiet desk or a small
+         *   town's place page is not stale.
+         *
+         * Undated articles stay, and so does everything of the feeds the user added. Pure.
          */
         internal fun current(source: FeedSource, items: List<NewsItem>, now: Instant): List<NewsItem> {
-            if (source.isGoogleNews || source.isCustom) return items
-            val articles = items.filterNot { isIndexPage(it.url) }
+            if (source.isCustom) return items
+            val articles = items.filterNot { isNoNews(it, now) }
             return articles.filterNot { isOlderThan(it.publishedAt, now, STALE_AFTER) }.ifEmpty { articles }
+        }
+
+        /**
+         * Whether [item] is no news whatever feed or page brought it: a rubric or topic page of
+         * a site ([isIndexPage]), an entry of a reference work ([REFERENCE_SITES]), or older than
+         * any list reaches ([NEVER_OLDER]). Not for the feeds the user added. Pure.
+         */
+        internal fun isNoNews(item: NewsItem, now: Instant): Boolean {
+            if (item.fromUserFeed) return false
+            val site = item.publisherDomain.ifEmpty { GoogleNews.domainOf(item.url) }
+            return isIndexPage(item.url) || KnownWalls.matches(site, REFERENCE_SITES) || isOlderThan(item.publishedAt, now, NEVER_OLDER)
         }
 
         /** Whether [url] is a rubric or topic page of a site, not an article (by its first path segment, [INDEX_SEGMENTS]). */
@@ -626,14 +679,21 @@ class NewsRepository(
             url.toHttpUrlOrNull()?.pathSegments?.firstOrNull()?.lowercase() in INDEX_SEGMENTS
 
         /**
-         * [page] without what lies before [window] (by more than [WINDOW_SLACK_DAYS]): should a
-         * search with a date window return a stray old hit, it would make the list look read
-         * back to it ([initialCursor] continues from the oldest paged article). Undated articles
-         * stay. Pure.
+         * The articles of a page of older ones ([fetched], asked for [window]): those dated
+         * within the window, give or take [WINDOW_SLACK_DAYS], and no reference works. Should
+         * Google News answer loosely after all (see [loadMore]), what it adds from outside the
+         * window never reaches a list: an old stray would make the list look read back to it
+         * ([initialCursor] continues from the oldest paged article) and stand at its very end, a
+         * newer one would be appended below older stories. Undated articles stay. Pure.
          */
-        internal fun inWindow(page: List<NewsItem>, window: GoogleNews.DateWindow): List<NewsItem> {
+        internal fun pageOf(fetched: List<NewsItem>, window: GoogleNews.DateWindow): List<NewsItem> {
             val earliest = window.after.minusDays(WINDOW_SLACK_DAYS).atStartOfDay(BERLIN).toInstant()
-            return page.filter { item -> parseInstantOrNull(item.publishedAt)?.let { it >= earliest } ?: true }
+            val latest = window.before.plusDays(WINDOW_SLACK_DAYS + 1).atStartOfDay(BERLIN).toInstant()
+            return fetched.filter { item ->
+                val site = item.publisherDomain.ifEmpty { GoogleNews.domainOf(item.url) }
+                !KnownWalls.matches(site, REFERENCE_SITES) &&
+                    (parseInstantOrNull(item.publishedAt)?.let { it >= earliest && it < latest } ?: true)
+            }
         }
 
         /**
