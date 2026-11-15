@@ -85,12 +85,15 @@ class VerifiedListsTest {
     fun `an endless list verifies the next candidates only while few verified ones lie ahead`() {
         val waiting = (1..40).map { item("w$it") }
         val shown = (1..10).map { "s$it" }
-        // On screen: s2..s4 – six verified below, fourteen missing: those plus a few spare.
-        assertEquals((1..17).map { "w$it" }, ids(verifyAhead(shown, listOf("s2", "s3", "s4"), waiting)))
-        // Twenty and more ready below the screen: nothing more is verified (no data spent on what nobody scrolls to).
-        assertTrue(verifyAhead((1..30).map { "s$it" }, listOf("s2", "s3"), waiting).isEmpty())
-        // An empty list (only its intro on screen): the first twenty.
+        // On screen: s2..s4 – six verified below, the rest missing: those plus a few spare.
+        val missing = VERIFY_AHEAD - 6
+        assertEquals((1..missing + VERIFY_EXTRA).map { "w$it" }, ids(verifyAhead(shown, listOf("s2", "s3", "s4"), waiting)))
+        // Enough ready below the screen: nothing more is verified (no data spent on what nobody scrolls to).
+        assertTrue(verifyAhead((1..VERIFY_AHEAD + 3).map { "s$it" }, listOf("s2", "s3"), waiting).isEmpty())
+        // An empty list (only its intro on screen): the first ones, as many as are kept ready.
         assertEquals((1..VERIFY_AHEAD).map { "w$it" }, ids(verifyAhead(emptyList(), emptyList(), waiting)))
+        // Three flings' worth is kept ready, and never more checks than the prefetcher queues.
+        assertTrue(VERIFY_AHEAD in 30..40)
         assertTrue(verifyAhead(shown, listOf("s10"), emptyList()).isEmpty())
     }
 

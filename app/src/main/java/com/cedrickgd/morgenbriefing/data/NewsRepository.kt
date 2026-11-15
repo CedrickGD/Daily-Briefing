@@ -17,6 +17,7 @@ import com.cedrickgd.morgenbriefing.data.news.PagingQuery
 import com.cedrickgd.morgenbriefing.data.news.RssDates
 import com.cedrickgd.morgenbriefing.data.news.SearchQuery
 import com.cedrickgd.morgenbriefing.data.news.SearchRanking
+import com.cedrickgd.morgenbriefing.data.news.StoryTwins
 import com.cedrickgd.morgenbriefing.data.news.TopicSources
 import com.cedrickgd.morgenbriefing.data.remote.FeedError
 import com.cedrickgd.morgenbriefing.data.remote.FeedException
@@ -37,6 +38,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
@@ -75,7 +77,8 @@ enum class MoreResult {
  * - [refresh] fetches the sources of the wanted topics in parallel (at most [PARALLEL_FETCHES]
  *   at a time) and publishes each topic as soon as its sources are in. A source that fails keeps
  *   the articles it delivered last time, so a newsroom that is down for a moment never empties a
- *   topic. The same story from several sources shows once ([dedupe]).
+ *   topic. The same story from several sources shows once ([dedupe]), and what a publisher's feed
+ *   only drags along – rubric pages, articles of months ago – is left out ([current]).
  * - [loadMore] makes a topic endless: it asks Google News for the next older days (a date window) and appends
  *   (up to [MAX_PER_TOPIC] articles per topic).
  * - [search] answers a query from Google News and the cached articles, page by page into the
@@ -267,7 +270,7 @@ class NewsRepository(
             // Refreshes wait for this lock before they publish, so the topic is still as read here.
             val current = _state.value.topics[topicId] ?: previous
             val (merged, added) = withContext(compute) {
-                val page = if (settings.readableOnly) readable(fetched, blocked) else fetched
+                val page = inWindow(if (settings.readableOnly) readable(fetched, blocked) else fetched, window)
                 appendPage(topicId, current, page, clock().toInstant(), resolvedUrl)
             }
             // A thin window widens the next window; a full one keeps it.
@@ -483,6 +486,22 @@ class NewsRepository(
         /** Headlines shorter than this are too generic to merge stories by ("Liveblog"). */
         private const val MIN_HEADLINE_KEY = 16
 
+        /**
+         * What a publisher's feed still lists after this long is no news. Measured on the German
+         * top feeds (15.11.2026): everything older was a rubric page or a house notice (ZDFheute:
+         * 25 of 205 items, 70 to 2579 days old – "Nachrichten aus Sachsen", "Fragen und
+         * Antworten", the lottery numbers), a rain radar and a programme page (tagesschau, 162
+         * and 571 days) or an evergreen feature (Deutsche Welle, 65 and 95 days); the articles
+         * of slow desks ended at 59 days.
+         */
+        internal val STALE_AFTER: Duration = Duration.ofDays(60)
+
+        /** First path segments of rubric and topic pages (`zdfheute.de/thema/sachsen-news-100.html`). */
+        private val INDEX_SEGMENTS = setOf("thema", "themen", "topic", "topics", "tag", "tags")
+
+        /** A page of older articles may reach this far before its window (time zones, a story updated since). */
+        private const val WINDOW_SLACK_DAYS = 2L
+
         /** Articles of a failed source are kept from the last fetch for this long. */
         private val KEEP_FAILED_FOR: Duration = Duration.ofDays(3)
 
@@ -500,8 +519,8 @@ class NewsRepository(
         /**
          * Merges fetch results into the topic's articles: failed sources keep what they delivered
          * before ([previous], up to [KEEP_FAILED_FOR]), articles [loadMore] appended stay while
-         * they still join the topic's Google News first page ([pagedToKeep]), articles of
-         * [blocked] sites go (except from feeds the user added: the user chose them), the same
+         * they still join the topic's Google News first page ([pagedToKeep]), the leftovers of
+         * publishers' feeds go ([current]), articles of [blocked] sites go (except from feeds the user added: the user chose them), the same
          * story shows once ([dedupe]), the newest article comes first and undated ones follow the
          * dated ones. A source's status counts the articles of it that can show. Pure.
          */
@@ -516,7 +535,7 @@ class NewsRepository(
             val before = previous?.items.orEmpty()
             val perSource = results.map { result ->
                 val delivered = if (result.error == null) {
-                    result.items
+                    current(result.source, result.items, now)
                 } else {
                     before.filter { item -> item.sourceId == result.source.id && !isOlderThan(item.publishedAt, now, KEEP_FAILED_FOR) }
                 }
@@ -588,27 +607,66 @@ class NewsRepository(
         }
 
         /**
-         * One article per story: the same id, the same (resolved) link, or the same headline once
-         * case, accents and punctuation are folded ([normalizeText]). Of a duplicate pair the
-         * publisher's own item wins over Google News', one with a picture or teaser over one
-         * without; the survivor keeps the position of the first. Pure.
+         * What [source] delivered without the leftovers of a publisher's feed: rubric and topic
+         * pages ([isIndexPage]) and articles older than [STALE_AFTER] – such a feed lists them
+         * among today's news, and at the end of an endless list they read as a dead end
+         * ("Nachrichten aus Sachsen", 800 days old). A feed with nothing newer keeps what it has
+         * (a quiet desk is not stale) and undated articles stay. Google News keeps everything (a
+         * small town's place page is months deep, and paging asks for old articles on purpose),
+         * and so do the feeds the user added. Pure.
+         */
+        internal fun current(source: FeedSource, items: List<NewsItem>, now: Instant): List<NewsItem> {
+            if (source.isGoogleNews || source.isCustom) return items
+            val articles = items.filterNot { isIndexPage(it.url) }
+            return articles.filterNot { isOlderThan(it.publishedAt, now, STALE_AFTER) }.ifEmpty { articles }
+        }
+
+        /** Whether [url] is a rubric or topic page of a site, not an article (by its first path segment, [INDEX_SEGMENTS]). */
+        internal fun isIndexPage(url: String): Boolean =
+            url.toHttpUrlOrNull()?.pathSegments?.firstOrNull()?.lowercase() in INDEX_SEGMENTS
+
+        /**
+         * [page] without what lies before [window] (by more than [WINDOW_SLACK_DAYS]): should a
+         * search with a date window return a stray old hit, it would make the list look read
+         * back to it ([initialCursor] continues from the oldest paged article). Undated articles
+         * stay. Pure.
+         */
+        internal fun inWindow(page: List<NewsItem>, window: GoogleNews.DateWindow): List<NewsItem> {
+            val earliest = window.after.minusDays(WINDOW_SLACK_DAYS).atStartOfDay(BERLIN).toInstant()
+            return page.filter { item -> parseInstantOrNull(item.publishedAt)?.let { it >= earliest } ?: true }
+        }
+
+        /**
+         * One article per story: the same id, the same (resolved) link, the same headline once
+         * case, accents and punctuation are folded ([normalizeText]), or the same publisher with
+         * nearly the same headline at nearly the same time ([StoryTwins]: a publisher's own feed
+         * and Google News word a headline a little differently now and then). Of a duplicate pair
+         * the publisher's own item wins over Google News', one with a picture or teaser over one
+         * without – and takes the picture or teaser only its twin carries. The survivor keeps the
+         * position of the first. Pure.
          */
         internal fun dedupe(items: List<NewsItem>, resolved: (String) -> String? = { null }): List<NewsItem> {
             val result = ArrayList<NewsItem>(items.size)
             val index = HashMap<String, Int>()
+            val twins = StoryTwins.Finder()
             for (item in items) {
                 val keys = dedupeKeys(item, resolved)
-                val hit = keys.firstNotNullOfOrNull { index[it] }
+                val hit = keys.firstNotNullOfOrNull { index[it] } ?: twins.find(item)
                 if (hit == null) {
                     result += item
                     keys.forEach { index[it] = result.lastIndex }
+                    twins.add(item, result.lastIndex)
                 } else {
-                    if (quality(item) > quality(result[hit])) result[hit] = item
+                    result[hit] = StoryTwins.merged(result[hit], item)
                     keys.forEach { index.putIfAbsent(it, hit) }
                 }
             }
             return result
         }
+
+        /** The key stories with the same headline share; null for a headline too short to tell ([MIN_HEADLINE_KEY]). */
+        internal fun headlineKey(item: NewsItem): String? =
+            StoryTwins.headline(item.headline).text.takeIf { it.length >= MIN_HEADLINE_KEY }
 
         private fun dedupeKeys(item: NewsItem, resolved: (String) -> String?): List<String> {
             val link = resolved(item.url) ?: item.url
@@ -619,9 +677,6 @@ class NewsRepository(
                 headline.takeIf { it.length >= MIN_HEADLINE_KEY }?.let { "h:$it" },
             )
         }
-
-        private fun quality(item: NewsItem): Int =
-            (if (item.aggregator == null) 4 else 0) + (if (item.image != null) 2 else 0) + (if (item.summary.isNotBlank()) 1 else 0)
 
         /** Lower case, accents and punctuation removed, single spaces: "„Börse: DAX-Rekord!“" → "borse dax rekord". */
         internal fun normalizeText(text: String): String = SearchQuery.fold(text)

@@ -5,11 +5,13 @@ import com.cedrickgd.morgenbriefing.data.model.FeedSource
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.SourceKind
 import com.cedrickgd.morgenbriefing.data.model.TopicNews
+import com.cedrickgd.morgenbriefing.data.news.GoogleNews
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
+import java.time.LocalDate
 
 class NewsRepositoryMergeTest {
 
@@ -93,8 +95,80 @@ class NewsRepositoryMergeTest {
         assertEquals(1, NewsRepository.readable(listOf(item("x", a, null, url = "https://www.zeit.de/x"), item("y", a, null)), setOf("zeit.de")).size)
     }
 
-    private fun paged(id: String, at: String) =
+    private fun paged(id: String, at: String?) =
         googleItem(id, "Eine ältere Meldung Nummer $id", "a.de", at = at).copy(sourceId = gn.id + NewsRepository.PAGE_SUFFIX)
+
+    @Test
+    fun `what a publisher's feed only drags along is left out`() {
+        // ZDFheute's feed on 15.11.2026: today's news, and rubric pages and house notices up to seven years old.
+        val zdf = FeedSource("zdfheute", "ZDFheute", "https://www.zdf.de/rss/zdf/nachrichten", "top")
+        fun zdf(id: String, at: String?, headline: String, path: String) = item(id, zdf, at, headline, url = "https://www.zdfheute.de/$path")
+        val delivered = listOf(
+            zdf("fresh", "2026-10-29T11:00:00+01:00", "Estland schließt Grenzübergänge zu Russland", "politik/estland-grenze-100.html"),
+            // 54 days: a slow desk's article is still an article.
+            zdf("slow", "2026-09-05T09:00:00+02:00", "Korrekturen und Richtigstellungen", "in-eigener-sache/korrekturen-104.html"),
+            zdf("notice", "2026-08-18T09:00:00+02:00", "Bettina Schausten bleibt ZDF-Chefredakteurin", "in-eigener-sache/schausten-100.html"),
+            zdf("rubric", "2024-08-20T09:00:00+02:00", "Nachrichten aus Sachsen", "thema/sachsen-news-100.html"),
+            zdf("faq", "2019-10-08T10:00:00+02:00", "Fragen und Antworten", "in-eigener-sache/fragen-und-antworten-114.html"),
+            // A rubric page is none whatever its date says.
+            zdf("index", "2026-10-28T09:00:00+01:00", "Nachrichten aus Sachsen-Anhalt", "thema/sachsen-anhalt-news-100.html"),
+            zdf("undated", null, "Ein Beitrag ohne Datum im Feed", "panorama/ohne-datum-100.html"),
+        )
+        val merged = NewsRepository.merge("top", null, listOf(ok(zdf, *delivered.toTypedArray())), now)
+        assertEquals(listOf("fresh", "slow", "undated"), merged.items.map { it.id })
+        assertEquals(3, merged.sources.single().count)
+        assertTrue(NewsRepository.isIndexPage("https://www.zdfheute.de/thema/aktuelle-lottozahlen-100.html"))
+        assertFalse(NewsRepository.isIndexPage("https://www.tagesschau.de/inland/innenpolitik/thema-des-tages-100.html"))
+        assertEquals(60, NewsRepository.STALE_AFTER.toDays())
+
+        // A quiet desk with nothing newer keeps what it has.
+        val quiet = listOf(item("q1", a, "2026-06-01T09:00:00+02:00"), item("q2", a, "2026-03-01T09:00:00+01:00"))
+        assertEquals(quiet, NewsRepository.current(a, quiet, now))
+        // Google News keeps old articles (a small town's place page, the stray hits paging counts on), and so does a feed the user added.
+        val mine = FeedSource("custom:1", "Mein Blog", "https://blog.example/feed", "ki", builtIn = false)
+        val mixed = listOf(item("new", mine, "2026-10-28T09:00:00+01:00"), item("old", mine, "2025-01-01T09:00:00+01:00", url = "https://blog.example/tag/old"))
+        assertEquals(mixed, NewsRepository.current(mine, mixed, now))
+        val found = listOf(googleItem("g1", "Eine neue Meldung von heute früh", "x.de"), googleItem("g2", "Eine alte Meldung vom Januar", "x.de", at = "2026-01-10T10:00:00+01:00"))
+        assertEquals(found, NewsRepository.current(gn, found, now))
+    }
+
+    @Test
+    fun `one publisher's article from its own feed and from Google News shows once`() {
+        val ntv = FeedSource("ntv-top", "n-tv", "https://www.n-tv.de/rss", "ki")
+        val own = item("own", ntv, "2026-10-29T10:00:00+01:00", "Rekruten aus aller Welt: Russland lockt Ausländer mit Fake-Jobs in den Krieg", url = "https://www.n-tv.de/politik/rekruten-article1.html")
+            .copy(publisherDomain = "n-tv.de")
+        // Google News words it a little differently (no kicker) and dates it six minutes later.
+        val google = googleItem("g", "Russland lockt Ausländer mit Fake-Jobs in den Krieg", "n-tv.de", at = "2026-10-29T10:06:00+01:00")
+        assertEquals(listOf("own"), NewsRepository.dedupe(listOf(google, own)).map { it.id })
+        assertEquals(listOf("own"), NewsRepository.dedupe(listOf(own, google)).map { it.id })
+        // The survivor has no picture, its twin has one: it takes the twin's.
+        val picture = ArticleImage("https://img.n-tv.de/rekruten.jpg")
+        val survivor = NewsRepository.dedupe(listOf(own, google.copy(image = picture))).single()
+        assertEquals("own", survivor.id)
+        assertEquals(picture, survivor.image)
+        // Another publisher's article with nearly those words is another article.
+        val welt = googleItem("w", "Russland lockt Ausländer mit Fake-Jobs in den Krieg – so läuft es ab", "welt.de", at = "2026-10-29T10:06:00+01:00")
+        assertEquals(listOf("own", "w"), NewsRepository.dedupe(listOf(own, welt)).map { it.id })
+        // The same publisher two days later: a new article.
+        val later = google.copy(id = "later", url = "https://news.google.com/rss/articles/CBMilater?oc=5", publishedAt = "2026-10-31T10:06:00+01:00")
+        assertEquals(listOf("own", "later"), NewsRepository.dedupe(listOf(own, later)).map { it.id })
+        // In a merged topic: one card, at the publisher's place.
+        val merged = NewsRepository.merge("ki", null, listOf(ok(ntv, own), ok(gn, google)), now)
+        assertEquals(listOf("own"), merged.items.map { it.id })
+    }
+
+    @Test
+    fun `a page of older articles keeps to its days`() {
+        val window = GoogleNews.DateWindow(LocalDate.of(2026, 10, 20), LocalDate.of(2026, 10, 23))
+        val page = listOf(
+            paged("in", "2026-10-21T08:00:00+02:00"),
+            // Time zones and updated stories: two days of slack.
+            paged("edge", "2026-10-18T12:00:00+02:00"),
+            paged("stray", "2026-04-02T08:00:00+02:00"),
+            paged("undated", null),
+        )
+        assertEquals(listOf("in", "edge", "undated"), NewsRepository.inWindow(page, window).map { it.id })
+    }
 
     @Test
     fun `paged articles survive a refresh while their source belongs to the topic`() {

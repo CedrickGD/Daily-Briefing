@@ -108,6 +108,7 @@ import com.cedrickgd.morgenbriefing.ui.news.followSuggestion
 import com.cedrickgd.morgenbriefing.ui.news.forYouItems
 import com.cedrickgd.morgenbriefing.ui.news.invitesToDiscover
 import com.cedrickgd.morgenbriefing.ui.news.listTail
+import com.cedrickgd.morgenbriefing.ui.news.nearEnd
 import com.cedrickgd.morgenbriefing.ui.news.noteCardItem
 import com.cedrickgd.morgenbriefing.ui.news.rememberFeedActions
 import com.cedrickgd.morgenbriefing.ui.news.rememberListenController
@@ -397,9 +398,10 @@ private fun TodayContent(
         )
     }
 
-    // Every view is endless: reveal more whenever the end comes into view; once everything
-    // loaded is on screen, ask for older articles – a topic's own, or (the timeline behind
-    // "Neueste" and below the "Für dich" cards) those of the topics that reach back least far.
+    // Every view is endless: reveal more before the end comes into view; once everything loaded
+    // is revealed, ask for older articles well ahead of the end (nearEnd) – a topic's own, or (the
+    // timeline behind "Neueste" and below the "Für dich" cards) those of the topics that reach
+    // back least far.
     var pages by rememberSaveable(selectedKey) { mutableIntStateOf(1) }
     val topicId = (selected as? FeedFilter.OneTopic)?.topicId
     val total = when (selected) {
@@ -428,7 +430,7 @@ private fun TodayContent(
         snapshotFlow {
             val info = listState.layoutInfo
             (info.visibleItemsInfo.lastOrNull()?.index ?: 0) to info.totalItemsCount
-        }.filter { (last, count) -> count > 0 && last >= count - REVEAL_AHEAD }.first()
+        }.filter { (last, count) -> nearEnd(action, last, count) }.first()
         when (action) {
             EndAction.REVEAL -> pages++
             EndAction.LOAD_MORE -> if (topicId != null) currentCallbacks.onLoadMore(topicId) else currentCallbacks.onLoadOlder()
@@ -701,9 +703,6 @@ private fun TodayContent(
         )
     }
 }
-
-/** How close to the end (in items) the next page of an endless list is revealed. */
-private const val REVEAL_AHEAD = 4
 
 /** The list must rest this long before covers are looked up (a fling passes many stories). */
 private const val COVER_SETTLE_MS = 150L

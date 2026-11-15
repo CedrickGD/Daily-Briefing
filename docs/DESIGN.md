@@ -158,9 +158,12 @@ dem Entwurf, den der Besitzer gewählt hat):
   Themen von selbst ältere nach. **Ein Thema**: oben eine schmale Zeile
   „37 MELDUNGEN · STAND 07:12“ (bei Kategorien mit „Unterthemen von …“), darunter eine Glaskarte –
   erste Meldung groß, dann Zeilen –, endlos mit Nachladen älterer Meldungen (auch
-  „Schlagzeilen“). Nachgeladen wird ohne Knopf; ruhige Tage überspringt die App von selbst.
-  „Weiter zurück suchen“ erscheint nur, wenn das Laden scheitert (offline), „Das war's“ erst,
-  wenn es wirklich nichts Älteres mehr gibt.
+  „Schlagzeilen“). Nachgeladen wird ohne Knopf und früh – mehrere Bildschirme vor dem Ende, damit
+  ein Wischen nicht an der Lade-Zeile hält; ruhige Tage überspringt die App von selbst.
+  **Älteres hängt immer unten an**: keine Karte rutscht, während man liest; neu sortiert wird
+  erst beim Aktualisieren. Derselbe Artikel über zwei Feeds eines Verlags steht einmal da.
+  „Weiter zurück suchen“ erscheint nur, wenn das Laden scheitert (offline) oder Seite um Seite
+  nichts Vollständiges brachte, „Das war's“ erst, wenn es wirklich nichts Älteres mehr gibt.
   Lange Karten sind aus einzelnen Listen-Elementen gebaut (`glassCardPart`): nur das erste hat die
   oberen, nur das letzte die unteren Rundungen, die Kante läuft ohne Naht durch.
 * **Keine Knopfreihe unter den Meldungen.** Das ⋮-Menü (auch per langem Druck auf die Meldung)

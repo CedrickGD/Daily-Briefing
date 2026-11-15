@@ -96,14 +96,25 @@ internal fun <T> verifiedList(candidates: List<T>, key: String, verification: Ve
 /** The list key of "Neueste" (topic lists use their topic id). */
 internal const val LATEST_LIST = "~latest"
 
-/** Candidates verified beyond the last article on screen of an endless list. */
-internal const val VERIFY_AHEAD = 20
+/**
+ * Verified articles kept ready beyond the last one on screen of an endless list: about three
+ * flings' worth. With twenty, a few flings in a row reached the end of the verified stories and
+ * stopped at "Weitere Artikel werden geprüft …" each time – a check takes about a second, three
+ * run at a time. (The prefetcher keeps at most 40 checks waiting: stay below that.)
+ */
+internal const val VERIFY_AHEAD = 30
 
 /** A few more than strictly missing keep every load slot busy (some candidates turn out to be teasers). */
 internal const val VERIFY_EXTRA = 3
 
-/** Fewer unverified candidates than this left at the end of an endless list: ask for older articles. */
-internal const val VERIFY_LOW_WATER = 10
+/**
+ * Fewer unverified candidates than this left at the end of an endless list: ask for older
+ * articles – while a screenful of checks is still to do, not when the last one is done.
+ */
+internal const val VERIFY_LOW_WATER = 30
+
+/** Candidates "Für dich" verifies for its cards at a time. */
+internal const val FOR_YOU_VERIFY_CAP = 20
 
 /**
  * What an endless list verifies next: when fewer than [ahead] verified articles lie below the
@@ -139,7 +150,7 @@ internal fun forYouVerifyWindow(
     sections: List<SectionUi>,
     size: Int,
     firstVisible: Int,
-    cap: Int = VERIFY_AHEAD,
+    cap: Int = FOR_YOU_VERIFY_CAP,
     extra: Int = 1,
 ): List<NewsItem> {
     val start = firstVisible.coerceIn(0, (sections.size - 1).coerceAtLeast(0))
