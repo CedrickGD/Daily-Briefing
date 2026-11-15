@@ -332,9 +332,9 @@ class RssClient(
             val link = entry.link.trim()
             if (!link.startsWith("http", ignoreCase = true)) return null
             val publisher = entry.sourceName.trim()
-            val headline = GoogleNews.stripPublisher(entry.title, publisher)
-            if (headline.isEmpty() || GoogleNews.isQuotePage(headline)) return null
             val domain = GoogleNews.domainOf(entry.sourceUrl).ifEmpty { GoogleNews.domainOf(link).takeIf { it != GoogleNews.HOST }.orEmpty() }
+            val headline = GoogleNews.stripPublisher(entry.title, publisher, domain)
+            if (headline.isEmpty() || GoogleNews.isQuotePage(headline)) return null
             return NewsItem(
                 id = stableId(link),
                 headline = headline,

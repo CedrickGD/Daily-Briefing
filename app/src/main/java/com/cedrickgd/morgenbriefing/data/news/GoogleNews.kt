@@ -203,24 +203,56 @@ object GoogleNews {
      * The headline without the ` - Publisher` Google appends. With a known [publisher] only that
      * exact suffix goes (publishers like "LVZ - Leipziger Volkszeitung" contain the separator
      * themselves); without one the last ` - …` part goes when it is short enough to be a name.
+     *
+     * Some sites put their name into the page title themselves, and Google appends it once more:
+     * "Kreise: Koalition verschiebt Zuckersteuer - boerse.de - boerse.de", "Steuern:
+     * Existenzminimum wird angehoben - Politik - SZ.de - SZ.de", "… | BR.de - BR" (seen
+     * 15.11.2026). The name goes as often as it stands at the end – as [publisher] or as the
+     * site's [domain] – and with a name that stood there twice the desk in front of it
+     * ([DESKS]: "Politik", "Sport"), which only such page titles carry.
      */
-    fun stripPublisher(title: String, publisher: String): String {
+    fun stripPublisher(title: String, publisher: String, domain: String = ""): String {
         val clean = title.trim()
         val name = publisher.trim()
-        if (name.isNotEmpty()) {
-            for (separator in SEPARATORS) {
+        if (name.isEmpty()) {
+            val cut = clean.lastIndexOf(" - ")
+            return if (cut > 0 && clean.length - cut - 3 in 2..40) clean.substring(0, cut).trim() else clean
+        }
+        val names = listOf(name, domain.trim().removePrefix("www.")).filter { it.isNotEmpty() }.distinct()
+        var rest = clean
+        var stripped = 0
+        while (true) {
+            val shorter = withoutSuffix(rest, names) ?: break
+            rest = shorter
+            stripped++
+        }
+        return if (stripped >= 2) withoutSuffix(rest, DESKS) ?: rest else rest
+    }
+
+    /** [title] without one of [suffixes] at its end (after a separator), or null when it ends in none or would be empty. */
+    private fun withoutSuffix(title: String, suffixes: Collection<String>): String? {
+        for (separator in SEPARATORS) {
+            for (name in suffixes) {
                 val suffix = separator + name
-                if (clean.endsWith(suffix, ignoreCase = true) && clean.length > suffix.length) {
-                    return clean.dropLast(suffix.length).trim()
+                if (title.endsWith(suffix, ignoreCase = true) && title.length > suffix.length) {
+                    return title.dropLast(suffix.length).trim().takeIf { it.isNotEmpty() }
                 }
             }
-            return clean
         }
-        val cut = clean.lastIndexOf(" - ")
-        return if (cut > 0 && clean.length - cut - 3 in 2..40) clean.substring(0, cut).trim() else clean
+        return null
     }
 
     private val SEPARATORS = listOf(" - ", " – ", " | ")
+
+    /** The desks sites name in their page titles between the headline and their own name ("… - Politik - SZ.de"). */
+    private val DESKS = listOf(
+        "Politik", "Wirtschaft", "Sport", "Panorama", "Kultur", "Wissen", "Wissenschaft", "Digital", "Technik", "Finanzen",
+        "Börse", "Nachrichten", "News", "Aktuelles", "Lokales", "Regional", "Welt", "Ausland", "Inland", "Gesellschaft",
+        "Meinung", "Gesundheit", "Auto", "Reise", "Leben", "Unterhaltung", "Medien", "Bayern", "München",
+        "Politics", "Business", "World", "Sports", "Tech", "Technology", "Science", "Health", "Opinion", "Entertainment",
+        "Markets", "Economy", "Politique", "Économie", "Monde", "International", "Société", "Culture", "Sciences",
+        "Política", "Economía", "Internacional", "Deportes", "Sociedad", "Cultura", "Politica", "Economia", "Esteri", "Cronaca",
+    )
 
     /**
      * The host of [url] without `www.` (`https://www.bbc.co.uk/x` → `bbc.co.uk`), lower case;
