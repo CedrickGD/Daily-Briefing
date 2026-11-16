@@ -1,5 +1,8 @@
 package com.cedrickgd.morgenbriefing.ui.article
 
+import android.content.Context
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -22,36 +25,44 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Cookie
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.GppBad
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,14 +74,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -78,14 +91,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cedrickgd.morgenbriefing.data.model.ArticleBlock
 import com.cedrickgd.morgenbriefing.data.model.ArticleImage
+import com.cedrickgd.morgenbriefing.data.model.NewsItem
+import com.cedrickgd.morgenbriefing.data.model.ReaderSettings
 import com.cedrickgd.morgenbriefing.domain.Fmt
+import com.cedrickgd.morgenbriefing.domain.ItemEdition
+import com.cedrickgd.morgenbriefing.i18n.FeedStrings
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
+import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.i18n.readerStrings
 import com.cedrickgd.morgenbriefing.listen
 import com.cedrickgd.morgenbriefing.listen.ListenMiniPlayerDefaults
 import com.cedrickgd.morgenbriefing.ui.components.GlassIconButton
 import com.cedrickgd.morgenbriefing.ui.components.GlassPillButton
+import com.cedrickgd.morgenbriefing.ui.components.GlassRoundButton
 import com.cedrickgd.morgenbriefing.ui.components.LoadingSkeleton
 import com.cedrickgd.morgenbriefing.ui.glass.GlassLevel
 import com.cedrickgd.morgenbriefing.ui.glass.GlassShapes
@@ -96,6 +115,7 @@ import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleRoute
 import com.cedrickgd.morgenbriefing.ui.news.ArticleVisual
 import com.cedrickgd.morgenbriefing.ui.news.TopicColors
+import com.cedrickgd.morgenbriefing.ui.news.copyLink
 import com.cedrickgd.morgenbriefing.ui.news.rememberTopicColors
 import com.cedrickgd.morgenbriefing.util.rememberLinkActions
 import com.cedrickgd.morgenbriefing.util.statusBarTop
@@ -106,7 +126,7 @@ private val TextGutter = 16.dp
 /** The failure panel reaches closer to the edge than the text (the card edge); the picture is edge to edge. */
 private val ImageGutter = 10.dp
 
-/** The floating controls (back, listen, share, browser) sit this far from the edge. */
+/** The floating controls (back, "A", listen, ⋮) sit this far from the edge. */
 private val ControlsGutter = 10.dp
 
 /** Height of the controls' row under the status bar; the bar behind them is status bar + this. */
@@ -122,9 +142,10 @@ private val ControlsBarCorner = 24.dp
  * The article reader (docs/DESIGN.md §7), short and clean like Google News or Perplexity: the
  * article's text on a calm, opaque surface — no ads, no cookie banners, no navigation, no source
  * lines, and one picture: the card's (or the page's lead picture) edge-to-edge under the status
- * bar. Then the time, the headline in serif, the teaser and the extracted body. Floating glass
- * controls: back, "Zuhören" (reads the full text), share and "Im Browser öffnen" as the way out
- * when a page cannot be read. Over the picture they float alone; once the text reaches them, a
+ * bar. Then the time, the headline in serif, the teaser and the text, in the size, font and line
+ * spacing of "Darstellung". Floating glass controls: back, "A" (the sheet "Darstellung"),
+ * "Zuhören" (reads the full text) and ⋮ (share, copy the link, "Im Browser öffnen" – the way out
+ * when a page cannot be read). Over the picture they float alone; once the text reaches them, a
  * frosted bar behind them takes the status bar and the controls' row, so the text never runs
  * under the clock or the buttons.
  */
@@ -136,6 +157,8 @@ fun ArticleScreen(
 ) {
     val viewModel: ArticleViewModel = viewModel(key = "article:${route.url}", factory = ArticleViewModel.factory(route))
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val appearance by viewModel.appearance.collectAsStateWithLifecycle()
+    var appearanceOpen by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val links = rememberLinkActions()
     val listen = remember(context) { context.listen }
@@ -149,6 +172,7 @@ fun ArticleScreen(
     val openExternal = { links.open(state.item.url) }
     val common = commonStrings()
     val reader = readerStrings()
+    val feed = feedStrings()
 
     BoxWithConstraints(
         modifier
@@ -163,6 +187,8 @@ fun ArticleScreen(
         val textUnderControls by remember(listState, barAfterPx) {
             derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > barAfterPx }
         }
+        val look = appearance
+        val type = rememberReaderType(look?.reader ?: ReaderSettings(), content?.language?.ifBlank { null } ?: ItemEdition.languageOf(state.item))
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -171,26 +197,35 @@ fun ArticleScreen(
                 .glassContent(),
             contentPadding = PaddingValues(bottom = navBottom + 32.dp + playerLift),
         ) {
-            item(key = "hero") { Hero(state, heroHeight) }
-            item(key = "head") { Head(state) }
+            item(key = "hero") { Hero(state, heroHeight, showImage = look?.showImages ?: true) }
             when {
+                // Until "Darstellung" is read the text waits (a frame or two) instead of jumping from one size to another.
+                look == null -> Unit
+
                 content != null -> {
+                    item(key = "head") { Head(state, type) }
                     // The text only: ArticleCleaner.arrange took every picture and caption out (the one picture is on top).
                     itemsIndexed(content.blocks, key = { index, _ -> "block$index" }, contentType = { _, block -> block.type }) { _, block ->
-                        BlockView(block)
+                        BlockView(block, type)
                     }
                     item(key = "end") { EndNote(state, onOpenExternal = openExternal) }
                 }
 
-                state.loading -> item(key = "skeleton") { BodySkeleton() }
+                state.loading -> {
+                    item(key = "head") { Head(state, type) }
+                    item(key = "skeleton") { BodySkeleton() }
+                }
 
-                else -> item(key = "failed") {
-                    LoadFailed(
-                        failure = state.failure,
-                        accent = rememberTopicColors(state.topic),
-                        onRetry = viewModel::retry,
-                        onOpenExternal = openExternal,
-                    )
+                else -> {
+                    item(key = "head") { Head(state, type) }
+                    item(key = "failed") {
+                        LoadFailed(
+                            failure = state.failure,
+                            accent = rememberTopicColors(state.topic),
+                            onRetry = viewModel::retry,
+                            onOpenExternal = openExternal,
+                        )
+                    }
                 }
             }
         }
@@ -199,6 +234,7 @@ fun ArticleScreen(
             solid = textUnderControls,
             back = { ReaderControl(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = common.back, onClick = onBack) },
         ) {
+            AppearanceControl(contentDescription = reader.appearance, onClick = { appearanceOpen = true })
             val speakingThis = listeningThis && listenState.speaking
             ReaderControl(
                 icon = if (speakingThis) Icons.Rounded.Pause else Icons.Rounded.Headphones,
@@ -207,9 +243,69 @@ fun ArticleScreen(
                     if (listeningThis) listen.pauseOrResume() else listen.play(state.item, state.content?.text)
                 },
             )
-            ReaderControl(Icons.Rounded.Share, contentDescription = common.share, onClick = { links.shareArticle(state.item) })
-            ReaderControl(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = common.openInBrowser, onClick = openExternal)
+            ReaderOverflow(
+                onShare = { links.shareArticle(state.item) },
+                onCopyLink = { copyArticleLink(context, state.item, feed) },
+                onOpenExternal = openExternal,
+            )
         }
+
+        val shown = appearance
+        if (appearanceOpen && shown != null) {
+            ReaderAppearanceSheet(
+                appearance = shown,
+                onPreview = viewModel::previewReader,
+                onChange = viewModel::setReader,
+                onShowImages = viewModel::setShowImages,
+                onDismiss = { appearanceOpen = false },
+            )
+        }
+    }
+}
+
+/**
+ * ⋮ in the reader's bar: what used to be three buttons up there – share, copy the link and "Im
+ * Browser öffnen" (also the way out when the page cannot be read), in the feed's menu style.
+ */
+@Composable
+private fun ReaderOverflow(onShare: () -> Unit, onCopyLink: () -> Unit, onOpenExternal: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val common = commonStrings()
+    val colors = MaterialTheme.colorScheme
+    Box {
+        ReaderControl(Icons.Rounded.MoreVert, contentDescription = feedStrings().moreOptions, onClick = { open = true })
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = colors.surfaceContainerHigh,
+            tonalElevation = 0.dp,
+            shadowElevation = 12.dp,
+        ) {
+            OverflowEntry(common.share, Icons.Rounded.Share) { open = false; onShare() }
+            OverflowEntry(common.copyLink, Icons.Rounded.ContentCopy) { open = false; onCopyLink() }
+            OverflowEntry(common.openInBrowser, Icons.AutoMirrored.Rounded.OpenInNew) { open = false; onOpenExternal() }
+        }
+    }
+}
+
+@Composable
+private fun OverflowEntry(label: String, icon: ImageVector, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        onClick = onClick,
+        leadingIcon = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+        modifier = Modifier.heightIn(min = 48.dp),
+    )
+}
+
+/** Puts the article's link on the clipboard (as the feed's menu does); Android 13+ confirms it itself. */
+private fun copyArticleLink(context: Context, item: NewsItem, strings: FeedStrings) {
+    val copied = copyLink(context, item.headline.ifBlank { strings.clipLabel }, item.url)
+    if (!copied) {
+        Toast.makeText(context, strings.copyFailed, Toast.LENGTH_SHORT).show()
+    } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        Toast.makeText(context, strings.linkCopied, Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -291,10 +387,32 @@ private fun ReaderControl(icon: ImageVector, contentDescription: String, onClick
     )
 }
 
+/**
+ * "A" in the reader's bar: a serif "Aa" (as the reader's text-size button had it in version 1) on
+ * the same glass as the other controls; it opens "Darstellung".
+ */
 @Composable
-private fun Hero(state: ArticleUiState, height: Dp) {
+private fun AppearanceControl(contentDescription: String, onClick: () -> Unit) {
+    GlassRoundButton(
+        contentDescription = contentDescription,
+        onClick = onClick,
+        level = GlassLevel.Regular,
+        container = MaterialTheme.colorScheme.surfaceContainerHighest,
+        floating = true,
+    ) {
+        Text(
+            text = "Aa",
+            style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold, fontSize = 18.sp),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.clearAndSetSemantics { },
+        )
+    }
+}
+
+@Composable
+private fun Hero(state: ArticleUiState, height: Dp, showImage: Boolean) {
     val item = state.item
-    // The feed's picture, else the page's lead picture (ArticleUiState.hero) — through the same loader and cover.
+    // The article's one picture (ArticleUiState.hero: the card's, else the page's) — through the same loader and cover.
     val visualItem = remember(item, state.hero) {
         val url = state.hero
         if (item.image == null && url != null) item.copy(image = ArticleImage(url)) else item
@@ -309,7 +427,7 @@ private fun Hero(state: ArticleUiState, height: Dp) {
             item = visualItem,
             topic = state.topic,
             modifier = Modifier.fillMaxSize(),
-            showImage = state.showImages,
+            showImage = showImage,
             contentDescription = visualItem.image?.alt?.ifBlank { null },
             showCoverBadge = true,
         )
@@ -333,7 +451,7 @@ private fun Hero(state: ArticleUiState, height: Dp) {
 
 /** Time, headline and teaser – no source: the newsroom's name is not the story. */
 @Composable
-private fun Head(state: ArticleUiState) {
+private fun Head(state: ArticleUiState, type: ReaderType) {
     val colors = MaterialTheme.colorScheme
     val item = state.item
     val headline = item.headline.ifBlank { state.content?.title.orEmpty() }
@@ -349,30 +467,21 @@ private fun Head(state: ArticleUiState) {
             Spacer(Modifier.height(10.dp))
         }
         if (headline.isNotBlank()) {
-            Text(text = headline, style = MaterialTheme.typography.headlineLarge, color = colors.onSurface)
+            Text(text = headline, style = type.headline, color = colors.onSurface)
         }
         if (state.teaser.isNotBlank()) {
             Spacer(Modifier.height(14.dp))
-            Text(
-                text = state.teaser,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontFamily = FontFamily.Serif,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 19.sp,
-                    lineHeight = 29.sp,
-                ),
-                color = colors.onSurface.copy(alpha = 0.92f),
-            )
+            Text(text = state.teaser, style = type.teaser, color = colors.onSurface.copy(alpha = 0.92f))
         }
         Spacer(Modifier.height(10.dp))
     }
 }
 
-/** One block of the text. Pictures and captions never get here (one picture, on top). */
+/** One block of the text in the reader's [type]. Pictures and captions never get here (one picture, on top). */
 @Composable
-private fun BlockView(block: ArticleBlock) {
+private fun BlockView(block: ArticleBlock, type: ReaderType) {
     val colors = MaterialTheme.colorScheme
-    val body = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif, fontSize = 18.sp, lineHeight = 29.sp)
+    val body = type.body
     when (block.type) {
         ArticleBlock.PARAGRAPH -> Text(
             text = block.text,
@@ -383,7 +492,7 @@ private fun BlockView(block: ArticleBlock) {
 
         ArticleBlock.HEADING -> Text(
             text = block.text,
-            style = MaterialTheme.typography.headlineSmall,
+            style = type.subheading,
             color = colors.onSurface,
             modifier = Modifier.padding(start = TextGutter, end = TextGutter, top = 20.dp, bottom = 4.dp),
         )
@@ -422,7 +531,7 @@ private fun BlockView(block: ArticleBlock) {
 
 /**
  * The end of the article: nothing but the way to the rest when the text is probably only its
- * beginning – no source line ("Quelle: …"); "Im Browser öffnen" otherwise sits in the bar.
+ * beginning – no source line ("Quelle: …"), and "Im Browser öffnen" otherwise lives in ⋮.
  */
 @Composable
 private fun EndNote(state: ArticleUiState, onOpenExternal: () -> Unit) {

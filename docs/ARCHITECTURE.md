@@ -38,7 +38,7 @@ keine Cloud und keine KI. (Paket und applicationId heißen aus Update-Gründen w
 Artikel öffnen / vorladen
   ArticleRepository ── LinkResolver (GoogleNewsDecoder, Cache store/google-news-links.json)
      → Seite der Redaktion (eigene Cookies je Artikel, Accept-Language der Ausgabe)
-     → ArticleExtractor (Readability4J + jsoup, JSON-LD-Rückfall) → ArticleCleaner (Doppeltes raus)
+     → ArticleExtractor (Readability4J + jsoup, JSON-LD-Rückfall) → ArticleCleaner (Doppeltes, Quellen, Link-Kästen raus)
      → Urteil OK / PAYWALL / CONSENT / BLOCKED / NOT_ARTICLE → ReadabilityStore lernt je Seite
      → ArticleCompleteness: vollständig oder nur Anriss (Abo-Hinweise, erklärte Länge, nur der
        Vorspann, abgeschnitten, Video-/Start-/Kursseite) → Status READABLE = „geprüft“
@@ -157,22 +157,38 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
   Repo-Name leitet weiter), lädt die APK, prüft die Signatur und übergibt sie dem Installer.
 * **Standort**: `LocationFinder` holt einen groben Fix über `LocationManager` (ohne Play
   Services) und den Ortsnamen über Androids `Geocoder`.
-* **Lesemodus – nichts doppelt**: `ArticleCleaner.clean` räumt auf, was die Seite selbst doppelt
-  sagt (im Cache, `ArticleContent.FORMAT` = 5), `ArticleCleaner.arrange` passt den Text unter den
-  Kopf des Lesers: Dort wird **einmal** entschieden, welches Bild oben steht (Feed-Bild, sonst
-  `og:image`, sonst ein Bild der ersten drei Blöcke → `ArticleUiState.hero`), und jede Kopie davon
-  fliegt aus dem Text (`ImageMatch`: gleiche Datei ohne Größenangaben, gleiche Id, ARD/ZDF-Varianten
-  nach der Tilde). `showsAlt` (ui/article) druckt den Alt-Text nur ohne echte Bildunterschrift.
-  Gemessen wird mit `ArticleDuplicateSurvey` (`MB_SURVEY_DIR`, aus dem normalen Testlauf heraus):
-  echte Seiten speichern, offline durch die Pipeline schicken, alles Gezeigte auf Wiederholungen
-  prüfen (Bilder auch per Pixel-Hash) und zwei Stände vergleichen (was fiel weg, steht es noch da?).
+* **Lesemodus – kurz, ein Bild, keine Quellen, nichts doppelt**: `ArticleCleaner.clean` räumt auf,
+  was die Seite selbst sagt (im Cache, `ArticleContent.FORMAT` = 7): Doppeltes und – nach dem
+  Zusammensetzen der Bildunterschriften – alles, was Quelle oder Nachweis ist (`dropSources`, in
+  Deutsch, Englisch und Französisch): Kästen mit Quellen oder anderen Artikeln ab ihrem Label
+  („Quellen“, „Mehr zum Thema“, „Related“, „À lire aussi“ – `isSectionLabel`) samt Listen, Bildern
+  und kurzen Zeilen danach (ein langer Absatz oder eine kurze Zeile direkt davor ist wieder Text)
+  und Zeilen, die nur Quelle, Agentur, Kürzel, Mitarbeit, Fotonachweis, Copyright,
+  Erstveröffentlichung oder Newsletter-/Social-Aufforderung sind (`isSourceLine`, `isAgencyLine`,
+  `isAuthorLine`); eine Frage oder ein Satz, der eine Quelle nur nennt, ist nie eine. Reste von
+  Galerien fallen mit den Player-Resten (`isMediaNoise`). `ArticleCleaner.arrange` passt den Text
+  unter den Kopf des Lesers: Dort wird **einmal** das eine Bild bestimmt (Feed-Bild, sonst das
+  Titelbild der Karte aus `ArticlePrefetcher.images`/`CoverResolver.covers`, sonst `og:image`,
+  sonst das erste Bild im Text → `ArticleUiState.hero`), und danach bleibt im Text **kein** Bild,
+  keine Bildunterschrift und kein Alt-Text; Zeilen, die nur den Namen der Redaktion tragen
+  (`sources`), fallen auch. Gemessen wird mit `ArticleDuplicateSurvey` (`MB_SURVEY_DIR`, aus dem
+  normalen Testlauf heraus): echte Seiten speichern, offline durch die Pipeline schicken, alles
+  Gezeigte auf Wiederholungen prüfen (Bilder auch per Pixel-Hash) und zwei Stände vergleichen (was
+  fiel weg, steht es noch da?).
+* **Darstellung des Lesers** (`AppSettings.reader` = `ReaderSettings`: Textgröße 0,85–1,4 in
+  0,05-Schritten, `ReaderFont` Serif/Sans, `ReaderSpacing` Eng/Normal/Weit; DataStore-Schlüssel
+  `reader_text_scale`, `reader_font`, `reader_spacing`, fehlend = wie bisher): das Sheet hinter dem
+  „A“ (`ReaderAppearanceSheet`) wirkt sofort – das `ArticleViewModel` zeigt die Wahl als Entwurf
+  (`appearance`), bevor DataStore sie zurückmeldet; der Slider speichert erst beim Loslassen.
+  `ReaderMetrics` (rein, getestet) rechnet die Größen, `rememberReaderType` baut die Textstile.
+  „Bilder anzeigen“ im Sheet ist `AppSettings.showImages` (gilt auch für den Feed).
 
 ## Module (`app/src/main/java/com/cedrickgd/morgenbriefing`)
 
 | Paket | Inhalt |
 |---|---|
 | `i18n` | `AppLanguage`, `LocalAppLanguage` und alle Texte (`CommonStrings`, `TopicStrings`, `FeedStrings`, `DiscoverStrings`, `SearchStrings`, `ReaderStrings`, `SettingsStrings`, `SourcesStrings`, `RegionStrings`, `OnboardingStrings`, `WeatherStrings`, `ClothingStrings`, `FormatStrings`, `NotifyStrings`, `ListenStrings`, `UpdateStrings`, `ComponentStrings`, `ShellStrings`) |
-| `data/model` | `Topic`, `TopicIcon`, `FeedSource`, `NewsItem`, `TopicNews`, `NewsEdition`, `Topics` (Fassade), Wetter, `AppSettings` |
+| `data/model` | `Topic`, `TopicIcon`, `FeedSource`, `NewsItem`, `TopicNews`, `NewsEdition`, `Topics` (Fassade), Wetter, `AppSettings`, `ReaderSettings` |
 | `data/news` | `Taxonomy` (Kategorien + Unterthemen), `TopicSources` (Quellen eines Themas), `GoogleNews` (URLs, Suchbegriffe, Ausschlüsse, Zeitfenster, Kursseiten), `CountryQuery` (wie Nachrichten ein Land in einer Sprache nennen), `SearchQuery` (Suchanfrage verstehen, ganze Wörter), `SearchRanking` (Relevanz der Treffer), `FeedCatalog` + `Regions`, `RssParser`, `RssDates`, `HtmlText` |
 | `data/remote` | `OpenMeteoClient`, `RssClient` (Feeds lesen, Feed hinter einer Website finden), `GoogleNewsDecoder` (Google-News-Link → Artikel-URL) |
 | `data/local` | `WeatherStore`, `NewsCache` (JSON-Dateien, atomar geschrieben) |
@@ -193,7 +209,7 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
 | `ui/onboarding` | Erster Start: App-Sprache, Nachrichten (Region und Sprache getrennt), Benachrichtigungen, Ort |
 | `ui/theme` | Theme, Akzent-Schemata, Typografie, `Reading` (Serif-Lesestile) |
 | `ui/nav` | `MainRoute` (der Pager), `ArticleRoute`, `DiscoverRoute`, `SearchRoute` (darüber geschoben) |
-| `ui/article` | `ArticleScreen` + `ArticleViewModel`: der Lesemodus (Bild, Überschrift, Teaser, Textblöcke, Zuhören, Teilen, Browser als Ausweg, eigene Zustände für Bezahlschranke, Cookie-Wand und Sperre) |
+| `ui/article` | `ArticleScreen` + `ArticleViewModel`: der Lesemodus (ein Bild, Zeit, Überschrift, Teaser, Textblöcke; Leiste Zurück · „A“ · Zuhören · ⋮ mit Teilen, Link kopieren, Browser als Ausweg; eigene Zustände für Bezahlschranke, Cookie-Wand und Sperre), `ReaderAppearanceSheet` („Darstellung“), `ReaderType` (`ReaderMetrics`, Textstile je Darstellung) |
 
 Kein DI-Framework: `AppContainer` (ein Objekt pro Prozess) wird über `context.container`
 erreicht, Vorlesen über `context.listen`. ViewModels über `viewModelFactory { initializer { … } }`.

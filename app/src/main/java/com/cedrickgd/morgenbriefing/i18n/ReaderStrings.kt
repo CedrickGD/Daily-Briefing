@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.ReadOutcome
+import com.cedrickgd.morgenbriefing.data.model.ReaderFont
+import com.cedrickgd.morgenbriefing.data.model.ReaderSpacing
 
 /**
  * Texts of the in-app reader: why an article cannot be shown (from
@@ -20,6 +22,34 @@ interface ReaderStrings {
 
     /** Under an article that is probably cut short. */
     val truncatedNote: String
+
+    /** The "A" in the reader's bar and the title of its sheet: how the text looks. */
+    val appearance: String
+
+    /** "Textgröße" (a slider in [appearance]). */
+    val textSize: String
+
+    /** The text size as the sheet shows it: "115 %". */
+    fun percent(value: Int): String
+
+    /** "Schrift": serif or sans. */
+    val font: String
+
+    fun fontName(font: ReaderFont): String
+
+    /** "Zeilenabstand". */
+    val spacing: String
+
+    fun spacingName(spacing: ReaderSpacing): String
+
+    /** "Bilder anzeigen" – the app-wide picture setting. */
+    val showImages: String
+
+    /** Under [showImages]: it also hides the pictures of the feed. */
+    val showImagesHint: String
+
+    /** Back to the reader's normal size, font and spacing. */
+    val resetAppearance: String
 
     /** Headline of the failure state. Null [outcome] = an unexpected error. */
     fun failureTitle(outcome: ReadOutcome?): String
@@ -52,6 +82,23 @@ interface ReaderStrings {
         override val pauseListening = "Vorlesen pausieren"
         override val readInApp = "Artikel lesen"
         override val truncatedNote = "Das war vermutlich nur der Anfang – den Rest zeigt die Redaktion nur auf ihrer Seite."
+        override val appearance = "Darstellung"
+        override val textSize = "Textgröße"
+        override fun percent(value: Int) = "$value\u00A0%"
+        override val font = "Schrift"
+        override fun fontName(font: ReaderFont) = when (font) {
+            ReaderFont.SERIF -> "Mit Serifen"
+            ReaderFont.SANS -> "Ohne Serifen"
+        }
+        override val spacing = "Zeilenabstand"
+        override fun spacingName(spacing: ReaderSpacing) = when (spacing) {
+            ReaderSpacing.COMPACT -> "Eng"
+            ReaderSpacing.NORMAL -> "Normal"
+            ReaderSpacing.WIDE -> "Weit"
+        }
+        override val showImages = "Bilder anzeigen"
+        override val showImagesHint = "Gilt auch für die Bilder im Feed."
+        override val resetAppearance = "Zurücksetzen"
 
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Nur bei der Redaktion lesbar" else "Artikel gerade nicht da"
@@ -93,6 +140,23 @@ interface ReaderStrings {
         override val pauseListening = "Pause reading aloud"
         override val readInApp = "Read article"
         override val truncatedNote = "That was probably just the beginning – the publisher shows the rest only on its own site."
+        override val appearance = "Appearance"
+        override val textSize = "Text size"
+        override fun percent(value: Int) = "$value%"
+        override val font = "Font"
+        override fun fontName(font: ReaderFont) = when (font) {
+            ReaderFont.SERIF -> "Serif"
+            ReaderFont.SANS -> "Sans serif"
+        }
+        override val spacing = "Line spacing"
+        override fun spacingName(spacing: ReaderSpacing) = when (spacing) {
+            ReaderSpacing.COMPACT -> "Compact"
+            ReaderSpacing.NORMAL -> "Normal"
+            ReaderSpacing.WIDE -> "Relaxed"
+        }
+        override val showImages = "Show pictures"
+        override val showImagesHint = "Also applies to the pictures in your feed."
+        override val resetAppearance = "Reset"
 
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Only readable on the publisher's site" else "Article not available right now"
@@ -134,6 +198,23 @@ interface ReaderStrings {
         override val pauseListening = "Mettre la lecture en pause"
         override val readInApp = "Lire l'article"
         override val truncatedNote = "Ce n'était sans doute que le début : la rédaction ne montre la suite que sur son propre site."
+        override val appearance = "Affichage"
+        override val textSize = "Taille du texte"
+        override fun percent(value: Int) = "$value\u00A0%"
+        override val font = "Police"
+        override fun fontName(font: ReaderFont) = when (font) {
+            ReaderFont.SERIF -> "Avec empattements"
+            ReaderFont.SANS -> "Sans empattements"
+        }
+        override val spacing = "Interligne"
+        override fun spacingName(spacing: ReaderSpacing) = when (spacing) {
+            ReaderSpacing.COMPACT -> "Serré"
+            ReaderSpacing.NORMAL -> "Normal"
+            ReaderSpacing.WIDE -> "Aéré"
+        }
+        override val showImages = "Afficher les images"
+        override val showImagesHint = "S'applique aussi aux images du fil."
+        override val resetAppearance = "Réinitialiser"
 
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Lisible uniquement chez l'éditeur" else "Article indisponible pour le moment"
@@ -175,6 +256,23 @@ interface ReaderStrings {
         override val pauseListening = "Pausar la lectura"
         override val readInApp = "Leer artículo"
         override val truncatedNote = "Probablemente esto era solo el comienzo: el medio muestra el resto únicamente en su web."
+        override val appearance = "Apariencia"
+        override val textSize = "Tamaño del texto"
+        override fun percent(value: Int) = "$value\u00A0%"
+        override val font = "Fuente"
+        override fun fontName(font: ReaderFont) = when (font) {
+            ReaderFont.SERIF -> "Con serifa"
+            ReaderFont.SANS -> "Sin serifa"
+        }
+        override val spacing = "Interlineado"
+        override fun spacingName(spacing: ReaderSpacing) = when (spacing) {
+            ReaderSpacing.COMPACT -> "Compacto"
+            ReaderSpacing.NORMAL -> "Normal"
+            ReaderSpacing.WIDE -> "Amplio"
+        }
+        override val showImages = "Mostrar imágenes"
+        override val showImagesHint = "También se aplica a las imágenes del feed."
+        override val resetAppearance = "Restablecer"
 
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Solo se puede leer en la web del medio" else "Artículo no disponible ahora"
@@ -216,6 +314,23 @@ interface ReaderStrings {
         override val pauseListening = "Metti in pausa la lettura"
         override val readInApp = "Leggi l'articolo"
         override val truncatedNote = "Probabilmente era solo l'inizio: la redazione mostra il resto solo sul proprio sito."
+        override val appearance = "Aspetto"
+        override val textSize = "Dimensione del testo"
+        override fun percent(value: Int) = "$value%"
+        override val font = "Carattere"
+        override fun fontName(font: ReaderFont) = when (font) {
+            ReaderFont.SERIF -> "Con grazie"
+            ReaderFont.SANS -> "Senza grazie"
+        }
+        override val spacing = "Interlinea"
+        override fun spacingName(spacing: ReaderSpacing) = when (spacing) {
+            ReaderSpacing.COMPACT -> "Compatta"
+            ReaderSpacing.NORMAL -> "Normale"
+            ReaderSpacing.WIDE -> "Ampia"
+        }
+        override val showImages = "Mostra immagini"
+        override val showImagesHint = "Vale anche per le immagini del feed."
+        override val resetAppearance = "Ripristina"
 
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Leggibile solo sul sito della redazione" else "Articolo non disponibile al momento"

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -54,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
@@ -166,6 +168,26 @@ fun GlassIconButton(
     container: Color? = null,
     floating: Boolean = false,
 ) {
+    GlassRoundButton(contentDescription, onClick, modifier, size, level, container, floating) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+    }
+}
+
+/**
+ * [GlassIconButton] around any [content] instead of a symbol – the reader's serif "Aa". The
+ * button says [contentDescription] to screen readers; what [content] draws stays silent.
+ */
+@Composable
+fun GlassRoundButton(
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 48.dp,
+    level: GlassLevel = GlassLevel.Thin,
+    container: Color? = null,
+    floating: Boolean = false,
+    content: @Composable () -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
@@ -179,10 +201,11 @@ fun GlassIconButton(
                 role = Role.Button,
                 onClickLabel = contentDescription,
                 onClick = onClick,
-            ),
+            )
+            .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(22.dp))
+        content()
     }
 }
 
@@ -245,14 +268,18 @@ private val SheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
  * padded above it. Without real blur (Android < 12) the glass is practically opaque, so the page
  * never ghosts through a modal. On Android 7, which cannot draw dark navigation buttons, a dark
  * band behind them keeps the white buttons visible on the light sheet.
+ *
+ * @param scrimColor dims the page behind the sheet; a sheet whose changes show on the page at
+ *   once (the reader's "Darstellung") keeps it light.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GlassSheet(
     onDismissRequest: () -> Unit,
+    scrimColor: Color = BottomSheetDefaults.ScrimColor,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    GlassSheet(onDismissRequest, rememberModalBottomSheetState(skipPartiallyExpanded = true), content)
+    GlassSheet(onDismissRequest, rememberModalBottomSheetState(skipPartiallyExpanded = true), scrimColor = scrimColor, content = content)
 }
 
 /** [GlassSheet] with the caller's [sheetState], to animate it out before acting (`hide()`). */
@@ -261,6 +288,7 @@ fun GlassSheet(
 fun GlassSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState,
+    scrimColor: Color = BottomSheetDefaults.ScrimColor,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val dark = isGlassDark()
@@ -269,6 +297,7 @@ fun GlassSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         shape = SheetShape,
+        scrimColor = scrimColor,
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
