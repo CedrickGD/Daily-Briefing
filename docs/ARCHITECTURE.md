@@ -149,7 +149,8 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
   „wird geprüft“ zu zeigen. „Nur vollständige Artikel“ filtert Meldungen gesperrter Seiten und zeigt
   nur vom `ArticlePrefetcher` geprüfte (`VerifiedLists.kt`, `ui/today/TodayWindows.kt`: was als
   Nächstes geprüft wird); ohne die Einstellung gehen sichtbare Meldungen zum Vorladen an den
-  Prefetcher (Status „Volltext“/„Bezahlinhalt“, Bild für Google-News-Karten).
+  Prefetcher (Marke „Bezahlinhalt“/„Nur im Browser“ – vollständige Artikel tragen keine –, Bild für
+  Google-News-Karten).
 * **Benachrichtigung**: `MorningWorker` holt Wetter und Feeds, je gefolgtem Thema die neueste
   Schlagzeile (mit „nur vollständige Artikel“ die neueste geprüfte), `WeatherInsights.notification`
   baut den Text in der App-Sprache.

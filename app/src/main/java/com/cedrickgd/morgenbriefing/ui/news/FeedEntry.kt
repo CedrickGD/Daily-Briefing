@@ -30,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AddCircleOutline
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Lock
@@ -165,8 +164,8 @@ class FeedHints(
  * lead open the article (the in-app reader, or the browser).
  *
  * Articles that came without a picture (Google News) show the page's lead picture once the
- * prefetcher found it, fading in over the cover; a small hint on the picture tells whether the
- * full text is ready in the app or the article sits behind a paywall.
+ * prefetcher found it, fading in over the cover; a small hint on the picture tells when the
+ * article sits behind a paywall or opens only in the browser.
  *
  * @param listening this article is being read aloud right now — the button turns into "Stopp".
  * @param paused this article is loaded in the player but paused — the button offers "Weiter".
@@ -267,7 +266,7 @@ fun FeedEntry(
 }
 
 /**
- * The readability hint on a feed picture ("✓ Volltext", "🔒 Bezahlinhalt", "Nur im Browser"):
+ * The readability hint on a feed picture ("🔒 Bezahlinhalt", "Nur im Browser"):
  * a small dark frosted pill that pops in once the prefetcher knows; nothing while unknown.
  */
 @Composable
@@ -282,7 +281,6 @@ private fun CardBadgePill(badge: CardBadge?, strings: FeedStrings, modifier: Mod
     ) {
         val shown = badge ?: return@AnimatedVisibility
         val (icon, label, description) = when (shown) {
-            CardBadge.FULL_TEXT -> Triple(Icons.Rounded.CheckCircle, strings.fullText, strings.fullTextDescription)
             CardBadge.PAYWALL -> Triple(Icons.Rounded.Lock, strings.paywall, strings.paywallDescription)
             CardBadge.BROWSER_ONLY -> Triple(Icons.Rounded.Public, strings.browserOnly, strings.browserOnlyDescription)
         }

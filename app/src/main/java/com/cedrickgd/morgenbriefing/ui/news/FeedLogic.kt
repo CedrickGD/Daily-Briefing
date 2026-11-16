@@ -98,15 +98,18 @@ internal fun isHidden(item: NewsItem, hides: ReadabilityHides): Boolean {
 internal fun readableItems(items: List<NewsItem>, hides: ReadabilityHides, readableOnly: Boolean): List<NewsItem> =
     if (!readableOnly || (hides.domains.isEmpty() && hides.itemIds.isEmpty())) items else items.filterNot { isHidden(it, hides) }
 
-/** The small readability hint a feed card shows, if any. */
-enum class CardBadge { FULL_TEXT, PAYWALL, BROWSER_ONLY }
+/**
+ * The small readability hint a feed card shows, if any: only what keeps an article from the
+ * reader. A complete article gets no mark – "Nur vollständige Artikel" (on by default) shows
+ * nothing else, so a ✓ on every card said nothing; that promise lives in the setting.
+ */
+enum class CardBadge { PAYWALL, BROWSER_ONLY }
 
-/** The hint for an article's prefetch [status]; nothing while unknown, loading or failed. */
+/** The hint for an article's prefetch [status]; nothing while readable, unknown, loading or failed. */
 internal fun cardBadge(status: ArticleStatus): CardBadge? = when (status) {
-    ArticleStatus.READABLE -> CardBadge.FULL_TEXT
     ArticleStatus.PAYWALL -> CardBadge.PAYWALL
     ArticleStatus.BLOCKED -> CardBadge.BROWSER_ONLY
-    ArticleStatus.UNKNOWN, ArticleStatus.LOADING, ArticleStatus.FAILED -> null
+    ArticleStatus.READABLE, ArticleStatus.UNKNOWN, ArticleStatus.LOADING, ArticleStatus.FAILED -> null
 }
 
 /** Articles warmed beyond the last one on screen. */

@@ -28,7 +28,7 @@ class FeedStringsTest {
             "moreOptions" to moreOptions, "listen" to listen, "stop" to stop, "resume" to resume,
             "listenTo" to listenTo("X"), "resumeListening" to resumeListening("X"), "stopListening" to stopListening,
             "readArticle" to readArticle, "hideSource" to hideSource("X"), "followTopic" to followTopic("X"),
-            "unfollowTopic" to unfollowTopic("X"), "fullText" to fullText, "fullTextDescription" to fullTextDescription,
+            "unfollowTopic" to unfollowTopic("X"),
             "paywall" to paywall, "paywallDescription" to paywallDescription, "browserOnly" to browserOnly,
             "browserOnlyDescription" to browserOnlyDescription,
             "noArticlesRightNow" to noArticlesRightNow, "moveUp" to moveUp("X"),

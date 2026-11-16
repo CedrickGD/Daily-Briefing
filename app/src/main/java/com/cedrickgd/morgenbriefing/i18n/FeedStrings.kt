@@ -83,8 +83,6 @@ interface FeedStrings {
     fun unfollowTopic(topic: String): String
 
     // Readability hints on a card
-    val fullText: String
-    val fullTextDescription: String
     val paywall: String
     val paywallDescription: String
     val browserOnly: String
@@ -215,8 +213,6 @@ interface FeedStrings {
         override fun followTopic(topic: String) = "„$topic“ folgen"
         override fun unfollowTopic(topic: String) = "„$topic“ nicht mehr folgen"
 
-        override val fullText = "Volltext"
-        override val fullTextDescription = "Volltext in der App lesbar"
         override val paywall = "Bezahlinhalt"
         override val paywallDescription = "Bezahlinhalt: nur für Abonnenten"
         override val browserOnly = "Nur im Browser"
@@ -328,8 +324,6 @@ interface FeedStrings {
         override fun followTopic(topic: String) = "Follow “$topic”"
         override fun unfollowTopic(topic: String) = "Unfollow “$topic”"
 
-        override val fullText = "Full text"
-        override val fullTextDescription = "Full text readable in the app"
         override val paywall = "Paywall"
         override val paywallDescription = "Paywall: for subscribers only"
         override val browserOnly = "Browser only"
@@ -441,8 +435,6 @@ interface FeedStrings {
         override fun followTopic(topic: String) = "Suivre « $topic »"
         override fun unfollowTopic(topic: String) = "Ne plus suivre « $topic »"
 
-        override val fullText = "Texte intégral"
-        override val fullTextDescription = "Texte intégral lisible dans l'app"
         override val paywall = "Payant"
         override val paywallDescription = "Article payant : réservé aux abonnés"
         override val browserOnly = "Navigateur"
@@ -554,8 +546,6 @@ interface FeedStrings {
         override fun followTopic(topic: String) = "Seguir «$topic»"
         override fun unfollowTopic(topic: String) = "Dejar de seguir «$topic»"
 
-        override val fullText = "Texto completo"
-        override val fullTextDescription = "Texto completo legible en la app"
         override val paywall = "De pago"
         override val paywallDescription = "Contenido de pago: solo para suscriptores"
         override val browserOnly = "Solo navegador"
@@ -667,8 +657,6 @@ interface FeedStrings {
         override fun followTopic(topic: String) = "Segui «$topic»"
         override fun unfollowTopic(topic: String) = "Non seguire più «$topic»"
 
-        override val fullText = "Testo completo"
-        override val fullTextDescription = "Testo completo leggibile nell'app"
         override val paywall = "A pagamento"
         override val paywallDescription = "Contenuto a pagamento: solo per abbonati"
         override val browserOnly = "Solo browser"

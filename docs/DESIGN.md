@@ -150,9 +150,11 @@ dem Entwurf, den der Besitzer gewählt hat):
 * **Für dich**: pro gefolgtem Thema **eine Glaskarte** – Kopfzeile mit Icon-Kachel (Themenfarbe),
   Themenname in Versalien und **„Alle →“** (wählt sichtbar den Tab des Themas und springt zurück
   an die Leiste – kein versteckter Modus); dann die erste Meldung **groß** (Bild 168 dp, 18 dp
-  Radius, Serif-Headline 19 sp, Meta „Quelle · vor 3 Std.“ mit kleinem grünem ✓ bei geprüftem
-  Volltext, ⋮) und die nächsten als **kompakte Zeilen** (Serif 16 sp, bis 3 Zeilen, Meta-Zeile
-  mit ✓ und ⋮, rechts ein 80-dp-Bild). **Jede Meldung hat ein Bild**: Bringt der Feed keines mit
+  Radius, Serif-Headline 19 sp, Meta „Quelle · vor 3 Std.“, ⋮) und die nächsten als **kompakte
+  Zeilen** (Serif 16 sp, bis 3 Zeilen, Meta-Zeile mit ⋮, rechts ein 80-dp-Bild). Ein vollständig
+  lesbarer Artikel trägt **kein Zeichen** – das verspricht einmal die Einstellung „Nur vollständige
+  Artikel“ (ein ✓ auf jeder Karte sagte nichts); nur ohne sie zeigen 🔒 (Bezahlinhalt) und 🌐 (nur
+  im Browser), was nicht in den Leser geht. **Jede Meldung hat ein Bild**: Bringt der Feed keines mit
   (Google News), sucht die App es vorab auf der Seite der Redaktion – für das, was gleich ins
   Bild kommt, und die nächste Seite, auch mobil – und lädt die Bilder des nächsten Bildschirms
   vor. Bis es da ist, und wenn es keines gibt oder es nicht lädt, zeigt der Bildplatz das

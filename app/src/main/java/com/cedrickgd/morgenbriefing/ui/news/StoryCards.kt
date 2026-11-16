@@ -22,7 +22,6 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.AddCircleOutline
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Lock
@@ -71,7 +70,6 @@ import com.cedrickgd.morgenbriefing.ui.components.entrance
 import com.cedrickgd.morgenbriefing.ui.components.pressScale
 import com.cedrickgd.morgenbriefing.ui.components.rememberEntrance
 import com.cedrickgd.morgenbriefing.ui.glass.glassCardPart
-import com.cedrickgd.morgenbriefing.ui.theme.ColorMath
 import com.cedrickgd.morgenbriefing.ui.theme.Reading
 import java.time.ZonedDateTime
 
@@ -175,8 +173,8 @@ internal fun SectionCardHeader(section: SectionUi, onShowAll: (() -> Unit)?, mod
 /**
  * One story in a feed card: [StoryStyle.LEAD] with a 168 dp picture above a larger serif
  * headline, or a compact [StoryStyle.ROW] (serif headline beside an 80 dp thumbnail). Under the
- * headline the meta line "Quelle · vor 3 Std." with a small mark when the reader can show the
- * full text (✓), a paywall or browser-only page, and the ⋮ menu. Tapping opens the article,
+ * headline the meta line "Quelle · vor 3 Std." with a small mark for a paywall or browser-only
+ * page, and the ⋮ menu. Tapping opens the article,
  * a long press opens the same menu. No buttons under the story.
  *
  * With "Bilder anzeigen" on every story has its picture slot from the start ([storyVisual]): the
@@ -400,23 +398,14 @@ private fun StoryMetaRow(
     }
 }
 
-/** ✓ (full text in the app), 🔒 (paywall) or 🌐 (browser only), small, with its spoken meaning. */
+/** 🔒 (paywall) or 🌐 (browser only), small and muted, with its spoken meaning. */
 @Composable
 private fun BadgeMark(badge: CardBadge, strings: FeedStrings) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val (icon, description, tint) = when (badge) {
-        CardBadge.FULL_TEXT -> Triple(Icons.Rounded.Check, strings.fullTextDescription, verifiedColor())
-        CardBadge.PAYWALL -> Triple(Icons.Rounded.Lock, strings.paywallDescription, muted)
-        CardBadge.BROWSER_ONLY -> Triple(Icons.Rounded.Public, strings.browserOnlyDescription, muted)
+    val (icon, description) = when (badge) {
+        CardBadge.PAYWALL -> Icons.Rounded.Lock to strings.paywallDescription
+        CardBadge.BROWSER_ONLY -> Icons.Rounded.Public to strings.browserOnlyDescription
     }
-    Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(15.dp))
-}
-
-/** A calm green for "the reader shows the full text", derived perceptually for light and dark. */
-@Composable
-private fun verifiedColor(): Color {
-    val dark = isDarkTheme()
-    return remember(dark) { if (dark) ColorMath.fromOkLch(0.80, 0.11, 150.0) else ColorMath.fromOkLch(0.52, 0.12, 150.0) }
+    Icon(icon, contentDescription = description, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
 }
 
 /**

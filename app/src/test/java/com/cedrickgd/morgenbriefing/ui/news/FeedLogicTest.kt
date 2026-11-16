@@ -58,7 +58,8 @@ class FeedLogicTest {
 
     @Test
     fun `card badges follow the prefetch status`() {
-        assertEquals(CardBadge.FULL_TEXT, cardBadge(ArticleStatus.READABLE))
+        // A complete article carries no mark: "Nur vollständige Artikel" promises that once.
+        assertNull(cardBadge(ArticleStatus.READABLE))
         assertEquals(CardBadge.PAYWALL, cardBadge(ArticleStatus.PAYWALL))
         assertEquals(CardBadge.BROWSER_ONLY, cardBadge(ArticleStatus.BLOCKED))
         assertNull(cardBadge(ArticleStatus.UNKNOWN))
