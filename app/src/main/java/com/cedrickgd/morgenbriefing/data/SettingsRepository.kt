@@ -183,6 +183,7 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
             localPlaces = localPlaces,
             readableOnly = this[Keys.READABLE_ONLY] ?: defaults.readableOnly,
             hideRead = this[Keys.HIDE_READ] ?: defaults.hideRead,
+            hideLong = this[Keys.HIDE_LONG] ?: defaults.hideLong,
             prefetch = enumOrDefault(this[Keys.PREFETCH], defaults.prefetch),
             recentSearches = decodeList(this[Keys.RECENT_SEARCHES], String.serializer())
                 .map { it.trim() }
@@ -263,6 +264,7 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
         this[Keys.LOCAL_PLACES] = AppJson.encodeToString(ListSerializer(Place.serializer()), s.localPlaces)
         this[Keys.READABLE_ONLY] = s.readableOnly
         this[Keys.HIDE_READ] = s.hideRead
+        this[Keys.HIDE_LONG] = s.hideLong
         this[Keys.PREFETCH] = s.prefetch.name
         this[Keys.RECENT_SEARCHES] = AppJson.encodeToString(ListSerializer(String.serializer()), s.recentSearches.take(SettingsOps.MAX_RECENT_SEARCHES))
         this[Keys.EFFECTS] = s.effects.name
@@ -346,6 +348,9 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
 
         /** "Gelesene Artikel ausblenden"; missing (older installs) = off. */
         val HIDE_READ = booleanPreferencesKey("hide_read")
+
+        /** "Lange Artikel ausblenden"; missing (older installs) = on, like a new install. */
+        val HIDE_LONG = booleanPreferencesKey("hide_long")
         val PREFETCH = stringPreferencesKey("prefetch")
         val RECENT_SEARCHES = stringPreferencesKey("recent_searches")
 

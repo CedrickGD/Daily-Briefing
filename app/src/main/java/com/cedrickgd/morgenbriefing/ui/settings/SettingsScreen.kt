@@ -305,6 +305,7 @@ fun SettingsScreen(
         onReadableOnly = viewModel::setReadableOnly,
         onPrefetch = viewModel::setPrefetch,
         onHideRead = viewModel::setHideRead,
+        onHideLong = viewModel::setHideLong,
         onOpenHistory = onOpenHistory,
     )
 

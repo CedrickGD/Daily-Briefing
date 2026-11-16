@@ -408,4 +408,42 @@ class ArticlePrefetcherTest {
         assertEquals(ArticleStatus.PAYWALL, p.statusOf("id2"))
         assertEquals(ArticleStatus.FAILED, p.statusOf("id3"))
     }
+
+    /** A complete article of [words] words (in sentences of twenty). */
+    private fun long(url: String, words: Int) = ArticleContent(
+        url = url, title = "Stadtrat beschließt Haushalt", fetchedAt = "2026-11-05T12:00:00+01:00",
+        blocks = (1..words / 20).map {
+            ArticleBlock.paragraph("Der Stadtrat hat am Abend den Haushalt beschlossen, nach einer langen Debatte über Schulen und Straßen der Stadt $it.")
+        },
+    )
+
+    @Test
+    fun `every article read is measured, its length published before its status and kept`() = runTest(StandardTestDispatcher()) {
+        val store = VerdictStore(File(dir, "verdicts.json"), AppJson, backgroundScope, clock = { testScheduler.currentTime })
+        val p = prefetcher(FakeSource(), NetworkMeter { true }, verdicts = store)
+        runCurrent()
+        p.report(item(1), long("https://news1.example.com/a1", 1_200))
+        p.report(item(2), content(2))
+        assertTrue(LongReads.isLong(p.lengths.value.getValue("id1")))
+        assertFalse(LongReads.isLong(p.lengths.value.getValue("id2")))
+        store.save()
+        assertEquals(p.lengths.value, VerdictStore(File(dir, "verdicts.json"), AppJson, backgroundScope, clock = { testScheduler.currentTime }).lengths())
+    }
+
+    @Test
+    fun `a complete article judged without a length is measured from the cache, never loaded again`() = runTest(StandardTestDispatcher()) {
+        val file = File(dir, "verdicts.json")
+        file.writeText("""{"version":${VerdictStore.VERSION},"entries":[{"id":"id1","status":"READABLE","at":0}]}""")
+        val store = VerdictStore(file, AppJson, backgroundScope, clock = { 0L })
+        val source = FakeSource()
+        source.cached["id1"] = long("https://news1.example.com/a1", 1_000)
+        val p = prefetcher(source, NetworkMeter { true }, verdicts = store)
+        runCurrent()
+        p.prefetch(listOf(item(1), item(2)), PrefetchMode.ALWAYS, verify = true)
+        source.release("id2")
+        runCurrent()
+        assertEquals(listOf("id2"), source.loads)
+        assertTrue(LongReads.isLong(p.lengths.value.getValue("id1")))
+        assertEquals(ArticleStatus.READABLE, p.statusOf("id1"))
+    }
 }

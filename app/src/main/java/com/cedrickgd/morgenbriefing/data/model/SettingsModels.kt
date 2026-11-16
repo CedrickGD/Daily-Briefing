@@ -214,6 +214,12 @@ data class AppSettings(
      * built anew (start, refresh, another tab), never under the finger. Off: they show, calmer.
      */
     val hideRead: Boolean = false,
+    /**
+     * "Lange Artikel ausblenden": normal-length news only – long reads, dossiers and live blogs
+     * (more than ~900 words, [com.cedrickgd.morgenbriefing.data.article.LongReads]) stay out of
+     * the lists.
+     */
+    val hideLong: Boolean = true,
     /** Load the articles on screen ahead of time. */
     val prefetch: PrefetchMode = PrefetchMode.WIFI_ONLY,
     /** Recent search queries, newest first (at most a handful). */

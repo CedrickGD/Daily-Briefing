@@ -23,7 +23,8 @@ import java.time.Duration
  * paid or only a teaser ([ArticleStatus.PAYWALL]), walled ([ArticleStatus.BLOCKED]) or no article
  * at all ([ArticleStatus.FAILED]). Network failures say nothing about the article and are never
  * recorded. The text of a complete article stays in the article cache, so it still opens
- * instantly and offline.
+ * instantly and offline. With the verdict goes the article's length in words, when it was
+ * measured ([LongReads], "Lange Artikel ausblenden"), so it is never fetched again for that.
  *
  * Bounded: at most [maxEntries] verdicts (the oldest go first), each kept [keepFor] – as long as
  * the article cache keeps the text ([ArticleRepository.KEEP_FOR]). Persisted as JSON
@@ -38,8 +39,9 @@ class VerdictStore(
     private val maxEntries: Int = MAX_ENTRIES,
     private val keepFor: Duration = ArticleRepository.KEEP_FOR,
 ) {
+    /** [words]: the article's length; 0 = not measured (verdicts of earlier versions). */
     @Serializable
-    private data class Entry(val id: String, val status: ArticleStatus, val at: Long)
+    private data class Entry(val id: String, val status: ArticleStatus, val at: Long, val words: Int = 0)
 
     @Serializable
     private data class Snapshot(val version: Int = VERSION, val entries: List<Entry> = emptyList())
@@ -58,6 +60,12 @@ class VerdictStore(
         return synchronized(lock) { entries.mapValues { it.value.status } }
     }
 
+    /** The measured lengths on disk that are still valid, by item id (reads the file: call off the main thread). */
+    fun lengths(): Map<String, Int> {
+        ensureLoaded()
+        return synchronized(lock) { entries.values.filter { it.words > 0 }.associate { it.id to it.words } }
+    }
+
     /** The verdict for [itemId], null when none (or an expired one) is known. */
     fun verdictOf(itemId: String): ArticleStatus? {
         ensureLoaded()
@@ -65,17 +73,20 @@ class VerdictStore(
     }
 
     /**
-     * Notes [status] for [itemId]; only the final ones count (see the class comment), others are
-     * ignored. Saved shortly after (several verdicts in a row are written once).
+     * Notes [status] for [itemId] with its length in [words] (0 = not measured); only the final
+     * verdicts count (see the class comment), others are ignored. A length measured before stays
+     * when none comes with the verdict. Saved shortly after (several verdicts in a row are
+     * written once).
      */
-    fun record(itemId: String, status: ArticleStatus) {
+    fun record(itemId: String, status: ArticleStatus, words: Int = 0) {
         if (status !in KEPT || itemId.isBlank()) return
         ensureLoaded()
         synchronized(lock) {
             val old = entries[itemId]
-            if (old?.status == status) return
+            val length = if (words > 0) words else old?.words ?: 0
+            if (old?.status == status && old.words == length) return
             entries.remove(itemId)
-            entries[itemId] = Entry(itemId, status, clock())
+            entries[itemId] = Entry(itemId, status, if (old?.status == status) old.at else clock(), length)
             while (entries.size > maxEntries) entries.remove(entries.keys.first())
             if (pendingWrite?.isActive == true) return
             pendingWrite = scope.launch {

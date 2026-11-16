@@ -13,6 +13,7 @@ import com.cedrickgd.morgenbriefing.MorgenbriefingApp
 import com.cedrickgd.morgenbriefing.data.BERLIN
 import com.cedrickgd.morgenbriefing.data.MoreResult
 import com.cedrickgd.morgenbriefing.data.article.KnownWalls
+import com.cedrickgd.morgenbriefing.data.article.LongReads
 import com.cedrickgd.morgenbriefing.data.local.ReadHistory
 import com.cedrickgd.morgenbriefing.data.local.StoryIndex
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
@@ -578,7 +579,7 @@ class TodayViewModel(
     /** Freezes what "nur lesbare Artikel" hides until the next refresh (file read off the main thread). */
     private suspend fun snapshotHides() {
         val snapshot = withContext(Dispatchers.IO) {
-            attempt { ReadabilityHides.of(container.readability.blockedDomains(), container.prefetcher.status.value) }
+            attempt { ReadabilityHides.of(container.readability.blockedDomains(), container.prefetcher.status.value, container.prefetcher.lengths.value) }
                 .onFailure { Log.w(TAG, "Readability unavailable", it) }
                 .getOrNull()
         } ?: return
@@ -640,11 +641,13 @@ class TodayViewModel(
                 val feedPrefs = inputs.prefs
                 val build = Triple<Any?, FeedPrefs?, ReadabilityHides?>(news.topics, feedPrefs, inputs.hides)
                 val before = built
+                // Lengths are published before verdicts: a verdict that arrives knows its length.
+                val long = if (feedPrefs.hideLong) LongReads.longIds(container.prefetcher.lengths.value) else emptySet()
                 if (before == null || before.first !== build.first || before.second != build.second || before.third != build.third) {
-                    kept = keptForBuild(kept, inputs.verdicts)
+                    kept = keptForBuild(kept, inputs.verdicts, long)
                     built = build
                 }
-                val verification = Verification(feedPrefs.readableOnly, inputs.verdicts, kept)
+                val verification = Verification(feedPrefs.readableOnly, inputs.verdicts, kept, long)
                 val open = feedPrefs.pageable - news.endReached - inputs.skipped
                 val result = withContext(Dispatchers.Default) {
                     buildFeed(news.topics, feedPrefs, clock(), inputs.hides, verification, open, order, inputs.stalled, inputs.reads)

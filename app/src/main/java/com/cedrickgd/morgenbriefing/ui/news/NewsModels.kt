@@ -53,6 +53,8 @@ data class FeedPrefs(
     val readableOnly: Boolean = true,
     /** "Gelesene Artikel ausblenden": read stories leave the lists when they are built anew ([ReadFilter]). */
     val hideRead: Boolean = false,
+    /** "Lange Artikel ausblenden": live blogs and articles measured long leave the lists ([shortItems]). */
+    val hideLong: Boolean = true,
     val prefetch: PrefetchMode = PrefetchMode.WIFI_ONLY,
     /** Language of the news edition (`de`), for the prefetcher's `Accept-Language`. */
     val editionLanguage: String = "",
@@ -76,6 +78,7 @@ data class FeedPrefs(
         pageable = Topics.followedIds(settings).filterTo(HashSet()) { TopicSources.pagingQuery(it, settings) != null },
         readableOnly = settings.readableOnly,
         hideRead = settings.hideRead,
+        hideLong = settings.hideLong,
         prefetch = settings.prefetch,
         editionLanguage = settings.edition.language,
         suggestions = suggestionsFor(settings, lang),
@@ -194,8 +197,9 @@ data class NewsFeed(
 /**
  * Builds the feed for the followed topics of [prefs] from the repository's [news]. Pure.
  *
- * - A topic's own list ([SectionUi.all]) holds everything it has (minus switched-off sources and,
- *   with [FeedPrefs.readableOnly], what [hides] rules out) – older pages included, so the list
+ * - A topic's own list ([SectionUi.all]) holds everything it has (minus switched-off sources,
+ *   with [FeedPrefs.readableOnly] what [hides] rules out, with [FeedPrefs.hideLong] live blogs
+ *   and the long reads measured by the last refresh) – older pages included, so the list
  *   really is endless. "Für dich" and "Neueste" keep to [FeedPrefs.newsAge].
  * - The same story often sits in several followed topics (a category also reads its
  *   sub-topics' feeds): "Für dich" shows it in the first section only, "Neueste" once, under the
@@ -270,10 +274,10 @@ internal fun buildFeed(
     val listed = FeedOrder.Builder()
     val sections = prefs.topics.mapIndexed { index, topic ->
         val topicNews = news[topic.id]
-        val held = readableItems(
-            topicNews?.items.orEmpty().filter { it.feedSourceId !in prefs.disabledFeeds },
+        val held = shortItems(
+            readableItems(topicNews?.items.orEmpty().filter { it.feedSourceId !in prefs.disabledFeeds }, hides, prefs.readableOnly),
             hides,
-            prefs.readableOnly,
+            prefs.hideLong,
         )
         val depth = if (topic.id in open) pagedDepth(topicNews?.items.orEmpty(), reference) else null
         if (depth != null) depths[topic.id] = depth

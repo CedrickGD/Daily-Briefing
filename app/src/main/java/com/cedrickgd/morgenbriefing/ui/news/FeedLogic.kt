@@ -3,6 +3,7 @@ package com.cedrickgd.morgenbriefing.ui.news
 import androidx.compose.runtime.Immutable
 import com.cedrickgd.morgenbriefing.data.NewsRepository
 import com.cedrickgd.morgenbriefing.data.article.KnownWalls
+import com.cedrickgd.morgenbriefing.data.article.LongReads
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.Topic
@@ -64,15 +65,21 @@ private val WHITESPACE = Regex("\\s+")
  * @property itemIds articles whose prefetch ended in [ArticleStatus.PAYWALL] or [ArticleStatus.BLOCKED].
  */
 @Immutable
-data class ReadabilityHides(val domains: Set<String> = emptySet(), val itemIds: Set<String> = emptySet()) {
+data class ReadabilityHides(
+    val domains: Set<String> = emptySet(),
+    val itemIds: Set<String> = emptySet(),
+    /** Articles measured long ([LongReads]): what "Lange Artikel ausblenden" leaves out. */
+    val longIds: Set<String> = emptySet(),
+) {
     companion object {
         val NONE = ReadabilityHides()
 
-        /** A snapshot of [blocked] sites and the walled articles among [statuses]. */
-        fun of(blocked: Collection<String>, statuses: Map<String, ArticleStatus>): ReadabilityHides =
+        /** A snapshot of [blocked] sites, the walled articles among [statuses] and the long reads among [lengths]. */
+        fun of(blocked: Collection<String>, statuses: Map<String, ArticleStatus>, lengths: Map<String, Int> = emptyMap()): ReadabilityHides =
             ReadabilityHides(
                 domains = blocked.toSet(),
                 itemIds = statuses.filterValues { it == ArticleStatus.PAYWALL || it == ArticleStatus.BLOCKED }.keys,
+                longIds = LongReads.longIds(lengths),
             )
     }
 }
@@ -93,6 +100,16 @@ internal fun isHidden(item: NewsItem, hides: ReadabilityHides): Boolean {
     val host = publisherHost(item)
     return host.isNotEmpty() && hides.domains.isNotEmpty() && KnownWalls.matches(host, hides.domains)
 }
+
+/**
+ * [items] without the long reads when [hideLong] is on ("Lange Artikel ausblenden"): live
+ * blogs and tickers by their headline or link, and the articles [hides] knows to be long – as
+ * measured by the last refresh, so a card on screen never vanishes because its check just ended.
+ * With "nur vollständige Artikel" a long article is never verified in the first place
+ * ([Verification.long]).
+ */
+internal fun shortItems(items: List<NewsItem>, hides: ReadabilityHides, hideLong: Boolean): List<NewsItem> =
+    if (!hideLong) items else items.filterNot { it.id in hides.longIds || LongReads.isLiveBlog(it) }
 
 /** [items] without the ones [hides] rules out; everything when [readableOnly] is off. */
 internal fun readableItems(items: List<NewsItem>, hides: ReadabilityHides, readableOnly: Boolean): List<NewsItem> =

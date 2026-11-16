@@ -51,6 +51,10 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  *   only [ArticleStatus.READABLE] items with "nur vollständige Artikel"; [statusOf] for one item.
  * - [images]: per item id the article's lead picture once the page was read – feed cards of
  *   items without a picture (Google News) can show it.
+ * - [lengths]: per item id the article's length in words once it was read ([LongReads]),
+ *   published before its status, kept with the verdict. A complete article judged by an earlier
+ *   version without a length is measured from the article cache when it is asked for again –
+ *   never from the network.
  * - [cancel] / [cancelAll] stop waiting and running loads (leaving the screen, pull-to-refresh).
  * - [report]: the reader tells what happened when an article was opened.
  * - [verify]: checks one article right now and waits for the verdict (the morning notification).
@@ -122,6 +126,11 @@ class ArticlePrefetcher(
     private val _images = MutableStateFlow<Map<String, String>>(emptyMap())
     val images: StateFlow<Map<String, String>> = _images.asStateFlow()
 
+    private val _lengths = MutableStateFlow<Map<String, Int>>(emptyMap())
+
+    /** The length in words of every article read so far, by item id ([LongReads]). */
+    val lengths: StateFlow<Map<String, Int>> = _lengths.asStateFlow()
+
     private val _waitingForNetwork = MutableStateFlow(false)
 
     /** Verification was asked for while the phone is offline: only articles verified before can show. */
@@ -138,6 +147,8 @@ class ArticlePrefetcher(
             scope.launch {
                 try {
                     val known = store.restore()
+                    val measured = store.lengths()
+                    if (measured.isNotEmpty()) _lengths.update { live -> measured + live }
                     if (known.isNotEmpty()) {
                         _status.update { live -> known + live }
                         val now = clock()
@@ -182,7 +193,7 @@ class ArticlePrefetcher(
         }
         val now = clock()
         for (item in window) {
-            if (statusOf(item.id) in SETTLED) continue
+            if (statusOf(item.id) in SETTLED && !needsLength(item.id)) continue
             synchronized(lock) {
                 if (jobs[item.id]?.isActive != true && mayTryAgain(item.id, now)) {
                     val job = scope.launch(start = CoroutineStart.LAZY) { warm(item, policy, language, followLatest = true) }
@@ -249,7 +260,14 @@ class ArticlePrefetcher(
 
     private suspend fun warm(item: NewsItem, policy: Policy, language: String?, followLatest: Boolean) {
         restored.await()
-        if (statusOf(item.id) in SETTLED) return
+        if (statusOf(item.id) in SETTLED) {
+            // Judged complete before lengths were kept: measured from the cache, never loaded again for it.
+            if (needsLength(item.id)) {
+                synchronized(lock) { lengthTried += item.id }
+                source.cached(item)?.let { measure(item, it, statusOf(item.id)) }
+            }
+            return
+        }
         source.cached(item)?.let {
             settle(item, it)
             return
@@ -320,10 +338,25 @@ class ArticlePrefetcher(
     private fun settle(item: NewsItem, content: ArticleContent) {
         synchronized(lock) { failures.remove(item.id) }
         val status = if (ArticleCompleteness.isComplete(content, item)) ArticleStatus.READABLE else ArticleStatus.PAYWALL
+        // The length first: a list that sees the verdict knows at once whether it is a long read.
+        measure(item, content, status)
         setStatus(item.id, status)
-        verdicts?.record(item.id, status)
         content.leadImage?.takeIf { it.startsWith("https://") }?.let { url -> _images.update { it + (item.id to url) } }
     }
+
+    /** Notes [content]'s length for [item] (published and kept with its [status]). */
+    private fun measure(item: NewsItem, content: ArticleContent, status: ArticleStatus) {
+        val words = LongReads.wordsOf(content)
+        if (words > 0) _lengths.update { if (it[item.id] == words) it else it + (item.id to words) }
+        verdicts?.record(item.id, status, words)
+    }
+
+    /** Complete articles whose length was looked for in the cache once (found or not). Guarded by [lock]. */
+    private val lengthTried = HashSet<String>()
+
+    /** A complete article whose length is not known yet and was not looked for. */
+    private fun needsLength(itemId: String): Boolean =
+        statusOf(itemId) == ArticleStatus.READABLE && itemId !in _lengths.value && synchronized(lock) { itemId !in lengthTried }
 
     /** [itemId] could not be read because of [outcome] (null = an unexpected error). */
     private fun fail(itemId: String, outcome: ReadOutcome?) {

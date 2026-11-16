@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.VerifiedUser
+import androidx.compose.material.icons.automirrored.rounded.ShortText
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.WbCloudy
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,6 +74,7 @@ internal class FeedCardActions(
     val onReadableOnly: (Boolean) -> Unit,
     val onPrefetch: (PrefetchMode) -> Unit,
     val onHideRead: (Boolean) -> Unit,
+    val onHideLong: (Boolean) -> Unit,
     /** Opens "Gelesen & ausgeblendet". */
     val onOpenHistory: () -> Unit,
 )
@@ -177,6 +179,13 @@ internal fun FeedCard(settings: AppSettings, actions: FeedCardActions, modifier:
             checked = settings.readableOnly,
             onCheckedChange = actions.onReadableOnly,
             leading = { IconTile(Icons.Rounded.VerifiedUser, tint = StatusPalette.ok()) },
+        )
+        ToggleRow(
+            title = strings.hideLong,
+            subtitle = if (settings.hideLong) strings.hideLongOn else strings.hideLongOff,
+            checked = settings.hideLong,
+            onCheckedChange = actions.onHideLong,
+            leading = { IconTile(Icons.AutoMirrored.Rounded.ShortText, tint = colors.secondary) },
         )
         AnimatedVisibility(
             visible = settings.readInApp,

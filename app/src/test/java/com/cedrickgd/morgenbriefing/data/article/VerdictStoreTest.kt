@@ -91,4 +91,20 @@ class VerdictStoreTest {
         file.writeText("""{"version":${VerdictStore.VERSION},"entries":[{"id":"a","status":"READABLE","at":$clock}]}""")
         assertEquals(mapOf("a" to ArticleStatus.READABLE), store().restore())
     }
+
+    @Test
+    fun `the measured length goes with the verdict, and is not lost to a verdict without one`() = runTest(StandardTestDispatcher()) {
+        val s = store()
+        s.record("a", ArticleStatus.READABLE, words = 1_250)
+        s.record("b", ArticleStatus.READABLE, words = 400)
+        s.record("c", ArticleStatus.PAYWALL)
+        s.record("a", ArticleStatus.READABLE) // the same verdict without a length keeps it
+        s.save()
+        val again = store()
+        assertEquals(mapOf("a" to 1_250, "b" to 400), again.lengths())
+        assertEquals(ArticleStatus.READABLE, again.verdictOf("a"))
+        // Verdicts of earlier versions have no length.
+        file.writeText("""{"version":${VerdictStore.VERSION},"entries":[{"id":"x","status":"READABLE","at":$clock}]}""")
+        assertTrue(store().lengths().isEmpty())
+    }
 }

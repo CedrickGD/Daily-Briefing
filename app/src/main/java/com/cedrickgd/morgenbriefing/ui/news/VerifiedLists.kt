@@ -31,17 +31,22 @@ enum class Check {
  * @property kept per list (its [verifiedList] key): the articles it showed since the last build.
  *   They stay until the next build, whatever their status says now, so nothing disappears under
  *   the user's finger.
+ * @property long articles measured as long reads while "Lange Artikel ausblenden" is on: a
+ *   complete article that runs too long is rejected like a teaser (its length is known together
+ *   with its verdict, so it never shows).
  */
 @Immutable
 data class Verification(
     val enabled: Boolean,
     val statuses: Map<String, ArticleStatus> = emptyMap(),
     val kept: Map<String, Set<String>> = emptyMap(),
+    val long: Set<String> = emptySet(),
 ) {
     /** What [list] may do with the article [id]. */
     fun check(list: String, id: String): Check = when {
         !enabled -> Check.VERIFIED
         kept[list]?.contains(id) == true -> Check.VERIFIED
+        id in long -> Check.REJECTED
         else -> checkOf(statuses[id])
     }
 
@@ -187,6 +192,9 @@ internal fun keptAfter(kept: Map<String, Set<String>>, feed: NewsFeed): Map<Stri
     return out
 }
 
-/** At a new build (fresh news, other settings): only what is still verified stays kept – removals happen now. */
-internal fun keptForBuild(kept: Map<String, Set<String>>, statuses: Map<String, ArticleStatus>): Map<String, Set<String>> =
-    kept.mapValues { (_, ids) -> ids.filterTo(HashSet()) { statuses[it] == ArticleStatus.READABLE } }.filterValues { it.isNotEmpty() }
+/**
+ * At a new build (fresh news, other settings): only what is still verified – and not a long read
+ * ([long]) – stays kept; removals happen now.
+ */
+internal fun keptForBuild(kept: Map<String, Set<String>>, statuses: Map<String, ArticleStatus>, long: Set<String> = emptySet()): Map<String, Set<String>> =
+    kept.mapValues { (_, ids) -> ids.filterTo(HashSet()) { statuses[it] == ArticleStatus.READABLE && it !in long } }.filterValues { it.isNotEmpty() }

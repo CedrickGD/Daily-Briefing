@@ -340,6 +340,8 @@ class SettingsViewModel(
 
     fun setHideRead(hide: Boolean) = edit { it.copy(hideRead = hide) }
 
+    fun setHideLong(hide: Boolean) = edit { it.copy(hideLong = hide) }
+
     fun setPrefetch(mode: PrefetchMode) = edit { it.copy(prefetch = mode) }
 
     fun setNewsAge(age: NewsAge) = edit { it.copy(newsAge = age) }

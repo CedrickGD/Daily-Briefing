@@ -151,6 +151,15 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
   Nächstes geprüft wird); ohne die Einstellung gehen sichtbare Meldungen zum Vorladen an den
   Prefetcher (Marke „Bezahlinhalt“/„Nur im Browser“ – vollständige Artikel tragen keine –, Bild für
   Google-News-Karten).
+* **Lange Artikel ausblenden** (`AppSettings.hideLong`, Standard an; `data/article/LongReads`):
+  der Prefetcher misst jeden gelesenen Artikel (extrahierte Wörter, sonst die erklärte Länge der
+  Redaktion) und legt die Länge vor dem Urteil in `lengths` und mit ihm in `store/verdicts.json` ab
+  – nie wird dafür neu geladen; ältere Urteile ohne Länge misst er aus dem Artikel-Cache. Mehr als
+  900 Wörter (≈ 4–5 Minuten) gilt als lang. Mit „nur vollständige Artikel“ wird ein langer Artikel
+  gar nicht erst als geprüft gezeigt (`Verification.long`); ohne die Einstellung fallen gemessene
+  lange Artikel beim nächsten Aufbau nach einer Aktualisierung weg (`ReadabilityHides.longIds`),
+  ungemessene zeigen sich sofort. Liveblogs und Ticker erkennt `isLiveBlog` an Überschrift oder
+  Link und lässt sie immer weg.
 * **Gelesen & ausgeblendet** (`data/local/ReadHistoryStore` → `store/read-history.json`): eine
   Meldung gilt als gelesen, wenn sie im Leser öffnet (`ArticleViewModel`), im Browser
   (`ShellNavigator.openArticle`, ⋮ „Im Browser öffnen“) oder angehört wird (`ListenController`

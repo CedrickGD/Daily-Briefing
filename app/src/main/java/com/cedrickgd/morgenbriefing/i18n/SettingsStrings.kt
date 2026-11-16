@@ -121,6 +121,9 @@ interface SettingsStrings {
     val readableOnly: String
     val readableOnlyOn: String
     val readableOnlyOff: String
+    val hideLong: String
+    val hideLongOn: String
+    val hideLongOff: String
 
     /** "Gelesene Artikel ausblenden" and the row to the archive of read and hidden stories below it. */
     val hideRead: String
@@ -316,6 +319,9 @@ interface SettingsStrings {
         override val readableOnlyOn =
             "Die App prüft jeden Artikel, bevor sie ihn zeigt: Du siehst nur Meldungen, die komplett in der App lesbar sind – keine Bezahlschranke, kein bloßer Anriss, keine Cookie-Wand. Dafür lädt sie Artikel vorab, auch über mobile Daten (etwas Datenvolumen); offline zeigt sie nur schon geprüfte."
         override val readableOnlyOff = "Alle Meldungen – manche lassen sich nur bei der Redaktion ganz lesen"
+        override val hideLong = "Lange Artikel ausblenden"
+        override val hideLongOn = "Normal lange Nachrichten, keine Romane: Longreads, Dossiers, Reportagen und Liveblogs (über ~900 Wörter, gut 4 Minuten) bleiben draußen."
+        override val hideLongOff = "Auch lange Texte, Dossiers und Liveblogs"
         override val hideRead = "Gelesene Artikel ausblenden"
         override val hideReadOn = "Was du gelesen oder angehört hast, verschwindet aus den Listen – beim nächsten Aktualisieren, nie unter dem Finger."
         override val hideReadOff = "Gelesenes bleibt in den Listen, nur ruhiger dargestellt."
@@ -535,6 +541,9 @@ interface SettingsStrings {
         override val readableOnlyOn =
             "The app checks every article before showing it: you only see stories that can be read in full in the app – no paywall, no mere teaser, no cookie wall. For that it loads articles in advance, on mobile data too (uses some data); offline it shows only articles checked before."
         override val readableOnlyOff = "All stories – some can only be read in full on the publisher's site"
+        override val hideLong = "Hide long articles"
+        override val hideLongOn = "Normal-length news, no novels: long reads, dossiers, features and live blogs (over ~900 words, 4+ minutes) stay out."
+        override val hideLongOff = "Long reads, dossiers and live blogs too"
         override val hideRead = "Hide read articles"
         override val hideReadOn = "Stories you read or listened to leave the lists the next time they refresh – never under your finger."
         override val hideReadOff = "Read stories stay in the lists, just quieter."
@@ -754,6 +763,9 @@ interface SettingsStrings {
         override val readableOnlyOn =
             "L'appli vérifie chaque article avant de l'afficher : tu ne vois que des articles lisibles en entier dans l'appli – pas de paywall, pas de simple accroche, pas de mur de cookies. Pour cela, elle charge les articles à l'avance, aussi en données mobiles (consomme un peu de données) ; hors ligne, elle n'affiche que ceux déjà vérifiés."
         override val readableOnlyOff = "Tous les articles – certains ne se lisent en entier que sur le site de l'éditeur"
+        override val hideLong = "Masquer les articles longs"
+        override val hideLongOn = "Des infos de longueur normale, pas des romans : grands formats, dossiers, reportages et directs (plus de ~900 mots, plus de 4 minutes) restent dehors."
+        override val hideLongOff = "Aussi les longs formats, dossiers et directs"
         override val hideRead = "Masquer les articles lus"
         override val hideReadOn = "Ce que tu as lu ou écouté quitte les listes à la prochaine actualisation – jamais sous ton doigt."
         override val hideReadOff = "Les articles lus restent dans les listes, simplement plus discrets."
@@ -977,6 +989,9 @@ interface SettingsStrings {
         override val readableOnlyOn =
             "La app comprueba cada artículo antes de mostrarlo: solo ves noticias que se pueden leer completas en la app – sin muro de pago, sin un simple adelanto, sin muro de cookies. Para ello carga los artículos por adelantado, también con datos móviles (gasta algunos datos); sin conexión solo muestra los ya comprobados."
         override val readableOnlyOff = "Todas las noticias – algunas solo se leen completas en la web del medio"
+        override val hideLong = "Ocultar artículos largos"
+        override val hideLongOn = "Noticias de extensión normal, no novelas: lecturas largas, dossieres, reportajes y directos (más de ~900 palabras, más de 4 minutos) se quedan fuera."
+        override val hideLongOff = "También textos largos, dossieres y directos"
         override val hideRead = "Ocultar artículos leídos"
         override val hideReadOn = "Lo que has leído o escuchado sale de las listas en la próxima actualización – nunca bajo tu dedo."
         override val hideReadOff = "Lo leído se queda en las listas, solo más discreto."
@@ -1200,6 +1215,9 @@ interface SettingsStrings {
         override val readableOnlyOn =
             "L'app verifica ogni articolo prima di mostrarlo: vedi solo notizie che si leggono per intero nell'app – niente paywall, niente semplici anteprime, niente muri dei cookie. Per questo carica gli articoli in anticipo, anche con i dati mobili (consuma qualche dato); offline mostra solo quelli già verificati."
         override val readableOnlyOff = "Tutte le notizie – alcune si leggono per intero solo sul sito della testata"
+        override val hideLong = "Nascondi articoli lunghi"
+        override val hideLongOn = "Notizie di lunghezza normale, niente romanzi: long read, dossier, reportage e dirette (oltre ~900 parole, più di 4 minuti) restano fuori."
+        override val hideLongOff = "Anche testi lunghi, dossier e dirette"
         override val hideRead = "Nascondi articoli letti"
         override val hideReadOn = "Ciò che hai letto o ascoltato lascia le liste al prossimo aggiornamento – mai sotto il dito."
         override val hideReadOff = "Gli articoli letti restano nelle liste, solo più discreti."

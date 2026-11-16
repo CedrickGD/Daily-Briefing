@@ -268,7 +268,8 @@ gefüllte Pill.
 6. **Feed & Lesen**: Meldungen pro Thema als große Zahl mit ruhigem Slider, Zeitraum als
    Auswahl-Pills, „Bilder anzeigen“, „Gelesene Artikel ausblenden“ (Standard aus, mit einer
    Zeile, was passiert) und direkt darunter die Zeile „Gelesen & ausgeblendet“ (Zähler, Chevron);
-   „In der App lesen“, „Nur lesbare Artikel“, „Vorladen“.
+   „In der App lesen“, „Nur lesbare Artikel“, „Lange Artikel ausblenden“ (Standard an: normal lange
+   Nachrichten, keine Romane), „Vorladen“.
 7. **Vorlesen**: Sprachausgabe als Pills (nur bei mehreren Engines, z. B. Samsung · Google),
    Sprache (Automatisch · feste Sprache), „Stimme für …“ (Sprach-Chips, wenn mehrere zählen),
    „Am liebsten“ Egal · Weiblich · Männlich (nur Geschlechter, die eine Stimme verrät), Stimmen als
