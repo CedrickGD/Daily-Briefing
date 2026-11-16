@@ -343,6 +343,9 @@ internal object ArticleCleaner {
     private val NAME_SPLIT = Regex("\\s*(,|&|\\bund\\b|\\band\\b|\\bet\\b)\\s*")
     private const val AUTHOR_LINE_WORDS = 10
 
+    /** A newsroom by its web address in a byline ("Von index-radar.de", "www.futurezone.de") – not "z.B." or "2.5". */
+    private val WEB_NAME = Regex("^(www\\.)?[a-z0-9][a-z0-9-]*(\\.[a-z0-9-]+)*\\.[a-z]{2,6}$")
+
     /**
      * "Mit Material von dpa", "Mit Agenturmaterial", "Unter Verwendung von Material der
      * Nachrichtenagenturen", "With reporting from Reuters" – never "Nach Angaben der dpa …", which
@@ -417,13 +420,15 @@ internal object ArticleCleaner {
 
     /**
      * Where the text appeared first: "Dieser Artikel erschien zuerst bei …", "Der Text ist zuerst in
-     * … erschienen", "Zuerst erschienen auf …", "This article was originally published on The
-     * Conversation", "This story first appeared in …", "A version of this story appeared in …",
-     * "Cet article a été publié initialement dans …", "Article initialement paru sur …".
+     * … erschienen", "Zuerst erschienen auf …", "Das Original zu diesem Beitrag "…" stammt von
+     * Index Radar." (FOCUS, BUNTE), "This article was originally published on The Conversation",
+     * "This story first appeared in …", "A version of this story appeared in …", "Cet article a
+     * été publié initialement dans …", "Article initialement paru sur …".
      */
     private val FIRST_APPEARED = Regex(
         "(?i)^(dieser|diese|der) (artikel|beitrag|text|kommentar|gastbeitrag|essay|interview)\\b(?=.{0,80}\\b(zuerst|erstmals|ursprünglich|zunächst)\\b)" +
             "(?=.{0,100}\\b(erschien|erschienen|veröffentlicht|publiziert)\\b)|^(zuerst|erstmals|ursprünglich|zunächst) (erschienen|veröffentlicht)\\b|" +
+            "^das original (zu |von )?(diesem|dieses|dem) (beitrag|artikel|text)\\b.{0,200}\\bstammt (von|aus)\\b|" +
             "^this (article|story|piece|post|essay|column|op-ed|interview|report)\\b.{0,40}\\b((originally|first) (published|appeared|ran|posted)|republished|reprinted)\\b|" +
             "^(originally|first) (published|appeared|ran|posted) (on|in|at|by)\\b|^a version of this (article|story|piece)\\b|" +
             // After "é" a word boundary is not one on every JVM: "no letter follows" instead.
@@ -813,15 +818,16 @@ internal object ArticleCleaner {
 
     /**
      * The byline on a line of its own: "Von Max Muster", "By Jane Doe and John Roe, Washington",
-     * "Par Jean Dupont" – every part after the word a name (or a place). "Von Montag an" or "Von
-     * Berlin nach Paris" are not.
+     * "Par Jean Dupont", "Von index-radar.de" – every part after the word a name (or a place, or
+     * the web address of the newsroom that wrote it). "Von Montag an" or "Von Berlin nach Paris"
+     * are not.
      */
     internal fun isAuthorLine(text: String): Boolean {
         val t = text.trim().trimEnd('.')
         if (TextMatch.wordCount(t) > AUTHOR_LINE_WORDS) return false
         val prefix = AUTHOR_PREFIX.find(t) ?: return false
         val names = t.substring(prefix.range.last + 1).split(NAME_SPLIT).map { it.trim() }.filter { it.isNotEmpty() }
-        return names.isNotEmpty() && names.size <= NAME_MAX_WORDS && names.all(::isPersonName)
+        return names.isNotEmpty() && names.size <= NAME_MAX_WORDS && names.all { isPersonName(it) || WEB_NAME.matches(it) }
     }
 
     /**

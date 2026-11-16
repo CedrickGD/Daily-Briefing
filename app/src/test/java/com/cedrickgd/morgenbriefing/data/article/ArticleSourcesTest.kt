@@ -119,6 +119,8 @@ class ArticleSourcesTest {
             "Text von Max Muster", "Ein Beitrag von Anna Muster", "Propos recueillis par Jean Dupont", "Rédaction : Jean Dupont",
             "Avec AFP", "Le Figaro avec AFP", "La rédaction avec AFP", "Par Jean Dupont avec l'AFP",
             "Dieser Artikel erschien zuerst bei Zeit Online.", "Der Text ist zuerst in der Süddeutschen Zeitung erschienen.",
+            "Das Original zu diesem Beitrag \"Diese 10 Aktien sind laut Morningstar jetzt echte Schnäppchen – Rheinmetall führt das Ranking an\" stammt von Index Radar.",
+            "Das Original zu diesem Beitrag \"Phil Collins: Tränen bei Hall-of-Fame-Ehrung mit Tochter Lily\" stammt von spot on news.",
             "This article was originally published on The Conversation.", "This story first appeared in ProPublica's weekly edition.",
             "Cet article a été publié initialement dans Le Monde.", "Article initialement paru sur Le Figaro.",
             "Abonnieren Sie unseren kostenlosen Newsletter.", "Folgen Sie uns auf Instagram und Facebook.", "Hier geht's zum WhatsApp-Kanal.",
@@ -142,15 +144,16 @@ class ArticleSourcesTest {
             "Laut dpa",
             "Mit Informationen aus Ermittlerkreisen konnte die Polizei den Täter fassen.",
             "Die Studie erschien im Fachblatt Nature und wurde zuerst von Kollegen geprüft.",
+            "Das Original des Gemäldes stammt von Caspar David Friedrich.",
         ).forEach { assertFalse(it, ArticleCleaner.isSourceLine(it)) }
     }
 
     @Test
     fun `the byline on its own line is a credit, a sentence that starts with Von is not`() {
-        listOf("Von Max Mustermann, Berlin", "By The Associated Press", "By Jane Doe and John Roe", "Par Jean Dupont").forEach {
+        listOf("Von Max Mustermann, Berlin", "By The Associated Press", "By Jane Doe and John Roe", "Par Jean Dupont", "Von index-radar.de", "Von futurezone.de").forEach {
             assertTrue(it, ArticleCleaner.isAuthorLine(it))
         }
-        listOf("Von Berlin nach Paris", "Von Montag an gilt die neue Regel.", "By the numbers", "Von Amts wegen").forEach {
+        listOf("Von Berlin nach Paris", "Von Montag an gilt die neue Regel.", "By the numbers", "Von Amts wegen", "Von z.B.", "Von 2.5").forEach {
             assertFalse(it, ArticleCleaner.isAuthorLine(it))
         }
         // As a paragraph it goes; a heading in title case ("By The Numbers") is not read as a byline.
@@ -159,6 +162,18 @@ class ArticleSourcesTest {
         val more = "Insgesamt fehlen den Städten und Gemeinden nach eigenen Angaben rund 800 Millionen Euro."
         val page = listOf(p(long), h("By The Numbers"), p(more), p("Von Max Mustermann, Berlin"))
         assertEquals(listOf(long, "By The Numbers", more), texts(ArticleCleaner.clean(page, "Grundsteuer bleibt")))
+    }
+
+    @Test
+    fun `a partner story on FOCUS loses its byline address and where the original comes from`() {
+        val last = "Ein vorzeitiger Verkauf ist somit jederzeit möglich – etwa dann, wenn der Großteil des Ertrags bereits eingefahren wurde."
+        val page = listOf(
+            p(mietenLead),
+            p(last),
+            p("Von index-radar.de"),
+            p("Das Original zu diesem Beitrag \"Diese 10 Aktien sind laut Morningstar jetzt echte Schnäppchen – Rheinmetall führt das Ranking an\" stammt von Index Radar."),
+        )
+        assertEquals(listOf(mietenLead, last), texts(ArticleCleaner.clean(page, "Rheinmetall führt Ranking von 10 Schnäppchen-Aktien an")))
     }
 
     @Test
