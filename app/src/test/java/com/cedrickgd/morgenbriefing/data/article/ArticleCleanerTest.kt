@@ -93,13 +93,13 @@ class ArticleCleanerTest {
     }
 
     @Test
-    fun `a different picture and a different first paragraph stay`() {
+    fun `a different first paragraph stays, a different picture does not show in the text (one picture, on top)`() {
         val c = content(
             ArticleBlock.image("https://images.tagesschau.de/image/11111111-2222-3333-4444-555555555555/AAA/BBB/16x9/anderes-bild-100.jpg"),
             ArticleBlock.paragraph("Ganz anderer Einstieg in den Text, der nichts mit dem Teaser zu tun hat und weitergeht."),
         )
         val arranged = ArticleCleaner.arrange(c, "Der Teaser der Redaktion ist ein anderer Satz über etwas anderes.", hero = "https://images.tagesschau.de/image/8e6be664-a867-424d-82e0-a1f8ce29c500/AAA/BBB/16x9/demokraten-124.jpg")
-        assertEquals(2, arranged.content.blocks.size)
+        assertEquals(listOf(ArticleBlock.PARAGRAPH), arranged.content.blocks.map { it.type })
         assertEquals("Der Teaser der Redaktion ist ein anderer Satz über etwas anderes.", arranged.teaser)
     }
 

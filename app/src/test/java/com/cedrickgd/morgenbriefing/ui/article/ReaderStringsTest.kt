@@ -26,7 +26,6 @@ class ReaderStringsTest {
             assertTrue(s.failureReason(ReadOutcome.BLOCKED, "kicker", 403).contains("403"))
             assertTrue(s.failureReason(ReadOutcome.NOT_ARTICLE, "", 404).contains("404"))
             assertTrue(s.failureReason(ReadOutcome.NETWORK, "", 429).contains("429"))
-            assertTrue(s.source("BBC").contains("BBC"))
             assertEquals("", s.status(ArticleStatus.UNKNOWN))
             ArticleStatus.entries.filter { it != ArticleStatus.UNKNOWN }.forEach { assertTrue("$lang $it", s.status(it).isNotBlank()) }
             listOf(s.listen, s.pauseListening, s.readInApp, s.truncatedNote).forEach { assertTrue(it.isNotBlank()) }

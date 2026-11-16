@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -64,7 +63,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
@@ -73,15 +71,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
 import com.cedrickgd.morgenbriefing.data.model.ArticleBlock
-import com.cedrickgd.morgenbriefing.data.model.ArticleContent
 import com.cedrickgd.morgenbriefing.data.model.ArticleImage
 import com.cedrickgd.morgenbriefing.domain.Fmt
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
@@ -101,15 +96,14 @@ import com.cedrickgd.morgenbriefing.ui.glass.isGlassDark
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleRoute
 import com.cedrickgd.morgenbriefing.ui.news.ArticleVisual
 import com.cedrickgd.morgenbriefing.ui.news.TopicColors
-import com.cedrickgd.morgenbriefing.ui.news.hostOf
 import com.cedrickgd.morgenbriefing.ui.news.rememberTopicColors
 import com.cedrickgd.morgenbriefing.util.rememberLinkActions
 import com.cedrickgd.morgenbriefing.util.statusBarTop
 
-/** Distance of the reader's text (head, paragraphs, captions, end note) from the screen's edge. */
+/** Distance of the reader's text (head, paragraphs, end note) from the screen's edge. */
 private val TextGutter = 16.dp
 
-/** Pictures in the text and the failure panel reach closer to the edge than the text; the hero is edge to edge. */
+/** The failure panel reaches closer to the edge than the text (the card edge); the picture is edge to edge. */
 private val ImageGutter = 10.dp
 
 /** The floating controls (back, listen, share, browser) sit this far from the edge. */
@@ -125,13 +119,14 @@ private val ControlsBarLead = 24.dp
 private val ControlsBarCorner = 24.dp
 
 /**
- * The article reader (docs/DESIGN.md §7): the article's own text and pictures on a calm, opaque
- * surface — no ads, no cookie banners, no navigation. The feed's picture (or the page's lead
- * picture) sits edge-to-edge under the status bar, then source and time, the headline in serif,
- * the teaser, and the extracted body. Floating glass controls: back, "Zuhören" (reads the full
- * text), share and "Im Browser öffnen" as the way out when a page cannot be read. Over the
- * picture they float alone; once the text reaches them, a frosted bar behind them takes the
- * status bar and the controls' row, so the text never runs under the clock or the buttons.
+ * The article reader (docs/DESIGN.md §7), short and clean like Google News or Perplexity: the
+ * article's text on a calm, opaque surface — no ads, no cookie banners, no navigation, no source
+ * lines, and one picture: the card's (or the page's lead picture) edge-to-edge under the status
+ * bar. Then the time, the headline in serif, the teaser and the extracted body. Floating glass
+ * controls: back, "Zuhören" (reads the full text), share and "Im Browser öffnen" as the way out
+ * when a page cannot be read. Over the picture they float alone; once the text reaches them, a
+ * frosted bar behind them takes the status bar and the controls' row, so the text never runs
+ * under the clock or the buttons.
  */
 @Composable
 fun ArticleScreen(
@@ -180,11 +175,11 @@ fun ArticleScreen(
             item(key = "head") { Head(state) }
             when {
                 content != null -> {
-                    itemsIndexed(content.blocks, key = { index, _ -> "block$index" }, contentType = { _, block -> block.type }) { index, block ->
-                        // The picture on top is not among the blocks (ArticleCleaner.arrange took it out).
-                        BlockView(block, showImages = state.showImages, showAlt = showsAlt(content.blocks, index))
+                    // The text only: ArticleCleaner.arrange took every picture and caption out (the one picture is on top).
+                    itemsIndexed(content.blocks, key = { index, _ -> "block$index" }, contentType = { _, block -> block.type }) { _, block ->
+                        BlockView(block)
                     }
-                    item(key = "end") { EndNote(state, content, onOpenExternal = openExternal) }
+                    item(key = "end") { EndNote(state, onOpenExternal = openExternal) }
                 }
 
                 state.loading -> item(key = "skeleton") { BodySkeleton() }
@@ -202,7 +197,6 @@ fun ArticleScreen(
 
         ReaderControls(
             solid = textUnderControls,
-            title = state.item.source.trim().ifEmpty { content?.site.orEmpty() },
             back = { ReaderControl(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = common.back, onClick = onBack) },
         ) {
             val speakingThis = listeningThis && listenState.speaking
@@ -220,17 +214,16 @@ fun ArticleScreen(
 }
 
 /**
- * The reader's controls at the top: [back], the [actions] and, once the text has reached them
- * ([solid]), a thick frosted bar behind them, from the top of the screen down to under the
- * buttons, with the [title] (the source) in small serif between them. The bar is floating glass:
- * it blurs the text gliding beneath it (opaque without real blur) and takes every touch inside
- * it. The reader's page has the colour of the bar, so a hairline along its rounded lower edge and
- * a soft shadow set it off.
+ * The reader's controls at the top: [back] on the left, the [actions] on the right and, once the
+ * text has reached them ([solid]), a thick frosted bar behind them, from the top of the screen
+ * down to under the buttons – without a title: the source is not the story. The bar is floating
+ * glass: it blurs the text gliding beneath it (opaque without real blur) and takes every touch
+ * inside it. The reader's page has the colour of the bar, so a hairline along its rounded lower
+ * edge and a soft shadow set it off.
  */
 @Composable
 private fun BoxScope.ReaderControls(
     solid: Boolean,
-    title: String,
     back: @Composable () -> Unit,
     actions: @Composable RowScope.() -> Unit,
 ) {
@@ -276,18 +269,7 @@ private fun BoxScope.ReaderControls(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         back()
-        Box(Modifier.weight(1f)) {
-            this@Row.AnimatedVisibility(visible = solid && title.isNotBlank(), enter = fadeIn(), exit = fadeOut()) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = MaterialTheme.typography.displaySmall.fontFamily),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 6.dp),
-                )
-            }
-        }
+        Spacer(Modifier.weight(1f))
         actions()
     }
 }
@@ -349,23 +331,23 @@ private fun Hero(state: ArticleUiState, height: Dp) {
     }
 }
 
+/** Time, headline and teaser – no source: the newsroom's name is not the story. */
 @Composable
 private fun Head(state: ArticleUiState) {
     val colors = MaterialTheme.colorScheme
     val item = state.item
     val headline = item.headline.ifBlank { state.content?.title.orEmpty() }
     val lang = LocalAppLanguage.current
-    val meta = remember(item, state.now, lang) {
-        val source = item.source.trim().ifEmpty { item.publisherDomain.ifBlank { hostOf(item.url) } }
-        listOfNotNull(Fmt.relative(item.publishedAt, state.now, lang), source.ifBlank { null }).joinToString(" · ")
-    }
+    val time = remember(item, state.now, lang) { Fmt.relative(item.publishedAt, state.now, lang)?.uppercase(lang.locale) }
     Column(Modifier.padding(horizontal = TextGutter)) {
-        Text(
-            text = meta.uppercase(lang.locale),
-            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp),
-            color = colors.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(10.dp))
+        if (!time.isNullOrBlank()) {
+            Text(
+                text = time,
+                style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp),
+                color = colors.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+        }
         if (headline.isNotBlank()) {
             Text(text = headline, style = MaterialTheme.typography.headlineLarge, color = colors.onSurface)
         }
@@ -386,8 +368,9 @@ private fun Head(state: ArticleUiState) {
     }
 }
 
+/** One block of the text. Pictures and captions never get here (one picture, on top). */
 @Composable
-private fun BlockView(block: ArticleBlock, showImages: Boolean, showAlt: Boolean) {
+private fun BlockView(block: ArticleBlock) {
     val colors = MaterialTheme.colorScheme
     val body = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif, fontSize = 18.sp, lineHeight = 29.sp)
     when (block.type) {
@@ -433,61 +416,24 @@ private fun BlockView(block: ArticleBlock, showImages: Boolean, showAlt: Boolean
             }
         }
 
-        ArticleBlock.IMAGE -> if (showImages) {
-            Column(Modifier.padding(horizontal = ImageGutter, vertical = 12.dp)) {
-                AsyncImage(
-                    model = block.url,
-                    // Printed below as text (showAlt)? Then that line is what a screen reader reads, once.
-                    contentDescription = imageDescription(block.alt, altShown = showAlt),
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 120.dp)
-                        .clip(GlassShapes.tile),
-                )
-                // Only without a caption below (showsAlt): the alt text often is the caption in other words.
-                if (showAlt) {
-                    Text(
-                        text = block.alt,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceVariant,
-                        modifier = Modifier.padding(start = TextGutter - ImageGutter, end = TextGutter - ImageGutter, top = 6.dp),
-                    )
-                }
-            }
-        }
-
-        ArticleBlock.CAPTION -> Text(
-            text = block.text,
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onSurfaceVariant,
-            modifier = Modifier.padding(start = TextGutter, end = TextGutter, bottom = 8.dp),
-        )
+        else -> Unit
     }
 }
 
+/**
+ * The end of the article: nothing but the way to the rest when the text is probably only its
+ * beginning – no source line ("Quelle: …"); "Im Browser öffnen" otherwise sits in the bar.
+ */
 @Composable
-private fun EndNote(state: ArticleUiState, content: ArticleContent, onOpenExternal: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val reader = readerStrings()
+private fun EndNote(state: ArticleUiState, onOpenExternal: () -> Unit) {
+    if (!state.partial) return
     Column(Modifier.padding(start = TextGutter, end = TextGutter, top = 24.dp)) {
-        if (state.partial) {
-            Text(
-                text = reader.truncatedNote,
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-        }
-        val source = state.item.source.ifBlank { content.site }
-        if (source.isNotBlank()) {
-            Text(
-                text = reader.source(source),
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-        }
+        Text(
+            text = readerStrings().truncatedNote,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
         GlassPillButton(text = commonStrings().openInBrowser, icon = Icons.AutoMirrored.Rounded.OpenInNew, onClick = onOpenExternal)
     }
 }

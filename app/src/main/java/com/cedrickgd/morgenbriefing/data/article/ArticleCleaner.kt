@@ -37,6 +37,17 @@ import com.cedrickgd.morgenbriefing.data.model.ArticleContent
  * - what taz hangs under its text after "Inhaltlichen Fehler melden": teasers for other articles
  *   and a subscription offer – and above it the author's box with a bare name as alt text.
  *
+ * And what the owner does not want to read at all (16.11.2026: "short, clean, one picture, no
+ * source clutter", like Google News or Perplexity):
+ *
+ * - sources and credits, in German, English and French: lists of sources ("Quellen", "Sources"),
+ *   "Quelle: dpa", "Mit Material von dpa", "jdl/dpa", "Avec AFP", "Mitarbeit: …", "Reporting by
+ *   …; Editing by …", "… contributed to this report", photo credits ("Foto: …", "Bild: …", "© …",
+ *   "AP Photo/…"), the byline as a line of its own,
+ * - boxes of other articles ("Mehr zum Thema", "Related", "À lire aussi") with their links,
+ *   "Dieser Artikel erschien zuerst …", newsletter and social prompts, what is left of a gallery,
+ * - every picture but one ([arrange]) – and with them their captions and alt texts.
+ *
  * [clean] works on what the page itself says (stored in the cache); [arrange] on what the
  * reader shows around it (the feed's headline, teaser and picture).
  */
@@ -63,8 +74,6 @@ internal object ArticleCleaner {
     private const val TEASER_REST_WORDS = 8
     private const val DATELINE_WORDS = 7
     private val YEAR = Regex("\\b(19|20)\\d{2}\\b")
-    private const val CREDIT_ONLY_WORDS = 6
-    private val CREDIT_ONLY = Regex("(?i)^(©|\\(c\\)|(foto|fotos|bild|bilder|bildquelle|bildrechte|quelle|photo|image|credit)\\s*:)")
 
     /** "Follow" boxes of a newsroom's account system (The Verge): one per author and topic of the story. */
     private val FOLLOW_BOX = Regex("(?i)posts from this (author|topic) will be added to your|follow topics and authors from this story")
@@ -132,8 +141,15 @@ internal object ArticleCleaner {
         Regex("(?i)^(\\d{1,2}:\\d{2}(\\s|$)|narrated by|read by|gelesen von|vorgelesen von|audio version)"),
     )
 
-    /** "Read More: Inside the …", "Lesen Sie auch: …": links to other articles between paragraphs. */
-    private val RELATED_LINE = Regex("(?i)^(read more|more|related|see also|also read|lesen sie auch|lesen sie mehr|mehr zum thema|auch interessant|weiterlesen|zum weiterlesen)\\s*[:|»›]\\s*\\S.{2,200}$")
+    /**
+     * "Read More: Inside the …", "Lesen Sie auch: …", "À lire aussi : …", "Watch: …": links to
+     * other articles (or videos) between paragraphs.
+     */
+    private val RELATED_LINE = Regex(
+        "(?i)^(read more|more|related|related coverage|see also|also read|further reading|recommended|watch|" +
+            "lesen sie auch|lesen sie mehr|mehr zum thema|mehr dazu|auch interessant|das könnte sie auch interessieren|passend dazu|weiterlesen|zum weiterlesen|" +
+            "[aàÀ] lire aussi|lire aussi|lire [ée]galement|voir aussi|[aàÀ] voir aussi|[aàÀ] voir|[aàÀ] [ée]couter|sur le m[êe]me sujet)\\s*[:|»›]\\s*\\S.{2,200}$",
+    )
     private const val RELATED_MAX_WORDS = 20
     private val BYLINE = Regex("^(?i:von|by|text|interview|ein kommentar von|eine analyse von|ein gastbeitrag von|aus)[:\\s]+\\p{Lu}")
     private val SENTENCE_END = Regex("[.!?:\"“”»«]$")
@@ -145,7 +161,11 @@ internal object ArticleCleaner {
     private val MEDIA_NOISE = Regex(
         "(?i)((audio|video|podcast) (starten|abspielen|anhören)|abbrechen mit escape|verfügbar bis \\d{1,2}\\.\\d{1,2}\\.\\d{2,4}|" +
             "^\\d+\\s*(sek|min)\\.?$|^(play|watch) (video|now)|video duration|^(video|audio):?\\s*\\d+:\\d{2}|bildergalerie mit \\d+ bildern|" +
-            "^\\d+ bilder$|zur bildergalerie|^(galerie|gallery)\\s*\\(\\d+|^(audio|video|podcast)\\s*:\\s*\\S.*\\(\\d+\\s*(min|sek|sec)\\.?\\)$)",
+            "^\\d+ bilder$|zur bildergalerie|^(galerie|gallery)\\s*\\(\\d+|^(audio|video|podcast)\\s*:\\s*\\S.*\\(\\d+\\s*(min|sek|sec)\\.?\\)$|" +
+            // The reader shows one picture: what is left of a gallery goes too ("Bild 3 von 12", "Alle Bilder anzeigen", "Voir le diaporama").
+            "^(bild|foto|image|photo)\\s+\\d+\\s*(von|of|sur|/)\\s*\\d+$|^\\d+\\s*/\\s*\\d+$|^(zur|zu den|alle) (galerie|fotos|bilder)\\b|^(alle )?(bilder|fotos) anzeigen$|" +
+            "^(weitere|mehr) (bilder|fotos)$|^(bildergalerie|fotostrecke|fotogalerie|photo gallery|galerie photos?|diaporama)\\b.{0,30}$|^(view|see|open) (the )?(gallery|all \\d* ?photos)\\b|" +
+            "^(voir|ouvrir) (la galerie|le diaporama|les photos)\\b)",
     )
     private val MORE_WORD = Regex("(?i)(mehr|more|weiterlesen|read more|alle artikel|zum artikel|zur übersicht|›|»)")
     private val CREDIT_TAIL = Regex("(?i)(\\(?(foto|fotos|bild|bilder|photo|image|bildquelle|credit)\\s*:\\s*[^:]{2,80}|photo by [^:]{3,80}|\\(foto: [^)]{2,60}\\))\\.?$")
@@ -238,6 +258,202 @@ internal object ArticleCleaner {
             "l[’']articolo\\b.{1,300}?\\b(proviene da|sembra essere il primo su)\\b).{0,80}$",
     )
 
+    // ------------------------------------------------------------------------------- sources
+
+    /**
+     * The label of a box that lists the sources or other articles, alone on its line (a heading or
+     * a short paragraph): "Quellen", "Mehr zum Thema", "Das könnte Sie auch interessieren",
+     * "Sources", "Related coverage", "À lire aussi", "Sur le même sujet". Not "Empfehlungen" or
+     * "Weitere Informationen" alone – an article may well have a section of that name.
+     */
+    private val SECTION_LABEL = Regex(
+        "(?i)^(quellen(angaben|verzeichnis)?|quellen und (links|literatur)|literatur(hinweise|verzeichnis)?|weiterführende links|links zum (thema|artikel)|" +
+            "mehr zu(m| diesem) thema|mehr dazu|zum thema|passend (zum thema|dazu)|weitere artikel( zum thema)?|weitere (meldungen|nachrichten|beiträge) (zum thema|dazu)|" +
+            "das könnte (sie|dich) auch interessieren|auch interessant|ebenfalls interessant|lesen sie auch|lesen sie mehr|lese-?tipps?|unsere empfehlungen|" +
+            "sources?|sources and (references|further reading)|references|further reading|related|related (articles?|stories|coverage|content|links|reading|topics)|" +
+            "more on this (story|topic)|read more|recommended( (reading|stories|for you))?|you (may|might) also like|" +
+            "sources et (liens|r[ée]f[ée]rences)|r[éÉ]f[ée]rences|[aàÀ] lire aussi|lire [ée]galement|[aàÀ] lire [ée]galement|voir aussi|[aàÀ] voir aussi|sur le m[êe]me sujet|" +
+            "dans la même rubrique|pour aller plus loin|nos articles sur le (sujet|même thème)|ces articles peuvent vous intéresser|vous aimerez aussi)\\s*[:.…]?$",
+    )
+
+    /** Labels of a list of sources (every short line after them is a source, sentence or not). */
+    private val SOURCE_LABEL = Regex("(?i)^(quellen|literatur|weiterführende links|sources?|references|r[éÉ]f[ée]rences)")
+
+    /** A source section's line: a link title or a source. Longer paragraphs are text again. */
+    private const val SECTION_LINE_WORDS = 25
+    private const val SECTION_LABEL_WORDS = 8
+
+    /** A newsroom's name on a line of its own ("tagesschau.de", "Süddeutsche Zeitung") is at most this long. */
+    private const val SOURCE_NAME_WORDS = 6
+
+    /** "Quelle: dpa", "Quellen: Destatis, Eurostat", "Sources: …", "Source : AFP", "Bildquelle: …". */
+    private val SOURCE_LINE = Regex("(?i)^\\(?(quellen?|quellenangaben?|bildquellen?|textquelle|datenquelle|sources?|source\\(s\\)|data sources?)\\s*:")
+    private const val SOURCE_LINE_WORDS = 40
+
+    /**
+     * A photo credit: "Foto: Kay Nietfeld/dpa", "Bild: IMAGO/…", "Titelbild: …", "Photo: Getty
+     * Images", "Pictured: …", "Crédit photo : AFP". Short – an interview question that opens with
+     * the newspaper's name ("BILD: Herr Merz, warum …?") is longer and asks.
+     */
+    private val PHOTO_CREDIT = Regex(
+        "(?i)^\\(?(fotos?|bilder?|bildquellen?|bildrechte|bildnachweis|fotonachweis|titelbild|titelfoto|aufmacher(bild|foto)|symbolbild|foto oben|bild oben|" +
+            "fotograf(in)?|photos?|photograph(y)?|images?|pictures?|pictured|(photo|image|picture) credits?|credits?|(top|header|lead|main|featured|cover) (image|photo)|" +
+            "cr[ée]dits?|cr[ée]dits? photos?|cr[ée]dit image|photo d['’]illustration|illustrations?|grafik|infografik|infographie)\\s*:\\s*\\S",
+    )
+    private const val PHOTO_CREDIT_WORDS = 15
+
+    /**
+     * Who wrote, reported, translated or filmed it: "Mitarbeit: …", "Text: …", "Redaktion: …",
+     * "Recherche: …", "Übersetzung: …", "Editing: …", "Rédaction : …", "Traduction : …". Never
+     * "Research:" or "Production:", which open explanatory paragraphs in English.
+     */
+    private val STAFF_CREDIT = Regex(
+        "(?i)^\\(?(mitarbeit|redaktionelle mitarbeit|recherche|redaktion|text|texte|text und fotos?|texte et photos?|autor(in|en|innen)?|protokoll|bearbeitung|" +
+            "[üÜ]bersetzung|layout|kamera|schnitt|editing|reporting|writing|contributors?|contributing (writers?|reporters?|editors?)|" +
+            "r[ée]daction|contribution|traduction|[éÉ]dition|montage|vid[ée]o)\\s*:\\s*\\S",
+    )
+    private const val STAFF_CREDIT_WORDS = 30
+
+    /** Reuters and friends, unmistakable: "Additional reporting by Jane Doe", "With reporting by …". */
+    private val REPORTING_CREDIT = Regex("(?i)^\\(?(additional reporting|with (additional )?reporting|reporting and writing) by\\s+\\p{Lu}")
+
+    /**
+     * "Reporting by Jane Doe in Washington; Editing by Bill Smith" – a credit with its semicolon,
+     * its editor, its brackets or without a full stop; "Reporting by The Guardian revealed …." is
+     * a sentence.
+     */
+    private val REPORTING_BY = Regex("(?i)^\\(?(reporting|writing|editing) by\\s+\\p{Lu}")
+    private val REPORTING_MARKS = Regex("(?i);|\\bediting by\\b|^\\(")
+    private const val REPORTING_BY_WORDS = 60
+
+    /**
+     * A short credit in words, without a full stop: "Text von Max Muster", "Interview by …", "Ein
+     * Beitrag von …", "Propos recueillis par …", "Un article de …". German capitalises its nouns:
+     * "Fotos von Demonstranten kursieren im Netz." is a sentence, and it ends like one.
+     */
+    private val CREDIT_PHRASE = Regex(
+        "(?i)^\\(?((text|words|interview|photos?|fotos?|illustrations?) (by|von)\\s+\\p{Lu}|propos recueillis par\\s+\\p{Lu}|" +
+            "(un |une )?(article|reportage|enquête|chronique) (de|d['’])\\s*\\p{Lu}|" +
+            "(ein|eine) (beitrag|artikel|text|kommentar|gastbeitrag|analyse|reportage|recherche|interview) (von|der|des)\\s+\\p{Lu})",
+    )
+    private const val CREDIT_PHRASE_WORDS = 12
+
+    /** The byline as a line of its own, anywhere: "Von Max Muster, Berlin", "By The Associated Press", "Par Jean Dupont". */
+    private val AUTHOR_PREFIX = Regex("(?i)^(von|by|par)\\s+")
+    private val NAME_SPLIT = Regex("\\s*(,|&|\\bund\\b|\\band\\b|\\bet\\b)\\s*")
+    private const val AUTHOR_LINE_WORDS = 10
+
+    /**
+     * "Mit Material von dpa", "Mit Agenturmaterial", "Unter Verwendung von Material der
+     * Nachrichtenagenturen", "With reporting from Reuters" – never "Nach Angaben der dpa …", which
+     * opens a sentence of the story.
+     */
+    private val AGENCY_MATERIAL = Regex(
+        "(?i)^\\(?((mit|unter verwendung von) (material|agenturmaterial)\\b|with (material|reporting|additional reporting|information) from\\b)",
+    )
+
+    /**
+     * The agency closes a French credit: "Avec AFP", "Le Figaro avec AFP", "Par Jean Dupont avec
+     * l'AFP", "La rédaction avec AFP". What stands before "avec" must be a name, not a sentence:
+     * "Il a parlé avec l'AFP." is one.
+     */
+    private val AVEC_AGENCY = Regex("(?i)\\s*\\bavec (l['’])?(afp|reuters|ap|agences|belga|ats|apa)\\)?\\.?$")
+    private val NEWSROOM_LEAD = Regex("(?i)^(la )?r[ée]daction\\b.*$")
+    private const val AGENCY_LINE_WORDS = 15
+    private const val AVEC_AGENCY_WORDS = 10
+
+    /** An agency named in a credit (lower case). */
+    private val AGENCY_WORD = Regex(
+        "(?i)\\b(dpa|afp|ap|reuters|kna|epd|sid|apa|ddp|dapd|ansa|efe|belga|ats|sda|anp|bloomberg|associated press|agence france-presse|" +
+            "nachrichtenagentur(en)?|agentur(en)?|agenturmaterial|agencies|agences|wire services?)\\b",
+    )
+
+    /** News and photo agencies a credit line may consist of ("jdl/dpa", "(AFP)", "dpa, Reuters"), lower case. */
+    private val AGENCIES = setOf(
+        "dpa", "dpa-afx", "dpa-infocom", "afx", "afp", "ap", "reuters", "kna", "epd", "sid", "apa", "ddp", "dapd", "ots", "ansa", "efe", "belga", "ats",
+        "sda", "keystone-sda", "keystone", "anp", "pap", "tass", "interfax", "xinhua", "kyodo", "yonhap", "pa", "pa media", "bloomberg", "upi",
+        "associated press", "agence france-presse", "agence france presse", "nachrichtenagenturen", "agenturen", "agencies", "agences", "wire services",
+        "getty images", "imago", "imago images", "picture alliance", "picture-alliance", "shutterstock", "istock", "epa", "epa-efe",
+    )
+
+    /** An editor's or author's initials next to the agency: "jdl", "mau", "AFP". */
+    private val INITIALS = Regex("^[a-zäöü]{2,4}$")
+    private val AGENCY_SPLIT = Regex("(?i)\\s*(/|,|;|&|\\+|\\||\\bund\\b|\\band\\b|\\bet\\b)\\s*")
+    private val AGENCY_LEAD = Regex("(?i)^(mit|with|avec)\\s+")
+    private const val AGENCY_PARTS = 6
+    private const val AGENCY_LINE_CHARS = 80
+
+    /** A picture credit made of a photographer and an agency: "AP Photo/Evan Vucci", "picture alliance / dpa | Kay Nietfeld". */
+    private val PHOTO_AGENCY = Regex(
+        "(?i)\\b(getty images|reuters|afp|dpa|ap photo|ap|associated press|imago( images)?|picture[ -]alliance|shutterstock|istock(photo)?|epa(-efe)?|keystone|" +
+            "nurphoto|bloomberg|anadolu|sipa|abaca|hans lucas|maxppp|belga|ansa|efe|zuma( press)?|alamy|xinhua|sopa images|lightrocket|ddp|fotofinder|photothek|" +
+            "ullstein ?bild|action press|eibner|sven simon|kyodo|yonhap)\\b",
+    )
+    private val CREDIT_SEPARATOR = Regex("[|/]")
+    private const val PHOTO_AGENCY_WORDS = 10
+
+    /**
+     * A note that someone else contributed: "The Associated Press contributed to this report.",
+     * "AP writer Jane Doe in Paris contributed.", "An diesem Artikel hat … mitgewirkt.", "… a
+     * contribué à cet article."
+     */
+    private val CONTRIBUTED = Regex(
+        "(?i)\\bcontributed( reporting)? to this (report|story|article)\\b|" +
+            "^an diesem (artikel|text|beitrag) ha(t|ben)\\b.{1,80}\\bmitgewirkt\\b|^mitgearbeitet ha(t|ben)\\b|" +
+            "\\b(a|ont) (contribué|participé) à (cet|cette) (article|enquête|reportage)\\b",
+    )
+
+    /** "… contributed." or "… contributed to the report." at the end – a credit only when it names writers or an agency. */
+    private val CONTRIBUTED_END = Regex("(?i)\\bcontributed( reporting)?( to (the|this) (report|story|article))?\\.?\\)?$")
+    private val CONTRIBUTOR = Regex("(?i)\\b(writers?|reporters?|correspondents?|staff|associated press|reuters|bloomberg|afp)\\b")
+    private const val CONTRIBUTED_WORDS = 30
+
+    /** "© dpa-infocom, dpa:261115-…", "Copyright 2026 The Associated Press. All rights reserved.", "Alle Rechte vorbehalten." */
+    private val COPYRIGHT = Regex(
+        "(?i)^(©|\\(c\\)|copyright\\s*(©|\\(c\\)|\\d{4}))|^(all rights reserved|alle rechte vorbehalten|tous droits réservés|todos los derechos reservados|tutti i diritti riservati)\\b|" +
+            "^this (material|article|story) may not be (published|reproduced|redistributed)\\b",
+    )
+    private const val COPYRIGHT_WORDS = 40
+
+    /**
+     * Where the text appeared first: "Dieser Artikel erschien zuerst bei …", "Der Text ist zuerst in
+     * … erschienen", "Zuerst erschienen auf …", "This article was originally published on The
+     * Conversation", "This story first appeared in …", "A version of this story appeared in …",
+     * "Cet article a été publié initialement dans …", "Article initialement paru sur …".
+     */
+    private val FIRST_APPEARED = Regex(
+        "(?i)^(dieser|diese|der) (artikel|beitrag|text|kommentar|gastbeitrag|essay|interview)\\b(?=.{0,80}\\b(zuerst|erstmals|ursprünglich|zunächst)\\b)" +
+            "(?=.{0,100}\\b(erschien|erschienen|veröffentlicht|publiziert)\\b)|^(zuerst|erstmals|ursprünglich|zunächst) (erschienen|veröffentlicht)\\b|" +
+            "^this (article|story|piece|post|essay|column|op-ed|interview|report)\\b.{0,40}\\b((originally|first) (published|appeared|ran|posted)|republished|reprinted)\\b|" +
+            "^(originally|first) (published|appeared|ran|posted) (on|in|at|by)\\b|^a version of this (article|story|piece)\\b|" +
+            // After "é" a word boundary is not one on every JVM: "no letter follows" instead.
+            "^(cet|cette|ce) (article|entretien|tribune|texte|reportage|[ée]ditorial)\\b.{0,60}\\b(publi[ée]e?|parue?)(?!\\p{L})|" +
+            "^(article |texte )?(initialement|d['’]abord|originellement|pr[ée]c[ée]demment) (publi[ée]e?|parue?)(?!\\p{L})|" +
+            "^publi[ée]e? (initialement|d['’]abord|[àa] l['’]origine) (sur|dans|par)\\b",
+    )
+    private const val FIRST_APPEARED_WORDS = 45
+
+    /**
+     * Asking the reader to subscribe, follow or install: an imperative at the start ("Abonnieren
+     * Sie …", "Folgen Sie …", "Melde dich …", "Sign up …", "Abonnez-vous …", "Suivez …") with a
+     * channel ([CHANNEL]), "Folgen Sie uns" / "follow us" / "suivez-nous" with a channel, or a
+     * phrase that means only that ("unseren Newsletter", "WhatsApp-Kanal", "notre newsletter").
+     */
+    private val PROMPT_START = Regex(
+        "(?i)^(jetzt |hier |gleich |kostenlos |einfach )?(abonnieren sie|abonniere|bestellen sie|melden sie sich|melde dich|registrieren sie sich|folgen sie|folge uns|" +
+            "holen sie sich|laden sie|lade dir|sign up|subscribe|abonnez-vous|inscrivez-vous|suivez|retrouvez|téléchargez)\\b",
+    )
+    private val FOLLOW_US = Regex("(?i)\\b(folgen sie uns|folgt uns|folge uns|follow us|suivez-nous|retrouvez-nous)\\b")
+    private val CHANNEL = Regex(
+        "(?i)\\b(newsletters?|instagram|facebook|twitter|tiktok|youtube|whatsapp|telegram|threads|bluesky|linkedin|mastodon|google news|podcasts?|" +
+            "push-?(mitteilung|nachricht|benachrichtigung)(en)?|app|e-?mail|postfach|kanal|channel|réseaux sociaux|notifications?)\\b",
+    )
+    private val PROMPT_PHRASE = Regex(
+        "(?i)\\b(newsletter (abonnieren|bestellen)|zum newsletter anmelden|für (unseren|den) newsletter|unseren? (\\S+-)?newsletter|our newsletter|notre newsletter|" +
+            "notre lettre d['’]information|whatsapp-kanal|whatsapp channel|sign up for our|download our app|(abonnez|inscrivez)-vous [àa] (notre|la|nos))\\b",
+    )
+    private const val PROMPT_WORDS = 40
+
     // ---------------------------------------------------------------------------------- page
 
     /** Cleans the blocks of a page whose headline is [title] and whose own teaser is [description]. */
@@ -256,6 +472,8 @@ internal object ArticleCleaner {
         out = creditsToCaptions(out)
         out = fixCaptions(out)
         out = settleAlts(out, listOf(title, description))
+        // After the captions are put together: "Erneut nominiert: …" + "Bildquelle: IMAGO/…" under a picture is its caption, not text.
+        out = dropSources(out)
         out = dropTailNoise(out)
         return dropOrphanCaptions(out)
     }
@@ -393,16 +611,6 @@ internal object ArticleCleaner {
         return TextMatch.wordCount(t) <= BARE_CREDIT_WORDS && BARE_CREDIT.matches(t)
     }
 
-    /**
-     * A caption that only names where the picture comes from ("Bildquelle: IMAGO/Chris Emil
-     * Janßen", "© ANSA/EPA", "Gerald Herbert/AP"): it does not say what the picture shows – the
-     * reader then prints the picture's alt text as well.
-     */
-    fun isCreditOnly(text: String): Boolean {
-        val t = text.trim()
-        return TextMatch.wordCount(t) <= CREDIT_ONLY_WORDS && (CREDIT_ONLY.containsMatchIn(t) || isBareCredit(t))
-    }
-
     /** "Stand: …", a date, "Von …", "Lesezeit: …", an author box. */
     internal fun isNoise(text: String): Boolean {
         val words = TextMatch.wordCount(text)
@@ -468,6 +676,152 @@ internal object ArticleCleaner {
                 TextMatch.wordCount(block.text) <= SNIPPET_WORDS && !SENTENCE_STOP.containsMatchIn(block.text.trim())
             !box[i] && !between
         }
+    }
+
+    /**
+     * Sources and credits are not the story (the owner's rule: always out, docs/DESIGN.md §7):
+     *
+     * - a box of sources or other articles – its label ([isSectionLabel]: "Quellen", "Mehr zum
+     *   Thema", "Related", "À lire aussi") and what follows it as long as it looks like the box:
+     *   lists, pictures, captions, short lines that are no sentence (link titles), short lines of
+     *   any kind in a list of sources, headings of teaser cards; a long paragraph – or a short
+     *   line or heading right before one – is the text again,
+     * - a line of its own that says where the text or its pictures come from or asks the reader
+     *   to subscribe ([isSourceLine]); in a list, such entries (and a list of nothing else).
+     *
+     * A sentence of the story that names a source ("…, sagte er der dpa.") is never such a line.
+     */
+    private fun dropSources(blocks: List<ArticleBlock>): List<ArticleBlock> {
+        val dropped = BooleanArray(blocks.size)
+        var i = 0
+        while (i < blocks.size) {
+            val block = blocks[i]
+            if ((block.type == ArticleBlock.HEADING || block.type == ArticleBlock.PARAGRAPH) && isSectionLabel(block.text)) {
+                val sources = SOURCE_LABEL.containsMatchIn(block.text.trim())
+                dropped[i] = true
+                var k = i + 1
+                while (k < blocks.size && inSourceBox(blocks, k, sources)) dropped[k++] = true
+                i = k
+                continue
+            }
+            val line = when (block.type) {
+                ArticleBlock.PARAGRAPH, ArticleBlock.CAPTION -> isSourceLine(block.text) || isAuthorLine(block.text)
+                // A heading in title case may look like a name ("By The Numbers") or carry an agency's letters ("AP-Analyse").
+                ArticleBlock.HEADING -> isSourceLine(block.text, heading = true)
+                else -> false
+            }
+            if (line) dropped[i] = true
+            i++
+        }
+        return blocks.mapIndexedNotNull { k, block ->
+            when {
+                dropped[k] -> null
+                block.type == ArticleBlock.LIST -> block.items.filterNot(::isSourceLine).takeIf { it.isNotEmpty() }?.let { block.copy(items = it) }
+                else -> block
+            }
+        }
+    }
+
+    /** True when the block at [k] still belongs to a box of sources or links that opened above it. */
+    private fun inSourceBox(blocks: List<ArticleBlock>, k: Int, sources: Boolean): Boolean {
+        val block = blocks[k]
+        val words = TextMatch.wordCount(block.text)
+        val beforeText = blocks.getOrNull(k + 1)?.let { it.type == ArticleBlock.PARAGRAPH && TextMatch.wordCount(it.text) > SECTION_LINE_WORDS } == true
+        return when (block.type) {
+            ArticleBlock.LIST, ArticleBlock.IMAGE, ArticleBlock.CAPTION -> true
+            ArticleBlock.HEADING -> words <= SECTION_LINE_WORDS && !beforeText && !isSectionLabel(block.text)
+            ArticleBlock.PARAGRAPH -> words <= SECTION_LINE_WORDS && !beforeText && !isSectionLabel(block.text) &&
+                (sources || isSourceLine(block.text) || !SENTENCE_STOP.containsMatchIn(block.text.trim()))
+            else -> false
+        }
+    }
+
+    /** The label of a box of sources or other articles, alone on its line (see [SECTION_LABEL]). */
+    internal fun isSectionLabel(text: String): Boolean =
+        TextMatch.wordCount(text) <= SECTION_LABEL_WORDS && SECTION_LABEL.matches(text.trim())
+
+    /**
+     * A line that names where the text or its pictures come from, who wrote or photographed it, or
+     * asks the reader to subscribe or follow – never a sentence of the story:
+     *
+     * - sources: "Quelle: dpa", "Sources: …", "Source : AFP",
+     * - agencies and initials: "(dpa)", "jdl/dpa", "dpa, AFP", "Mit Material von dpa", "Avec AFP",
+     *   "Le Figaro avec AFP", "With reporting from Reuters",
+     * - credits: "Mitarbeit: …", "Text: …", "Foto: …", "Bild: IMAGO/…", "© …", "AP Photo/Evan
+     *   Vucci", "Reporting by …; Editing by …", "Propos recueillis par …", "Crédit photo : …", the
+     *   byline as its own line ("Von Max Muster, Berlin", "By The Associated Press"),
+     *   "The Associated Press contributed to this report.",
+     * - where it appeared first: "Dieser Artikel erschien zuerst …", "This article was originally
+     *   published on …", "Cet article a été publié initialement …",
+     * - prompts: "Abonnieren Sie unseren Newsletter", "Folgen Sie uns auf Instagram", "Hier geht's
+     *   zum WhatsApp-Kanal", "Sign up for our newsletter", "Suivez-nous sur les réseaux sociaux".
+     *
+     * A question is never one ("BILD: Herr Merz, warum …?" is an interview). The byline on its own
+     * line is [isAuthorLine] (for paragraphs only); a [heading] is spared the photo-agency rule.
+     */
+    internal fun isSourceLine(text: String, heading: Boolean = false): Boolean {
+        val t = text.trim()
+        val words = TextMatch.wordCount(t)
+        if (words == 0 || t.endsWith("?")) return false
+        val stop = SENTENCE_STOP.containsMatchIn(t)
+        return (words <= SOURCE_LINE_WORDS && SOURCE_LINE.containsMatchIn(t)) ||
+            (words <= PHOTO_CREDIT_WORDS && PHOTO_CREDIT.containsMatchIn(t)) ||
+            (words <= STAFF_CREDIT_WORDS && STAFF_CREDIT.containsMatchIn(t)) ||
+            (words <= REPORTING_BY_WORDS && (REPORTING_CREDIT.containsMatchIn(t) || (REPORTING_BY.containsMatchIn(t) && (!stop || REPORTING_MARKS.containsMatchIn(t))))) ||
+            (words <= CREDIT_PHRASE_WORDS && CREDIT_PHRASE.containsMatchIn(t) && !stop) ||
+            (words <= AGENCY_LINE_WORDS && AGENCY_MATERIAL.containsMatchIn(t) && AGENCY_WORD.containsMatchIn(t)) ||
+            (words <= AVEC_AGENCY_WORDS && isAvecAgency(t)) ||
+            (words <= COPYRIGHT_WORDS && COPYRIGHT.containsMatchIn(t)) ||
+            (words <= CONTRIBUTED_WORDS && (CONTRIBUTED.containsMatchIn(t) || (CONTRIBUTED_END.containsMatchIn(t) && CONTRIBUTOR.containsMatchIn(t)))) ||
+            (words <= FIRST_APPEARED_WORDS && FIRST_APPEARED.containsMatchIn(t)) ||
+            (words <= PROMPT_WORDS && isPrompt(t)) ||
+            (!heading && words <= PHOTO_AGENCY_WORDS && isPhotoAgencyCredit(t)) ||
+            isAgencyLine(t) || isBareCredit(t)
+    }
+
+    /** "Avec AFP", "Le Figaro avec AFP", "Par Jean Dupont avec l'AFP", "La rédaction avec AFP" – not "Il a parlé avec l'AFP." */
+    private fun isAvecAgency(text: String): Boolean {
+        val match = AVEC_AGENCY.find(text) ?: return false
+        val before = text.substring(0, match.range.first).trim().removePrefix("(").trim()
+        if (before.isEmpty() || NEWSROOM_LEAD.matches(before)) return true
+        val name = before.removePrefix("Par ").removePrefix("par ").trim()
+        return name.isNotEmpty() && isPersonName(name)
+    }
+
+    /** "Abonnieren Sie unseren Newsletter", "Folgen Sie uns auf Instagram", "WhatsApp-Kanal" (see [PROMPT_START]). */
+    private fun isPrompt(text: String): Boolean =
+        PROMPT_PHRASE.containsMatchIn(text) || ((PROMPT_START.containsMatchIn(text) || FOLLOW_US.containsMatchIn(text)) && CHANNEL.containsMatchIn(text))
+
+    /**
+     * Nothing but agencies and initials: "dpa", "(AFP)", "jdl/dpa", "dpa/AFP/Reuters", "mit dpa",
+     * "© dpa", "Reuters, AP" – at least one agency, every part an agency or a short lower-case
+     * mark. "Laut dpa" or "USA" are not.
+     */
+    internal fun isAgencyLine(text: String): Boolean {
+        var t = text.trim().trimEnd('.').trim()
+        if (t.isEmpty() || t.length > AGENCY_LINE_CHARS) return false
+        t = t.removePrefix("(").removeSuffix(")").removePrefix("[").removeSuffix("]").trim().removePrefix("©").trim()
+        t = AGENCY_LEAD.replace(t, "")
+        val parts = t.split(AGENCY_SPLIT).map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        if (parts.isEmpty() || parts.size > AGENCY_PARTS) return false
+        return parts.any { it in AGENCIES } && parts.all { it in AGENCIES || INITIALS.matches(it) }
+    }
+
+    /** "AP Photo/Evan Vucci", "picture alliance / dpa | Kay Nietfeld": a photographer and an agency, no sentence. */
+    private fun isPhotoAgencyCredit(text: String): Boolean =
+        CREDIT_SEPARATOR.containsMatchIn(text) && PHOTO_AGENCY.containsMatchIn(text) && !SENTENCE_STOP.containsMatchIn(text)
+
+    /**
+     * The byline on a line of its own: "Von Max Muster", "By Jane Doe and John Roe, Washington",
+     * "Par Jean Dupont" – every part after the word a name (or a place). "Von Montag an" or "Von
+     * Berlin nach Paris" are not.
+     */
+    internal fun isAuthorLine(text: String): Boolean {
+        val t = text.trim().trimEnd('.')
+        if (TextMatch.wordCount(t) > AUTHOR_LINE_WORDS) return false
+        val prefix = AUTHOR_PREFIX.find(t) ?: return false
+        val names = t.substring(prefix.range.last + 1).split(NAME_SPLIT).map { it.trim() }.filter { it.isNotEmpty() }
+        return names.isNotEmpty() && names.size <= NAME_MAX_WORDS && names.all(::isPersonName)
     }
 
     /**
@@ -821,11 +1175,23 @@ internal object ArticleCleaner {
      *   the teaser when it is short, else the teaser is hidden,
      * - the teaser is put together from sentences of the first paragraphs → the teaser is hidden.
      *
-     * The picture on top is [hero] (the feed's picture, else the page's announced lead picture);
-     * without one, a picture among the first [heroFromBlocks] blocks of the text moves up. It is
-     * decided here, once, so the text below never shows it again – wherever it stands.
+     * **One picture per article**, the one on top: [hero] (the feed's picture, else the card's
+     * cover, else the page's announced lead picture); without one and with [pictureFromText], the
+     * first picture of the text moves up. It is decided here, once – and every picture of the text
+     * goes, with its caption: the lead picture again in another size, inline pictures, galleries,
+     * video stills. Nothing is left to show a picture, a caption or an alt text below the head.
+     *
+     * [sources] are names of the newsroom (the feed's source, `og:site_name`, its domain): a line
+     * that is nothing but one of them ("tagesschau.de" under the last paragraph) goes as well.
      */
-    fun arrange(content: ArticleContent, teaser: String, headline: String = "", hero: String? = null, heroFromBlocks: Int = 0): Arranged {
+    fun arrange(
+        content: ArticleContent,
+        teaser: String,
+        headline: String = "",
+        hero: String? = null,
+        pictureFromText: Boolean = false,
+        sources: List<String> = emptyList(),
+    ): Arranged {
         var blocks = dropLeadNoise(content.blocks, listOf(headline, content.title), "")
         val titles = listOf(headline, content.title).filter { TextMatch.words(it).size >= 3 }
         var shown = cleanTeaser(teaser)
@@ -888,10 +1254,23 @@ internal object ArticleCleaner {
             shown = shown.takeIf { TextMatch.words(it).isNotEmpty() }.orEmpty()
         }
         val top = hero?.takeIf { it.isNotBlank() }
-            ?: blocks.take(heroFromBlocks).firstOrNull { it.type == ArticleBlock.IMAGE && it.url.startsWith("https://") }?.url
-        blocks = dropHero(blocks, top)
+            ?: blocks.firstOrNull { pictureFromText && it.type == ArticleBlock.IMAGE && it.url.startsWith("https://") }?.url
+        // A short paragraph that says what a picture's alt text says is that picture's caption: it goes with it.
         blocks = settleAlts(blocks, listOf(headline, content.title, shown))
-        return Arranged(shown.trim(), content.copy(blocks = dropOrphanCaptions(blocks)), top)
+        blocks = blocks.filterNot { it.type == ArticleBlock.IMAGE || it.type == ArticleBlock.CAPTION }
+        blocks = dropSourceNames(blocks, sources)
+        return Arranged(shown.trim(), content.copy(blocks = blocks), top)
+    }
+
+    /** A line that is just the newsroom's name ([sources]): "tagesschau.de", "ZEIT ONLINE", "© SPIEGEL". */
+    private fun dropSourceNames(blocks: List<ArticleBlock>, sources: List<String>): List<ArticleBlock> {
+        val names = sources.map { TextMatch.normalize(it) }.filter { it.isNotBlank() }.toSet()
+        if (names.isEmpty()) return blocks
+        return blocks.filterNot { block ->
+            val text = block.text.trim().removePrefix("©").trim()
+            (block.type == ArticleBlock.PARAGRAPH || block.type == ArticleBlock.HEADING) &&
+                TextMatch.wordCount(text) <= SOURCE_NAME_WORDS && TextMatch.normalize(text) in names
+        }
     }
 
     /**
@@ -940,30 +1319,6 @@ internal object ArticleCleaner {
             }
         }
         return ""
-    }
-
-    /**
-     * Every copy of the picture the reader shows on top goes, with its caption – not only the
-     * lead picture: newsrooms repeat it after the byline, in a gallery, as the still of a video
-     * further down (BBC, Fox News, ANSA put a dozen blocks between the top and that picture).
-     */
-    private fun dropHero(blocks: List<ArticleBlock>, hero: String?): List<ArticleBlock> {
-        if (hero.isNullOrBlank()) return blocks
-        val out = ArrayList<ArticleBlock>(blocks.size)
-        var skipCaption = false
-        for (block in blocks) {
-            if (block.type == ArticleBlock.IMAGE && ImageMatch.same(block.url, hero)) {
-                skipCaption = true
-                continue
-            }
-            if (block.type == ArticleBlock.CAPTION && skipCaption) {
-                skipCaption = false
-                continue
-            }
-            skipCaption = false
-            out += block
-        }
-        return out
     }
 
     private val TEXT = setOf(ArticleBlock.PARAGRAPH, ArticleBlock.HEADING, ArticleBlock.QUOTE)

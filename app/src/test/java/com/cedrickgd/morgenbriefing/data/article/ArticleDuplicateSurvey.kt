@@ -8,7 +8,6 @@ import com.cedrickgd.morgenbriefing.data.news.GoogleNews
 import com.cedrickgd.morgenbriefing.data.news.RssParser
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
 import com.cedrickgd.morgenbriefing.ui.article.ArticleViewModel
-import com.cedrickgd.morgenbriefing.ui.article.showsAlt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -276,10 +275,8 @@ class ArticleDuplicateSurvey {
         if (arranged.teaser.isNotBlank()) units += SurveyUnit("teaser", arranged.teaser)
         shown.blocks.forEachIndexed { i, block ->
             when (block.type) {
-                ArticleBlock.IMAGE -> {
-                    units += SurveyUnit("img", url = block.url, block = i)
-                    if (showsAlt(shown.blocks, i)) units += SurveyUnit("alt", block.alt, block = i)
-                }
+                // The reader keeps no picture in the text (one picture, on top); should one slip through, it counts.
+                ArticleBlock.IMAGE -> units += SurveyUnit("img", url = block.url, block = i)
                 ArticleBlock.LIST -> block.items.forEach { units += SurveyUnit("li", it, block = i) }
                 else -> units += SurveyUnit(block.type, block.text, block = i)
             }

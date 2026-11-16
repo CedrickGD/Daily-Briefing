@@ -74,8 +74,9 @@ data class ArticleUiState(
      */
     val teaser: String = item.summary,
     /**
-     * The picture under the status bar (null = the topic's cover): the feed's until the article
-     * is here, then the one the text was arranged around – no block of [content] shows it again.
+     * The article's one picture, under the status bar (null = the topic's cover): the card's
+     * picture until the article is here, then the one the text was arranged around – the text
+     * itself shows none ([ArticleCleaner.arrange]).
      */
     val hero: String? = item.image?.url,
     val loading: Boolean = true,
@@ -128,7 +129,11 @@ class ArticleViewModel(
             sourceId = "",
             topicId = route.topicId ?: FALLBACK_TOPIC,
         )
-        return ArticleUiState(item = item, topic = Topics.resolveOrNeutral(item.topicId, AppSettings()), now = clock())
+        // The card's picture (FeedEntry.heroImage): the feed's, else what the prefetcher or the cover lookup found.
+        val picture = item.image?.url?.takeIf { it.isNotBlank() }
+            ?: container.prefetcher.images.value[item.id]
+            ?: container.covers.covers.value[item.id]
+        return ArticleUiState(item = item, topic = Topics.resolveOrNeutral(item.topicId, AppSettings()), hero = picture, now = clock())
     }
 
     /** Loads (or, with [refresh], re-reads) the article. */
@@ -144,12 +149,14 @@ class ArticleViewModel(
             ensureActive()
             result.fold(
                 onSuccess = { content ->
+                    // The card's picture the reader opened with: the one picture unless the feed has its own.
+                    val cover = _state.value.hero
                     val current = _state.value.item
                     val shown = if (current.headline.isBlank()) current.copy(headline = content.title) else current
                     // Cleaning up the blocks and judging completeness walk the whole text: off the main thread.
                     val (arranged, partial) = withContext(Dispatchers.Default) {
                         container.prefetcher.report(item, content)
-                        arrange(content, shown) to !ArticleCompleteness.isComplete(content, item)
+                        arrange(content, shown, cover) to !ArticleCompleteness.isComplete(content, item)
                     }
                     ensureActive()
                     _state.update { s ->
@@ -176,16 +183,18 @@ class ArticleViewModel(
 
         /**
          * [content] arranged under the reader's head for [item]: the teaser is the feed's (else
-         * the page's `og:description`), the hero the feed's picture, else the page's lead picture,
-         * else a picture that opens the text – taken out of the text wherever it stands.
+         * the page's `og:description`); the one picture is the feed's, else the card's [cover],
+         * else the page's lead picture, else the first picture of the text – and the text keeps
+         * none. A line that only names the newsroom goes too.
          */
-        internal fun arrange(content: ArticleContent, item: NewsItem): ArticleCleaner.Arranged =
+        internal fun arrange(content: ArticleContent, item: NewsItem, cover: String? = null): ArticleCleaner.Arranged =
             ArticleCleaner.arrange(
                 content = content,
                 teaser = item.summary.ifBlank { content.description },
                 headline = item.headline,
-                hero = item.image?.url?.takeIf { it.isNotBlank() } ?: content.image,
-                heroFromBlocks = HERO_FROM_BLOCKS,
+                hero = item.image?.url?.takeIf { it.isNotBlank() } ?: cover?.takeIf { it.isNotBlank() } ?: content.image,
+                pictureFromText = true,
+                sources = listOf(item.source, item.publisherDomain, hostOf(item.url).removePrefix("www."), content.site),
             )
 
         /**

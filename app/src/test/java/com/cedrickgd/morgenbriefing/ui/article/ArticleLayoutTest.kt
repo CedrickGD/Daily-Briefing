@@ -6,7 +6,6 @@ import com.cedrickgd.morgenbriefing.data.model.ArticleImage
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.ReadOutcome
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -21,66 +20,75 @@ class ArticleLayoutTest {
         image = image?.let { ArticleImage(it) },
     )
 
+    private fun pictures(arranged: com.cedrickgd.morgenbriefing.data.article.ArticleCleaner.Arranged) =
+        arranged.content.blocks.filter { it.type == ArticleBlock.IMAGE || it.type == ArticleBlock.CAPTION }
+
     @Test
-    fun `the feed picture comes first, then the announced lead picture`() {
-        val page = content("https://img.example.com/lead.jpg", ArticleBlock.image("https://img.example.com/inline.jpg"))
-        assertEquals("https://img.example.com/feed.jpg", ArticleViewModel.arrange(page, item("https://img.example.com/feed.jpg")).hero)
+    fun `the one picture is the feed's, then the card's cover, then the announced lead picture`() {
+        val page = content("https://img.example.com/lead.jpg", ArticleBlock.image("https://img.example.com/inline.jpg"), ArticleBlock.paragraph("Text"))
+        assertEquals("https://img.example.com/feed.jpg", ArticleViewModel.arrange(page, item("https://img.example.com/feed.jpg"), cover = "https://img.example.com/cover.jpg").hero)
+        assertEquals("https://img.example.com/cover.jpg", ArticleViewModel.arrange(page, item(), cover = "https://img.example.com/cover.jpg").hero)
         assertEquals("https://img.example.com/lead.jpg", ArticleViewModel.arrange(page, item()).hero)
+        assertTrue(pictures(ArticleViewModel.arrange(page, item())).isEmpty())
     }
 
     @Test
-    fun `an early picture in the text becomes the hero and is not shown twice`() {
+    fun `without one the first picture of the text becomes the picture - and the text keeps none`() {
         val page = content(
             null,
-            ArticleBlock.paragraph("Intro"), ArticleBlock.image("https://img.example.com/first.jpg"), ArticleBlock.paragraph("More"),
-            ArticleBlock.image("https://img.example.com/first.jpg?width=640"), ArticleBlock.image("https://img.example.com/second.jpg"),
+            ArticleBlock.paragraph("Intro"), ArticleBlock.image("https://img.example.com/first.jpg"), ArticleBlock.caption("Die erste Bildunterschrift"),
+            ArticleBlock.paragraph("More"), ArticleBlock.image("https://img.example.com/first.jpg?width=640"), ArticleBlock.image("https://img.example.com/second.jpg"),
+            ArticleBlock.caption("Foto: dpa"),
         )
         val arranged = ArticleViewModel.arrange(page, item())
         assertEquals("https://img.example.com/first.jpg", arranged.hero)
-        // Gone from the text, also its other rendition further down; the second picture stays.
-        assertEquals(listOf("https://img.example.com/second.jpg"), arranged.content.blocks.filter { it.type == ArticleBlock.IMAGE }.map { it.url })
-        assertEquals(listOf("Intro", "More"), arranged.content.blocks.filter { it.type == ArticleBlock.PARAGRAPH }.map { it.text })
+        // Gone from the text: the hero's other rendition, the second picture (a gallery's), every caption.
+        assertTrue(pictures(arranged).isEmpty())
+        assertEquals(listOf("Intro", "More"), arranged.content.blocks.map { it.text })
     }
 
     @Test
-    fun `a picture deep in the text or without https stays where it is`() {
+    fun `a picture deep in the text is the one picture too, one without https is none`() {
         val deep = content(
             null,
-            ArticleBlock.paragraph("1"), ArticleBlock.paragraph("2"), ArticleBlock.paragraph("3"),
+            ArticleBlock.paragraph("1"), ArticleBlock.paragraph("2"), ArticleBlock.paragraph("3"), ArticleBlock.paragraph("4"),
             ArticleBlock.image("https://img.example.com/late.jpg"),
         )
         val arranged = ArticleViewModel.arrange(deep, item())
-        assertNull(arranged.hero)
-        assertEquals(1, arranged.content.blocks.count { it.type == ArticleBlock.IMAGE })
-        val plain = ArticleViewModel.arrange(content(null, ArticleBlock.image("http://img.example.com/plain.jpg")), item())
+        assertEquals("https://img.example.com/late.jpg", arranged.hero)
+        assertTrue(pictures(arranged).isEmpty())
+        val plain = ArticleViewModel.arrange(content(null, ArticleBlock.image("http://img.example.com/plain.jpg"), ArticleBlock.paragraph("Text")), item())
         assertNull(plain.hero)
-        assertEquals(1, plain.content.blocks.size)
+        assertEquals(listOf("Text"), plain.content.blocks.map { it.text })
     }
 
     @Test
-    fun `the alt text is printed under a picture only when no caption follows`() {
-        val blocks = listOf(
-            ArticleBlock.image("https://img.example.com/a.jpg", alt = "Demonstrierende mit einem Banner"),
-            ArticleBlock.caption("\"Gemeinsam für das Klima\" heißt es auf dem Banner Bild: AFP"),
-            ArticleBlock.image("https://img.example.com/b.jpg", alt = "Ein Kreuz auf dem Friedhof"),
-            ArticleBlock.paragraph("Text"),
-            ArticleBlock.image("https://img.example.com/c.jpg"),
+    fun `a short paragraph that repeats a picture's alt text is its caption and goes with it`() {
+        val page = content(
+            null,
+            ArticleBlock.paragraph("Ein langer erster Absatz, der die Geschichte erzählt und mit dem Bild nichts zu tun hat, außer dass er davor steht."),
+            ArticleBlock.image("https://img.example.com/a.jpg", alt = "Leone XIV in volo verso Santa Cruz"),
+            ArticleBlock.paragraph("Leone XIV in volo verso Santa Cruz (VATICAN MEDIA)"),
+            ArticleBlock.paragraph("Der zweite Absatz erzählt weiter."),
         )
-        assertFalse(showsAlt(blocks, 0))
-        assertTrue(showsAlt(blocks, 2))
-        assertFalse(showsAlt(blocks, 4)) // no alt text
-        assertFalse(showsAlt(blocks, 3)) // not a picture
-        assertFalse(showsAlt(blocks, 9))
+        val arranged = ArticleViewModel.arrange(page, item("https://img.example.com/feed.jpg"))
+        assertEquals(2, arranged.content.blocks.size)
+        assertTrue(arranged.content.blocks.none { it.text.contains("VATICAN") })
     }
 
     @Test
-    fun `an alt text printed under its picture is not also the picture's content description`() {
-        // Printed as text: a screen reader reads that line, the picture stays silent.
-        assertNull(imageDescription("Dominic Johnson", altShown = true))
-        // With a caption of its own the alt text is not printed: it describes the picture to a screen reader.
-        assertEquals("Zwei Männer am Rednerpult", imageDescription("Zwei Männer am Rednerpult", altShown = false))
-        assertNull(imageDescription("", altShown = false))
-        assertNull(imageDescription("  ", altShown = false))
+    fun `a line that only names the newsroom goes, a sentence with its name stays`() {
+        val newsroom = NewsItem(
+            id = "id", headline = "Eine Überschrift mit einigen Wörtern", url = "https://www.tagesschau.de/inland/a.html", source = "tagesschau", sourceId = "t",
+            topicId = "welt", publisherDomain = "tagesschau.de",
+        )
+        val page = content(
+            null,
+            ArticleBlock.paragraph("Der Bundestag hat am Donnerstag beschlossen, was die tagesschau am Morgen gemeldet hatte."),
+            ArticleBlock.paragraph("tagesschau.de"),
+            ArticleBlock.paragraph("tagesschau"),
+        )
+        assertEquals(listOf("Der Bundestag hat am Donnerstag beschlossen, was die tagesschau am Morgen gemeldet hatte."), ArticleViewModel.arrange(page, newsroom).content.blocks.map { it.text })
     }
 
     @Test

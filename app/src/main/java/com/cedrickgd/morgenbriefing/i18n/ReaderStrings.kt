@@ -21,9 +21,6 @@ interface ReaderStrings {
     /** Under an article that is probably cut short. */
     val truncatedNote: String
 
-    /** "Quelle: tagesschau". */
-    fun source(site: String): String
-
     /** Headline of the failure state. Null [outcome] = an unexpected error. */
     fun failureTitle(outcome: ReadOutcome?): String
 
@@ -55,7 +52,6 @@ interface ReaderStrings {
         override val pauseListening = "Vorlesen pausieren"
         override val readInApp = "Artikel lesen"
         override val truncatedNote = "Das war vermutlich nur der Anfang – den Rest zeigt die Redaktion nur auf ihrer Seite."
-        override fun source(site: String) = "Quelle: $site"
 
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Nur bei der Redaktion lesbar" else "Artikel gerade nicht da"
@@ -97,7 +93,6 @@ interface ReaderStrings {
         override val pauseListening = "Pause reading aloud"
         override val readInApp = "Read article"
         override val truncatedNote = "That was probably just the beginning – the publisher shows the rest only on its own site."
-        override fun source(site: String) = "Source: $site"
 
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Only readable on the publisher's site" else "Article not available right now"
@@ -139,7 +134,6 @@ interface ReaderStrings {
         override val pauseListening = "Mettre la lecture en pause"
         override val readInApp = "Lire l'article"
         override val truncatedNote = "Ce n'était sans doute que le début : la rédaction ne montre la suite que sur son propre site."
-        override fun source(site: String) = "Source : $site"
 
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Lisible uniquement chez l'éditeur" else "Article indisponible pour le moment"
@@ -181,7 +175,6 @@ interface ReaderStrings {
         override val pauseListening = "Pausar la lectura"
         override val readInApp = "Leer artículo"
         override val truncatedNote = "Probablemente esto era solo el comienzo: el medio muestra el resto únicamente en su web."
-        override fun source(site: String) = "Fuente: $site"
 
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Solo se puede leer en la web del medio" else "Artículo no disponible ahora"
@@ -223,7 +216,6 @@ interface ReaderStrings {
         override val pauseListening = "Metti in pausa la lettura"
         override val readInApp = "Leggi l'articolo"
         override val truncatedNote = "Probabilmente era solo l'inizio: la redazione mostra il resto solo sul proprio sito."
-        override fun source(site: String) = "Fonte: $site"
 
         override fun failureTitle(outcome: ReadOutcome?) =
             if (outcome?.isWall == true) "Leggibile solo sul sito della redazione" else "Articolo non disponibile al momento"
