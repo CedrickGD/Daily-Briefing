@@ -169,6 +169,7 @@ private fun AppShell(
     var openTodaySignal by rememberSaveable { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val links = rememberLinkActions()
+    val history = LocalContext.current.container.history
     // The navigator outlives recompositions; it reads the newest setting and link actions.
     val readsInApp by rememberUpdatedState(readInApp)
     val currentLinks by rememberUpdatedState(links)
@@ -178,6 +179,7 @@ private fun AppShell(
             onTodayRequested = { openTodaySignal++ },
             readInApp = { readsInApp },
             openInBrowser = { url -> currentLinks.open(url) },
+            onReadInBrowser = history::markRead,
         )
     }
     val insets = rememberShellInsets()

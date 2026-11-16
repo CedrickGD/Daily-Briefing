@@ -121,6 +121,7 @@ fun SettingsScreen(
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     onOpenDiscover: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory),
     updateViewModel: UpdateViewModel = viewModel(factory = UpdateViewModel.Factory),
 ) {
@@ -134,6 +135,7 @@ fun SettingsScreen(
     val blocked by viewModel.blockedDomains.collectAsStateWithLifecycle()
     val deviceTier by viewModel.deviceTier.collectAsStateWithLifecycle()
     val update by updateViewModel.state.collectAsStateWithLifecycle()
+    val history by viewModel.history.collectAsStateWithLifecycle()
 
     val strings = settingsStrings()
     val language = LocalAppLanguage.current
@@ -302,6 +304,8 @@ fun SettingsScreen(
         onReadInApp = viewModel::setReadInApp,
         onReadableOnly = viewModel::setReadableOnly,
         onPrefetch = viewModel::setPrefetch,
+        onHideRead = viewModel::setHideRead,
+        onOpenHistory = onOpenHistory,
     )
 
     val listenActions = ListenCardActions(
@@ -367,6 +371,8 @@ fun SettingsScreen(
                         sourceStatus = sourceStatus,
                         blocked = blocked,
                         deviceTier = deviceTier,
+                        readCount = history.readCount,
+                        hiddenCount = history.hiddenCount,
                     ),
                     callbacks = BlockCallbacks(
                         onPill = onPill,
@@ -555,6 +561,9 @@ private class BlockContent(
     val sourceStatus: Map<String, SourceStatus>,
     val blocked: Set<String>,
     val deviceTier: TierAssessment?,
+    /** Stories in "Gelesen & ausgeblendet". */
+    val readCount: Int = 0,
+    val hiddenCount: Int = 0,
 )
 
 /** Callbacks of the blocks. */
@@ -667,7 +676,13 @@ private fun SettingsBlock(
             modifier = modifier,
         )
         Block.H_FEED -> Heading(strings, key, modifier)
-        Block.FEED -> FeedCard(settings = settings, actions = callbacks.feed, modifier = modifier)
+        Block.FEED -> FeedCard(
+            settings = settings,
+            actions = callbacks.feed,
+            modifier = modifier,
+            readCount = content.readCount,
+            hiddenCount = content.hiddenCount,
+        )
         Block.H_LISTEN -> Heading(strings, key, modifier)
         Block.LISTEN -> ListenCard(settings = settings, actions = callbacks.listen, modifier = modifier)
         Block.H_LOOK -> Heading(strings, key, modifier)

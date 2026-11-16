@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -36,6 +37,9 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
+import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material3.DropdownMenu
@@ -80,7 +84,9 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.data.model.ArticleImage
+import com.cedrickgd.morgenbriefing.data.local.ReadHistory
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
+import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.domain.ItemEdition
 import com.cedrickgd.morgenbriefing.i18n.FeedStrings
@@ -128,29 +134,38 @@ class FeedActions(
     val followSuggestion: (FeedArticle) -> Topic? = { null },
     /** False for the last followed topic: the story menus do not offer to unfollow it. */
     val canUnfollowTopic: (Topic) -> Boolean = { true },
+    /** Takes the story out of every list at once (⋮ → "Ausblenden"); null: not offered. */
+    val onHide: ((FeedArticle) -> Unit)? = null,
+    /** Marks the story read (true) or unread (⋮ → "Als gelesen / ungelesen markieren"); null: not offered. */
+    val onSetRead: ((FeedArticle, Boolean) -> Unit)? = null,
 )
 
 /**
  * What the app learned about the articles on screen: the picture of articles that came without
  * one (Google News) – the lead picture the prefetcher read, else the cover looked up ahead of
- * the list ([com.cedrickgd.morgenbriefing.data.article.CoverResolver]) – and whether the reader
- * can show them. Entries read single values through `derivedStateOf`, so one new status
- * recomposes only its own card.
+ * the list ([com.cedrickgd.morgenbriefing.data.article.CoverResolver]) – whether the reader
+ * can show them, and whether the user read them already ([history]). Entries read single values
+ * through `derivedStateOf`, so one new status recomposes only its own card.
  */
 @Stable
 class FeedHints(
     private val images: State<Map<String, String>>,
     private val statuses: State<Map<String, ArticleStatus>>,
     private val covers: State<Map<String, String>> = NO_COVERS,
+    private val history: State<ReadHistory> = NO_HISTORY,
 ) {
     /** The article's picture found by the prefetcher or the cover lookup, if any. */
     fun heroImage(itemId: String): String? = images.value[itemId] ?: covers.value[itemId]
 
     fun status(itemId: String): ArticleStatus = statuses.value[itemId] ?: ArticleStatus.UNKNOWN
 
+    /** True when the user read [item]'s story (opened, listened to, marked) – also from another feed. */
+    fun isRead(item: NewsItem): Boolean = history.value.isRead(item)
+
     companion object {
-        // Declared before [None]: companion fields initialise in order, and None's default reads it.
+        // Declared before [None]: companion fields initialise in order, and None's default reads them.
         private val NO_COVERS: State<Map<String, String>> = mutableStateOf(emptyMap())
+        private val NO_HISTORY: State<ReadHistory> = mutableStateOf(ReadHistory.EMPTY)
 
         /** Nothing known (previews, screens without a prefetcher). */
         val None = FeedHints(mutableStateOf(emptyMap()), mutableStateOf(emptyMap()))
@@ -165,7 +180,8 @@ class FeedHints(
  *
  * Articles that came without a picture (Google News) show the page's lead picture once the
  * prefetcher found it, fading in over the cover; a small hint on the picture tells when the
- * article sits behind a paywall or opens only in the browser.
+ * article sits behind a paywall or opens only in the browser. An article the user read already
+ * sits back like a feed card: quieter headline, faded picture, "👁 Gelesen" in the meta row.
  *
  * @param listening this article is being read aloud right now — the button turns into "Stopp".
  * @param paused this article is loaded in the player but paused — the button offers "Weiter".
@@ -194,6 +210,8 @@ fun FeedEntry(
         derivedStateOf { if (item.image == null) hints.heroImage(item.id) else null }
     }
     val badge by remember(hints, item.id) { derivedStateOf { cardBadge(hints.status(item.id)) } }
+    val read by remember(hints, item) { derivedStateOf { hints.isRead(item) } }
+    val pictureAlpha by animateFloatAsState(if (read) ReadPictureAlpha else 1f, label = "readPicture")
     val visualItem = remember(item, hero) { hero?.let { item.copy(image = ArticleImage(it)) } ?: item }
     // Feeds that repeat the title as their description get no second copy of it.
     val teaser = remember(item.headline, item.summary) { cardTeaser(item.headline, item.summary) }
@@ -216,6 +234,7 @@ fun FeedEntry(
                 Modifier
                     .fillMaxWidth()
                     .aspectRatioAtMost(FEED_IMAGE_RATIO, maxImageHeight)
+                    .graphicsLayer { alpha = pictureAlpha }
                     .clip(GlassShapes.tile),
             ) {
                 ArticleVisual(
@@ -243,6 +262,7 @@ fun FeedEntry(
                 Text(
                     text = item.headline,
                     style = Reading.feedHeadline(language = textLanguage),
+                    color = if (read) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { heading() },
@@ -258,6 +278,7 @@ fun FeedEntry(
             meta = meta,
             listening = listening,
             paused = paused,
+            read = read,
             actions = actions,
             // The buttons at its end keep reaching the picture's edge.
             modifier = Modifier.padding(start = CardInset, top = 4.dp),
@@ -387,6 +408,7 @@ private fun FeedMetaRow(
     meta: FeedMetaParts,
     listening: Boolean,
     paused: Boolean,
+    read: Boolean,
     actions: FeedActions,
     modifier: Modifier = Modifier,
 ) {
@@ -398,6 +420,7 @@ private fun FeedMetaRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            if (read) ReadMark(Reading.meta(), separator = meta.time != null || meta.source != null)
             meta.time?.let { time ->
                 Text(text = time, style = Reading.meta(), maxLines = 1, softWrap = false)
             }
@@ -426,7 +449,7 @@ private fun FeedMetaRow(
         IconButton(onClick = { actions.onShare(article) }) {
             Icon(Icons.Rounded.Share, contentDescription = commonStrings().share, tint = colors.onSurfaceVariant)
         }
-        FeedMenu(article = article, actions = actions)
+        FeedMenu(article = article, read = read, actions = actions)
     }
 }
 
@@ -504,7 +527,7 @@ private fun Equalizer(color: Color, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun FeedMenu(article: FeedArticle, actions: FeedActions) {
+private fun FeedMenu(article: FeedArticle, read: Boolean, actions: FeedActions) {
     var open by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     val strings = feedStrings()
@@ -525,6 +548,16 @@ private fun FeedMenu(article: FeedArticle, actions: FeedActions) {
             MenuItem(strings.readArticle, Icons.AutoMirrored.Rounded.Article) { open = false; actions.onOpen(article) }
             MenuItem(common.openInBrowser, Icons.AutoMirrored.Rounded.OpenInNew) { open = false; actions.onOpenExternal(article) }
             MenuItem(common.copyLink, Icons.Rounded.ContentCopy) { open = false; actions.onCopyLink(article) }
+            actions.onSetRead?.let { setRead ->
+                if (read) {
+                    MenuItem(strings.markUnread, Icons.Rounded.Restore) { open = false; setRead(article, false) }
+                } else {
+                    MenuItem(strings.markRead, Icons.Rounded.Visibility) { open = false; setRead(article, true) }
+                }
+            }
+            actions.onHide?.let { hide ->
+                MenuItem(strings.hideStory, Icons.Rounded.VisibilityOff) { open = false; hide(article) }
+            }
             if (open) {
                 actions.onFollowTopic?.let { follow ->
                     actions.followSuggestion(article)?.let { topic ->

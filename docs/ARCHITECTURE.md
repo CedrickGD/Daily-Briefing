@@ -151,6 +151,20 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
   Nächstes geprüft wird); ohne die Einstellung gehen sichtbare Meldungen zum Vorladen an den
   Prefetcher (Marke „Bezahlinhalt“/„Nur im Browser“ – vollständige Artikel tragen keine –, Bild für
   Google-News-Karten).
+* **Gelesen & ausgeblendet** (`data/local/ReadHistoryStore` → `store/read-history.json`): eine
+  Meldung gilt als gelesen, wenn sie im Leser öffnet (`ArticleViewModel`), im Browser
+  (`ShellNavigator.openArticle`, ⋮ „Im Browser öffnen“) oder angehört wird (`ListenController`
+  meldet jedes neue Vorlesen); ⋮ „Ausblenden“ nimmt sie von Hand heraus. Je Geschichte ein
+  Eintrag (Titel, Link, Quelle, Bild, Zeit, Thema, `readAt`, `hiddenAt`), erkannt wie beim
+  Zusammenführen (`StoryIndex`: gleiche Id, gleicher – auch aufgelöster – Link, gleiche gefaltete
+  Überschrift oder `StoryTwins`), höchstens 1000 Einträge und 60 Tage, beim Schreiben gekürzt;
+  `state` (StateFlow `ReadHistory`) treibt Karten, Feed und Archiv. Der Feed (`buildFeed`,
+  `ReadFilter`) lässt ausgeblendete sofort weg, gelesene mit „Gelesene Artikel ausblenden“ nur nach
+  dem Stand des letzten Neuaufbaus (`TodayViewModel.readAtBuild`: Start, Aktualisieren,
+  Tab-Wechsel) – gelesene Karten bleiben bis dahin, nur ruhiger. Die Reihenfolge der Listen wird
+  vor dem Filtern gemerkt (wer wieder eingeblendet wird, steht an seinem Platz), und
+  Weggelassenes zählt fürs Blättern mit (`heldBack`), damit eine Liste voller Gelesenem weiter
+  nachlädt.
 * **Benachrichtigung**: `MorningWorker` holt Wetter und Feeds, je gefolgtem Thema die neueste
   Schlagzeile (mit „nur vollständige Artikel“ die neueste geprüfte), `WeatherInsights.notification`
   baut den Text in der App-Sprache.
@@ -172,11 +186,11 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
 
 | Paket | Inhalt |
 |---|---|
-| `i18n` | `AppLanguage`, `LocalAppLanguage` und alle Texte (`CommonStrings`, `TopicStrings`, `FeedStrings`, `DiscoverStrings`, `SearchStrings`, `ReaderStrings`, `SettingsStrings`, `SourcesStrings`, `RegionStrings`, `OnboardingStrings`, `WeatherStrings`, `ClothingStrings`, `FormatStrings`, `NotifyStrings`, `ListenStrings`, `UpdateStrings`, `ComponentStrings`, `ShellStrings`) |
+| `i18n` | `AppLanguage`, `LocalAppLanguage` und alle Texte (`CommonStrings`, `TopicStrings`, `FeedStrings`, `HistoryStrings`, `DiscoverStrings`, `SearchStrings`, `ReaderStrings`, `SettingsStrings`, `SourcesStrings`, `RegionStrings`, `OnboardingStrings`, `WeatherStrings`, `ClothingStrings`, `FormatStrings`, `NotifyStrings`, `ListenStrings`, `UpdateStrings`, `ComponentStrings`, `ShellStrings`) |
 | `data/model` | `Topic`, `TopicIcon`, `FeedSource`, `NewsItem`, `TopicNews`, `NewsEdition`, `Topics` (Fassade), Wetter, `AppSettings` |
 | `data/news` | `Taxonomy` (Kategorien + Unterthemen), `TopicSources` (Quellen eines Themas), `GoogleNews` (URLs, Suchbegriffe, Ausschlüsse, Zeitfenster, Kursseiten), `CountryQuery` (wie Nachrichten ein Land in einer Sprache nennen), `SearchQuery` (Suchanfrage verstehen, ganze Wörter), `SearchRanking` (Relevanz der Treffer), `FeedCatalog` + `Regions`, `RssParser`, `RssDates`, `HtmlText` |
 | `data/remote` | `OpenMeteoClient`, `RssClient` (Feeds lesen, Feed hinter einer Website finden), `GoogleNewsDecoder` (Google-News-Link → Artikel-URL) |
-| `data/local` | `WeatherStore`, `NewsCache` (JSON-Dateien, atomar geschrieben) |
+| `data/local` | `WeatherStore`, `NewsCache` (JSON-Dateien, atomar geschrieben), `ReadHistoryStore` + `ReadHistory`/`StoryIndex`/`HistoryEntry` (gelesen & ausgeblendet) |
 | `data` | `SettingsRepository` (DataStore) + `SettingsOps` (folgen, sortieren, Orte, Suchen) + `SettingsMigration`, `WeatherRepository`, `NewsRepository` |
 | `data/article` | `ArticleExtractor`, `ArticleCleaner`, `PageSignals` (Bezahlschranke/Cookie-Wand), `ArticleCompleteness` (vollständig oder Anriss), `ArticleRepository`, `ReadabilityStore` (`store/readability.json`, Startliste `KnownWalls`), `ArticlePrefetcher` + `NetworkMeter` + `VerdictStore` (`store/verdicts.json`), `CoverResolver` + `CoverLookup` + `CoverStore` (`store/covers.json`: Titelbilder für Meldungen ohne Bild), `LinkResolver`, `SessionCookies`. Prüfung gegen echte Seiten: `ArticleLiveEvaluation` (`MB_LIVE=1`) |
 | `domain` | `Condition`, `WeatherInsights`, `ClothingAdvisor` (Headline, Kleidung, Warnungen, Notification-Text in jeder Sprache), `Fmt` |
@@ -193,7 +207,8 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
 | `ui/settings` | Einstellungen: Status, Sprache & Region (App-Sprache, Nachrichten-Region, Nachrichten-Sprache: `EditionLogic`, `LanguageRegion`), lokale Nachrichten, Wecker, Deine Themen (sortieren, eigene), Quellen, Feed & Lesen, Vorlesen (`ListenSection`), Darstellung, Orte, Wetterblöcke, App/Updates |
 | `ui/onboarding` | Erster Start: App-Sprache, Nachrichten (Region und Sprache getrennt), Benachrichtigungen, Ort |
 | `ui/theme` | Theme, Akzent-Schemata, Typografie, `Reading` (Serif-Lesestile) |
-| `ui/nav` | `MainRoute` (der Pager), `ArticleRoute`, `DiscoverRoute`, `SearchRoute` (darüber geschoben) |
+| `ui/history` | „Gelesen & ausgeblendet“: `HistoryScreen` + `HistoryViewModel`, `HistoryLogic` (Suche, Filter, Tage – rein, getestet) |
+| `ui/nav` | `MainRoute` (der Pager), `ArticleRoute`, `DiscoverRoute`, `SearchRoute`, `HistoryRoute` (darüber geschoben) |
 | `ui/article` | `ArticleScreen` + `ArticleViewModel`: der Lesemodus (Bild, Überschrift, Teaser, Textblöcke, Zuhören, Teilen, Browser als Ausweg, eigene Zustände für Bezahlschranke, Cookie-Wand und Sperre) |
 
 Kein DI-Framework: `AppContainer` (ein Objekt pro Prozess) wird über `context.container`

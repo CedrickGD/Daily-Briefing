@@ -24,6 +24,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.toRoute
 import com.cedrickgd.morgenbriefing.ui.article.ArticleScreen
 import com.cedrickgd.morgenbriefing.ui.discover.DiscoverScreen
+import com.cedrickgd.morgenbriefing.ui.history.HistoryScreen
 import com.cedrickgd.morgenbriefing.ui.search.SearchScreen
 import com.cedrickgd.morgenbriefing.ui.shell.LocalSettingsLink
 import com.cedrickgd.morgenbriefing.ui.shell.MainPage
@@ -35,9 +36,10 @@ import com.cedrickgd.morgenbriefing.ui.today.TodayViewModel
 /**
  * The navigation graph: [MainRoute] (the page pager) is the start destination. Pushed over it:
  * the article reader ([ArticleRoute], covers the shared sky with its own opaque page),
- * "Themen entdecken" ([DiscoverRoute]) and the search ([SearchRoute]) – both glass over the
- * sky, so the sky keeps living behind them. Every pushed screen follows the predictive back
- * gesture (its pop transition is seeked by the gesture). Their back arrows close only their own
+ * "Themen entdecken" ([DiscoverRoute]), the search ([SearchRoute]) and "Gelesen & ausgeblendet"
+ * ([HistoryRoute]) – glass over the sky, so the sky keeps living behind them. Every pushed
+ * screen follows the predictive back gesture (its pop transition is seeked by the gesture).
+ * Their back arrows close only their own
  * entry ([ShellNavigator.back]); articles open through [ShellNavigator.openArticle], which also
  * honours "Artikel in der App lesen".
  *
@@ -111,6 +113,18 @@ internal fun AppNavHost(
                 onBack = { navigator.back(entry) },
                 onOpenArticle = { item -> navigator.openArticle(entry, item) },
                 onOpenDiscover = { navigator.openDiscover() },
+            )
+        }
+        composable<HistoryRoute>(
+            enterTransition = { pushedEnter() },
+            exitTransition = { fadeOut(spring(stiffness = Spring.StiffnessMedium)) },
+            popEnterTransition = { fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) },
+            popExitTransition = { pushedPopExit() },
+        ) { entry ->
+            HistoryScreen(
+                contentPadding = pushedPadding,
+                onBack = { navigator.back(entry) },
+                onOpenArticle = { item -> navigator.openArticle(entry, item) },
             )
         }
     }

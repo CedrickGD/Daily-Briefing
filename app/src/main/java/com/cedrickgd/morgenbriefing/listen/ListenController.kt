@@ -142,8 +142,10 @@ data class ListenVoices(
  * * Headphones unplugged or the app sent to the background (screen still on) → pause; with the
  *   screen simply turned off it keeps reading.
  * * [pauseOrResume] restarts the interrupted sentence group, not the whole article.
+ *
+ * @param onPlay told of every article that starts reading (it counts as read).
  */
-class ListenController(context: Context) {
+class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit = {}) {
     private val app: Context = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
 
@@ -363,6 +365,11 @@ class ListenController(context: Context) {
         )
         // A voice for another language than the engine's is picked right before speaking (ensureVoice).
         begin()
+        try {
+            onPlay(item)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not note the article as read", e)
+        }
     }
 
     /** Pauses a reading or resumes a paused one; does nothing when idle. */

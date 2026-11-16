@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.cedrickgd.morgenbriefing.AppContainer
+import com.cedrickgd.morgenbriefing.data.local.ReadHistory
 import com.cedrickgd.morgenbriefing.MorgenbriefingApp
 import com.cedrickgd.morgenbriefing.data.BERLIN
 import com.cedrickgd.morgenbriefing.data.SettingsOps
@@ -144,6 +145,9 @@ class SettingsViewModel(
 
     /** What the phone is (tier and why), for the "Effekte" hint; null for the first milliseconds. */
     val deviceTier: StateFlow<TierAssessment?> get() = container.performance.assessment
+
+    /** The stories in "Gelesen & ausgeblendet" (the counts under "Gelesene Artikel ausblenden"). */
+    val history: StateFlow<ReadHistory> get() = container.history.state
 
     private val _placeSearch = MutableStateFlow(PlaceSearchState())
     val placeSearch: StateFlow<PlaceSearchState> = _placeSearch.asStateFlow()
@@ -333,6 +337,8 @@ class SettingsViewModel(
     fun setReadInApp(inApp: Boolean) = edit { it.copy(readInApp = inApp) }
 
     fun setReadableOnly(only: Boolean) = edit { it.copy(readableOnly = only) }
+
+    fun setHideRead(hide: Boolean) = edit { it.copy(hideRead = hide) }
 
     fun setPrefetch(mode: PrefetchMode) = edit { it.copy(prefetch = mode) }
 

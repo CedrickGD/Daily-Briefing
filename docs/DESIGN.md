@@ -136,7 +136,8 @@ dem Entwurf, den der Besitzer gewählt hat):
   Wetterblock in den Einstellungen an ist. Auf/zu bleibt über App-Starts erhalten.
   **Warnungen** stehen immer sichtbar unter der Karte (getönte Glas-Banner), auch zugeklappt.
 * **Feed-Leiste** unter dem Wetter: ein Suchfeld (sieht aus wie ein Feld, ist ein Knopf und
-  öffnet die Suche: „Suchen – z. B. SLV-ETF, Midterms“) und darunter die Tabs **„Für dich“ ·
+  öffnet die Suche: „Suchen – z. B. SLV-ETF, Midterms“), rechts daneben ein runder Glasknopf mit
+  Verlaufs-Uhr (**„Gelesen & ausgeblendet“**, gleiche Höhe und Rundung wie das Feld), und darunter die Tabs **„Für dich“ ·
   „Neueste“ · je ein Tab pro gefolgtem Thema** (mit Icon; aktiver Tab gefüllt in Themen- bzw.
   Akzentfarbe) und am Ende ein runder **„＋“**. Die Tabs scrollen waagerecht und laufen rechts weich
   aus. Erreicht die Leiste den oberen Rand, **pinnt** sie dort: Die Glasfläche oben – beim
@@ -182,8 +183,17 @@ dem Entwurf, den der Besitzer gewählt hat):
 * **Keine Knopfreihe unter den Meldungen.** Das ⋮-Menü (auch per langem Druck auf die Meldung)
   enthält: Zuhören (beim Vorlesen „Vorlesen beenden“, pausiert „Weiter zuhören“), Teilen, Link
   kopieren, Im Browser öffnen, „… folgen“ (Unterthema einer Kategorie-Meldung), „… nicht mehr
-  folgen“ (nicht beim letzten Thema), „„Quelle“ ausblenden“ (nicht bei Google News). Antippen
+  folgen“ (nicht beim letzten Thema), „„Quelle“ ausblenden“ (nicht bei Google News). Davor:
+  „Als gelesen markieren“ / „Als ungelesen markieren“ (je nach Zustand) und **„Ausblenden“** – die
+  Meldung verschwindet sofort aus allen Listen, Snackbar „Ausgeblendet“ mit „Rückgängig“. Antippen
   öffnet den Leser. Wird eine Meldung vorgelesen, zeigt ihre Meta-Zeile ein kleines Kopfhörer-Symbol.
+* **Gelesen**: eine Meldung gilt als gelesen, sobald sie im Leser oder Browser geöffnet oder
+  angehört wurde – auch, wenn dieselbe Geschichte über einen anderen Feed kommt. Ihre Karte tritt
+  zurück: Überschrift in der leiseren Textfarbe, Bild halb durchscheinend (50 %), am Anfang der
+  Meta-Zeile ein gedämpftes Auge mit „Gelesen“ (kein Haken – der hieß früher „Volltext“). Mit
+  **„Gelesene Artikel ausblenden“** verschwinden gelesene Meldungen aus allen Listen – aber nur,
+  wenn eine Liste neu aufgebaut wird (Start, Aktualisieren, anderer Tab), nie unter dem Finger:
+  wer aus dem Leser zurückkommt, sieht die Karte ruhig an ihrem Platz.
 * Hinweise (offline, Quellen antworten nicht, nichts vollständig lesbar …) als **schmales
   getöntes Band** unter der Leiste – keine Kartenstapel vor der ersten Meldung. „Weitere Artikel
   werden geprüft …“ schließt die Karte eines Themas als ruhige Zeile ab.
@@ -219,6 +229,18 @@ unter einem Bild steht die Bildunterschrift der Redaktion – der Alt-Text nur, 
 als Zeile unter dem Bild, ist er nicht zugleich dessen Content-Description (TalkBack liest ihn
 einmal).
 
+**Gelesen & ausgeblendet** – über die Seite geschoben, Glas über dem Himmel wie „Themen
+entdecken“: Overline „DEIN VERLAUF“ und Serif-Titel, darunter eine Glaskarte mit zwei Zählern
+(Auge in Akzentfarbe: gelesen · durchgestrichenes Auge in Tertiärfarbe: ausgeblendet, große
+Serif-Zahlen), ein Glas-Suchfeld (Titel oder Quelle) und Filter-Pills Alle · Gelesen ·
+Ausgeblendet. Die Geschichten stehen nach Tagen („HEUTE“, „GESTERN“, „DIENSTAG · 6. OKTOBER“ als
+Overline auf der Textkante) in Glaskarten: 64-dp-Bild (sonst das generierte Cover), Serif-Titel,
+eine kleine getönte Marke „Gelesen“/„Ausgeblendet“, Quelle · Uhrzeit, ⋮ (Teilen, Link kopieren, Im
+Browser öffnen, „Wieder einblenden“, „Als ungelesen markieren“ – beides mit „Rückgängig“). Antippen
+öffnet den Leser, auch wenn der Feed die Meldung längst nicht mehr hat. Oben rechts „Verlauf
+löschen“ mit Rückfrage. Leer: ein Verlaufs-Symbol in weichem Akzentschein und eine Zeile, was hier
+landet. Erreichbar über den Knopf neben dem Suchfeld auf „Heute“ und Einstellungen → Feed & Lesen.
+
 **Suche** – Glas-Suchfeld oben, letzte Suchen als Chips, „Gerade wichtig“, Ergebnisse als
 große redaktionelle Einträge ohne Kartenrahmen (Bild in voller Breite, Serif-Headline, Lead mit
 „… Weiterlesen“, Meta-Zeile mit „Zuhören“, Teilen und ⋮), endlos; „Diesem Thema folgen“ als
@@ -244,7 +266,9 @@ gefüllte Pill.
    aufklappbaren Zeile: alle Feeds mit Schalter, „Eigene Quelle“ (Adresse oder Website, die App
    findet den Feed und zeigt Titel + Anzahl vor dem Speichern), bei eigenen Themen Bearbeiten/Löschen.
 6. **Feed & Lesen**: Meldungen pro Thema als große Zahl mit ruhigem Slider, Zeitraum als
-   Auswahl-Pills, „Bilder anzeigen“; „In der App lesen“, „Nur lesbare Artikel“, „Vorladen“.
+   Auswahl-Pills, „Bilder anzeigen“, „Gelesene Artikel ausblenden“ (Standard aus, mit einer
+   Zeile, was passiert) und direkt darunter die Zeile „Gelesen & ausgeblendet“ (Zähler, Chevron);
+   „In der App lesen“, „Nur lesbare Artikel“, „Vorladen“.
 7. **Vorlesen**: Sprachausgabe als Pills (nur bei mehreren Engines, z. B. Samsung · Google),
    Sprache (Automatisch · feste Sprache), „Stimme für …“ (Sprach-Chips, wenn mehrere zählen),
    „Am liebsten“ Egal · Weiblich · Männlich (nur Geschlechter, die eine Stimme verrät), Stimmen als

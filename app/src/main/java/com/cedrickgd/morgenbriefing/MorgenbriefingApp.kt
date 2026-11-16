@@ -23,8 +23,8 @@ class MorgenbriefingApp : Application() {
     /** In-app updater (release check, download, verification); created on first use. */
     val updates: UpdateServices by lazy { UpdateServices(this, container) }
 
-    /** "Zuhören": text-to-speech for articles. */
-    val listen: ListenController by lazy { ListenController(this) }
+    /** "Zuhören": text-to-speech for articles; an article listened to counts as read. */
+    val listen: ListenController by lazy { ListenController(this, onPlay = { item -> container.history.markRead(item) }) }
 
     /** Process-wide scope for fire-and-forget work (alarm rescheduling etc.). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

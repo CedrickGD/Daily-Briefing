@@ -122,6 +122,13 @@ interface SettingsStrings {
     val readableOnlyOn: String
     val readableOnlyOff: String
 
+    /** "Gelesene Artikel ausblenden" and the row to the archive of read and hidden stories below it. */
+    val hideRead: String
+    val hideReadOn: String
+    val hideReadOff: String
+    val historyTitle: String
+    fun historySummary(read: Int, hidden: Int): String
+
     /** Under "Artikel vorladen" while [readableOnly] is on: it checks and loads ahead anyway. */
     val prefetchWhileReadableOnly: String
     val prefetch: String
@@ -309,6 +316,12 @@ interface SettingsStrings {
         override val readableOnlyOn =
             "Die App prüft jeden Artikel, bevor sie ihn zeigt: Du siehst nur Meldungen, die komplett in der App lesbar sind – keine Bezahlschranke, kein bloßer Anriss, keine Cookie-Wand. Dafür lädt sie Artikel vorab, auch über mobile Daten (etwas Datenvolumen); offline zeigt sie nur schon geprüfte."
         override val readableOnlyOff = "Alle Meldungen – manche lassen sich nur bei der Redaktion ganz lesen"
+        override val hideRead = "Gelesene Artikel ausblenden"
+        override val hideReadOn = "Was du gelesen oder angehört hast, verschwindet aus den Listen – beim nächsten Aktualisieren, nie unter dem Finger."
+        override val hideReadOff = "Gelesenes bleibt in den Listen, nur ruhiger dargestellt."
+        override val historyTitle = "Gelesen & ausgeblendet"
+        override fun historySummary(read: Int, hidden: Int) =
+            if (read == 0 && hidden == 0) "Noch leer – hier findest du Gelesenes wieder" else "$read gelesen · $hidden ausgeblendet"
         override val prefetchWhileReadableOnly =
             "„Nur vollständige Artikel“ ist an: Die App prüft und lädt die Artikel ohnehin vorab. Diese Wahl gilt, wenn du das ausschaltest."
         override val prefetch = "Artikel vorladen"
@@ -522,6 +535,12 @@ interface SettingsStrings {
         override val readableOnlyOn =
             "The app checks every article before showing it: you only see stories that can be read in full in the app – no paywall, no mere teaser, no cookie wall. For that it loads articles in advance, on mobile data too (uses some data); offline it shows only articles checked before."
         override val readableOnlyOff = "All stories – some can only be read in full on the publisher's site"
+        override val hideRead = "Hide read articles"
+        override val hideReadOn = "Stories you read or listened to leave the lists the next time they refresh – never under your finger."
+        override val hideReadOff = "Read stories stay in the lists, just quieter."
+        override val historyTitle = "Read & hidden"
+        override fun historySummary(read: Int, hidden: Int) =
+            if (read == 0 && hidden == 0) "Empty for now – find what you read here again" else "$read read · $hidden hidden"
         override val prefetchWhileReadableOnly =
             "“Only complete articles” is on: the app checks and loads articles in advance anyway. This choice applies when you switch that off."
         override val prefetch = "Preload articles"
@@ -735,6 +754,16 @@ interface SettingsStrings {
         override val readableOnlyOn =
             "L'appli vérifie chaque article avant de l'afficher : tu ne vois que des articles lisibles en entier dans l'appli – pas de paywall, pas de simple accroche, pas de mur de cookies. Pour cela, elle charge les articles à l'avance, aussi en données mobiles (consomme un peu de données) ; hors ligne, elle n'affiche que ceux déjà vérifiés."
         override val readableOnlyOff = "Tous les articles – certains ne se lisent en entier que sur le site de l'éditeur"
+        override val hideRead = "Masquer les articles lus"
+        override val hideReadOn = "Ce que tu as lu ou écouté quitte les listes à la prochaine actualisation – jamais sous ton doigt."
+        override val hideReadOff = "Les articles lus restent dans les listes, simplement plus discrets."
+        override val historyTitle = "Lus et masqués"
+        override fun historySummary(read: Int, hidden: Int) =
+            if (read == 0 && hidden == 0) {
+                "Vide pour l'instant – tu retrouveras ici ce que tu as lu"
+            } else {
+                "$read ${if (read == 1) "lu" else "lus"} · $hidden ${if (hidden == 1) "masqué" else "masqués"}"
+            }
         override val prefetchWhileReadableOnly =
             "« Articles complets uniquement » est activé : l'appli vérifie et précharge déjà les articles. Ce choix s'applique si tu le désactives."
         override val prefetch = "Précharger les articles"
@@ -948,6 +977,16 @@ interface SettingsStrings {
         override val readableOnlyOn =
             "La app comprueba cada artículo antes de mostrarlo: solo ves noticias que se pueden leer completas en la app – sin muro de pago, sin un simple adelanto, sin muro de cookies. Para ello carga los artículos por adelantado, también con datos móviles (gasta algunos datos); sin conexión solo muestra los ya comprobados."
         override val readableOnlyOff = "Todas las noticias – algunas solo se leen completas en la web del medio"
+        override val hideRead = "Ocultar artículos leídos"
+        override val hideReadOn = "Lo que has leído o escuchado sale de las listas en la próxima actualización – nunca bajo tu dedo."
+        override val hideReadOff = "Lo leído se queda en las listas, solo más discreto."
+        override val historyTitle = "Leídos y ocultos"
+        override fun historySummary(read: Int, hidden: Int) =
+            if (read == 0 && hidden == 0) {
+                "Vacío por ahora – aquí encontrarás lo que has leído"
+            } else {
+                "$read ${if (read == 1) "leído" else "leídos"} · $hidden ${if (hidden == 1) "oculto" else "ocultos"}"
+            }
         override val prefetchWhileReadableOnly =
             "«Solo artículos completos» está activado: la app ya comprueba y carga los artículos por adelantado. Esta opción vale si lo desactivas."
         override val prefetch = "Precargar artículos"
@@ -1161,6 +1200,16 @@ interface SettingsStrings {
         override val readableOnlyOn =
             "L'app verifica ogni articolo prima di mostrarlo: vedi solo notizie che si leggono per intero nell'app – niente paywall, niente semplici anteprime, niente muri dei cookie. Per questo carica gli articoli in anticipo, anche con i dati mobili (consuma qualche dato); offline mostra solo quelli già verificati."
         override val readableOnlyOff = "Tutte le notizie – alcune si leggono per intero solo sul sito della testata"
+        override val hideRead = "Nascondi articoli letti"
+        override val hideReadOn = "Ciò che hai letto o ascoltato lascia le liste al prossimo aggiornamento – mai sotto il dito."
+        override val hideReadOff = "Gli articoli letti restano nelle liste, solo più discreti."
+        override val historyTitle = "Letti e nascosti"
+        override fun historySummary(read: Int, hidden: Int) =
+            if (read == 0 && hidden == 0) {
+                "Ancora vuoto – qui ritrovi ciò che hai letto"
+            } else {
+                "$read ${if (read == 1) "letto" else "letti"} · $hidden ${if (hidden == 1) "nascosto" else "nascosti"}"
+            }
         override val prefetchWhileReadableOnly =
             "«Solo articoli completi» è attivo: l'app verifica e carica già gli articoli in anticipo. Questa scelta vale se lo disattivi."
         override val prefetch = "Precarica gli articoli"

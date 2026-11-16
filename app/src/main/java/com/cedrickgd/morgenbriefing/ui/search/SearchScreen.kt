@@ -64,6 +64,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -103,6 +104,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cedrickgd.morgenbriefing.container
+import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
@@ -131,6 +134,7 @@ import com.cedrickgd.morgenbriefing.ui.nav.SearchRoute
 import com.cedrickgd.morgenbriefing.ui.news.FeedActions
 import com.cedrickgd.morgenbriefing.ui.news.FeedEntry
 import com.cedrickgd.morgenbriefing.ui.news.FeedGutter
+import com.cedrickgd.morgenbriefing.ui.news.FeedHints
 import com.cedrickgd.morgenbriefing.ui.news.copyLink
 import com.cedrickgd.morgenbriefing.ui.shell.reportChromeScroll
 import com.cedrickgd.morgenbriefing.util.horizontalSafeDrawing
@@ -273,6 +277,9 @@ fun SearchScreen(
     val actions = rememberSearchFeedActions(open, onMessage = message)
     val context = LocalContext.current
     val listenState by remember(context) { context.listen.state }.collectAsStateWithLifecycle()
+    // Results the user read already sit back like feed cards.
+    val history = remember(context) { context.container.history.state }.collectAsStateWithLifecycle()
+    val hints = remember(history) { FeedHints(NO_PICTURES, NO_STATUSES, history = history) }
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(
@@ -376,6 +383,7 @@ fun SearchScreen(
                                 // Stories from the phone's own topics say which one; Google News results all belong to the query.
                                 showTopic = article.topic.id != Topics.SEARCH_ID,
                                 showImage = state.showImages,
+                                hints = hints,
                             )
                             // A result in another language says so on its picture, opposite the readability hint.
                             state.languageTags[article.item.id]?.let { tag ->
@@ -440,10 +448,17 @@ fun SearchScreen(
 
 private const val RESULT_PREFIX = "r:"
 
+// The search result entries take their pictures and checks from the results themselves.
+private val NO_PICTURES: State<Map<String, String>> = mutableStateOf(emptyMap())
+private val NO_STATUSES: State<Map<String, ArticleStatus>> = mutableStateOf(emptyMap())
+
 /** Results below the screen whose covers are looked up ahead (large entries: about two screens). */
 private const val COVERS_AHEAD = 6
 
-/** The feed entry's actions for search results: open in the reader, listen, share, copy. */
+/**
+ * The feed entry's actions for search results: open in the reader, listen, share, copy, mark
+ * read or unread. A result opened in the browser counts as read.
+ */
 @Composable
 private fun rememberSearchFeedActions(onOpen: (NewsItem) -> Unit, onMessage: (String) -> Unit): FeedActions {
     val context = LocalContext.current
@@ -454,9 +469,13 @@ private fun rememberSearchFeedActions(onOpen: (NewsItem) -> Unit, onMessage: (St
     val latestStrings by rememberUpdatedState(strings)
     return remember(context, links) {
         val listen = context.listen
+        val history = context.container.history
         FeedActions(
             onOpen = { latestOpen(it.item) },
-            onOpenExternal = { links.open(it.item.url) },
+            onOpenExternal = { article ->
+                links.open(article.item.url)
+                history.markRead(article.item)
+            },
             onListen = { article ->
                 try {
                     listen.play(article.item)
@@ -482,6 +501,7 @@ private fun rememberSearchFeedActions(onOpen: (NewsItem) -> Unit, onMessage: (St
                     latestMessage(latestStrings.linkCopied)
                 }
             },
+            onSetRead = { article, read -> if (read) history.markRead(article.item) else history.markUnread(article.item) },
         )
     }
 }

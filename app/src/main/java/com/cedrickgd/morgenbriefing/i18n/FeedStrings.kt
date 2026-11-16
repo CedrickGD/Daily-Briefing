@@ -82,6 +82,14 @@ interface FeedStrings {
     fun followTopic(topic: String): String
     fun unfollowTopic(topic: String): String
 
+    // Reading history: the mark of a read story, its ⋮ entries, the snackbar, the way to the archive
+    val readMark: String
+    val markRead: String
+    val markUnread: String
+    val hideStory: String
+    val storyHidden: String
+    val openHistory: String
+
     // Readability hints on a card
     val paywall: String
     val paywallDescription: String
@@ -212,6 +220,12 @@ interface FeedStrings {
         override fun hideSource(source: String) = "„$source“ ausblenden"
         override fun followTopic(topic: String) = "„$topic“ folgen"
         override fun unfollowTopic(topic: String) = "„$topic“ nicht mehr folgen"
+        override val readMark = "Gelesen"
+        override val markRead = "Als gelesen markieren"
+        override val markUnread = "Als ungelesen markieren"
+        override val hideStory = "Ausblenden"
+        override val storyHidden = "Ausgeblendet"
+        override val openHistory = "Gelesen & ausgeblendet"
 
         override val paywall = "Bezahlinhalt"
         override val paywallDescription = "Bezahlinhalt: nur für Abonnenten"
@@ -323,6 +337,12 @@ interface FeedStrings {
         override fun hideSource(source: String) = "Hide “$source”"
         override fun followTopic(topic: String) = "Follow “$topic”"
         override fun unfollowTopic(topic: String) = "Unfollow “$topic”"
+        override val readMark = "Read"
+        override val markRead = "Mark as read"
+        override val markUnread = "Mark as unread"
+        override val hideStory = "Hide"
+        override val storyHidden = "Hidden"
+        override val openHistory = "Read & hidden"
 
         override val paywall = "Paywall"
         override val paywallDescription = "Paywall: for subscribers only"
@@ -434,6 +454,12 @@ interface FeedStrings {
         override fun hideSource(source: String) = "Masquer « $source »"
         override fun followTopic(topic: String) = "Suivre « $topic »"
         override fun unfollowTopic(topic: String) = "Ne plus suivre « $topic »"
+        override val readMark = "Lu"
+        override val markRead = "Marquer comme lu"
+        override val markUnread = "Marquer comme non lu"
+        override val hideStory = "Masquer"
+        override val storyHidden = "Masqué"
+        override val openHistory = "Lus et masqués"
 
         override val paywall = "Payant"
         override val paywallDescription = "Article payant : réservé aux abonnés"
@@ -545,6 +571,12 @@ interface FeedStrings {
         override fun hideSource(source: String) = "Ocultar «$source»"
         override fun followTopic(topic: String) = "Seguir «$topic»"
         override fun unfollowTopic(topic: String) = "Dejar de seguir «$topic»"
+        override val readMark = "Leído"
+        override val markRead = "Marcar como leído"
+        override val markUnread = "Marcar como no leído"
+        override val hideStory = "Ocultar"
+        override val storyHidden = "Oculto"
+        override val openHistory = "Leídos y ocultos"
 
         override val paywall = "De pago"
         override val paywallDescription = "Contenido de pago: solo para suscriptores"
@@ -656,6 +688,12 @@ interface FeedStrings {
         override fun hideSource(source: String) = "Nascondi «$source»"
         override fun followTopic(topic: String) = "Segui «$topic»"
         override fun unfollowTopic(topic: String) = "Non seguire più «$topic»"
+        override val readMark = "Letto"
+        override val markRead = "Segna come letto"
+        override val markUnread = "Segna come non letto"
+        override val hideStory = "Nascondi"
+        override val storyHidden = "Nascosto"
+        override val openHistory = "Letti e nascosti"
 
         override val paywall = "A pagamento"
         override val paywallDescription = "Contenuto a pagamento: solo per abbonati"

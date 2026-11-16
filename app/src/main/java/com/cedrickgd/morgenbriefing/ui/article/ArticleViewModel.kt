@@ -112,6 +112,12 @@ class ArticleViewModel(
 
     init {
         load(refresh = false)
+        // Opened in the reader: the story counts as read. A bare link (the mini player) is noted once its title is known.
+        _state.value.item.takeIf { it.headline.isNotBlank() }?.let(::noteRead)
+    }
+
+    private fun noteRead(item: NewsItem) {
+        attempt { container.history.markRead(item) }.onFailure { Log.w(TAG, "Could not note the article as read", it) }
     }
 
     private fun initialState(): ArticleUiState {
@@ -146,6 +152,7 @@ class ArticleViewModel(
                 onSuccess = { content ->
                     val current = _state.value.item
                     val shown = if (current.headline.isBlank()) current.copy(headline = content.title) else current
+                    if (current.headline.isBlank() && shown.headline.isNotBlank()) noteRead(shown)
                     // Cleaning up the blocks and judging completeness walk the whole text: off the main thread.
                     val (arranged, partial) = withContext(Dispatchers.Default) {
                         container.prefetcher.report(item, content)

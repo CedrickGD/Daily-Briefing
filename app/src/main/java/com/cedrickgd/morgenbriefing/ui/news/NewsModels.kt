@@ -51,6 +51,8 @@ data class FeedPrefs(
     val pageable: Set<String> = emptySet(),
     /** Hide articles the in-app reader cannot show. */
     val readableOnly: Boolean = true,
+    /** "Gelesene Artikel ausblenden": read stories leave the lists when they are built anew ([ReadFilter]). */
+    val hideRead: Boolean = false,
     val prefetch: PrefetchMode = PrefetchMode.WIFI_ONLY,
     /** Language of the news edition (`de`), for the prefetcher's `Accept-Language`. */
     val editionLanguage: String = "",
@@ -73,6 +75,7 @@ data class FeedPrefs(
         subtitles = subtitlesFor(settings, lang),
         pageable = Topics.followedIds(settings).filterTo(HashSet()) { TopicSources.pagingQuery(it, settings) != null },
         readableOnly = settings.readableOnly,
+        hideRead = settings.hideRead,
         prefetch = settings.prefetch,
         editionLanguage = settings.edition.language,
         suggestions = suggestionsFor(settings, lang),
@@ -126,6 +129,11 @@ data class SectionUi(
     val topWaiting: List<NewsItem> = emptyList(),
     /** Articles the topic has before verification (minus switched-off sources and walled sites). */
     val candidates: Int = all.size,
+    /**
+     * Articles the list leaves out because the user hid them, or read them with "Gelesene Artikel
+     * ausblenden" ([ReadFilter]) – they still count for paging, so a list of read stories pages on.
+     */
+    val heldBack: Int = 0,
 ) {
     val id: String get() = topic.id
     val count: Int get() = all.size
@@ -167,6 +175,8 @@ data class NewsFeed(
     val more: List<FeedArticle> = emptyList(),
     /** The topics to ask for older articles when [timeline] ends ([nextToPage]); empty: nothing older can come. */
     val olderNext: List<String> = emptyList(),
+    /** [timeline] stories left out as hidden or read ([ReadFilter]); they still count for paging. */
+    val timelineHeldBack: Int = 0,
 ) {
     val isEmpty: Boolean get() = latest.isEmpty()
     val articleCount: Int get() = latest.size
@@ -206,12 +216,18 @@ data class NewsFeed(
  *   [released]), and every list goes on from what it listed at the last build ([order],
  *   [appendOnly]) – older pages never land above a story on screen. A refresh sorts afresh.
  *
+ * - The reading history takes stories out of every list ([reads]): the ones hidden by hand, and
+ *   – with [FeedPrefs.hideRead] – the ones read when the lists were last built anew.
+ *
  * @param now reference for the age filter.
  * @param hides the readable-only snapshot of the last refresh.
  * @param verification the verdicts, and what each list showed since the last build.
  * @param open the followed topics that can still bring older articles (can page, not at their end).
  * @param order what the endless lists listed at the last build ([BuiltFeed.order]).
  * @param released topics whose last load of older articles failed: their lists show all they hold.
+ * @param reads the stories the reading history leaves out: hidden ones always, read ones with
+ *   [FeedPrefs.hideRead] ([ReadFilter]). They keep their place in [order], so a story shown again
+ *   (unhidden, marked unread) comes back where it was.
  */
 internal fun buildNewsFeed(
     news: Map<String, TopicNews>,
@@ -222,7 +238,8 @@ internal fun buildNewsFeed(
     open: Set<String> = emptySet(),
     order: FeedOrder = FeedOrder.NONE,
     released: Set<String> = emptySet(),
-): NewsFeed = buildFeed(news, prefs, now, hides, verification, open, order, released).feed
+    reads: ReadFilter = ReadFilter.NONE,
+): NewsFeed = buildFeed(news, prefs, now, hides, verification, open, order, released, reads).feed
 
 /** A built feed and the order its endless lists have now – what the next build goes on from. */
 internal class BuiltFeed(val feed: NewsFeed, val order: FeedOrder)
@@ -237,8 +254,12 @@ internal fun buildFeed(
     open: Set<String> = emptySet(),
     order: FeedOrder = FeedOrder.NONE,
     released: Set<String> = emptySet(),
+    reads: ReadFilter = ReadFilter.NONE,
 ): BuiltFeed {
     val reference = now.toInstant()
+    // The history's stories leave the lists after their order is taken (a story shown again keeps its place).
+    val filtering = !reads.hidden.isEmpty || (prefs.hideRead && !reads.read.isEmpty)
+    val keep: (NewsItem) -> Boolean = { reads.keeps(it, prefs.hideRead) }
     val floor = reference.minus(TIMELINE_FLOOR)
     val size = prefs.sectionSize.coerceAtLeast(1)
     val verify = if (prefs.readableOnly && verification.enabled) verification else Verification.OFF
@@ -259,13 +280,14 @@ internal fun buildFeed(
         // The topic's own list: as far back as the topic has been read, in the order it had before.
         val stamp = topicNews?.fetchedAt.orEmpty()
         val before = order.of(topic.id, stamp)
-        val read = if (depth == null || topic.id in released) held else readSoFar(held, depth, floor, before)
-        val candidates = appendOnly(read, before, NewsItem::id)
-        listed.put(topic.id, stamp, candidates.map(NewsItem::id))
+        val reached = if (depth == null || topic.id in released) held else readSoFar(held, depth, floor, before)
+        val ordered = appendOnly(reached, before, NewsItem::id)
+        listed.put(topic.id, stamp, ordered.map(NewsItem::id))
+        val candidates = if (filtering) ordered.filter(keep) else ordered
         val checked = verifiedList(candidates, topic.id, verify, NewsItem::id)
         val items = checked.shown
         val recent = filterByAge(items, prefs.newsAge, reference)
-        fresh += topic to filterByAge(held, prefs.newsAge, reference)
+        fresh += topic to filterByAge(if (filtering) held.filter(keep) else held, prefs.newsAge, reference)
         everything += topic to held
         // A section whose stories all opened earlier sections still shows them: never empty-looking.
         val top = recent.filter { it.id !in onTop }.ifEmpty { recent }.take(size)
@@ -288,6 +310,7 @@ internal fun buildFeed(
             waiting = checked.waiting,
             topWaiting = topWaiting,
             candidates = candidates.size,
+            heldBack = ordered.size - candidates.size,
         )
     }
     val latestCandidates = latestOf(fresh)
@@ -296,8 +319,9 @@ internal fun buildFeed(
     val stamp = sections.joinToString("|") { "${it.id}@${it.fetchedAt.orEmpty()}" }
     val before = order.of(TIMELINE_LIST, stamp)
     val stories = timelineStories(everything, horizon = depths.values.maxOrNull(), floor = floor, shown = before)
-    val timelineCandidates = appendOnly(stories.articles, before) { it.item.id }
-    listed.put(TIMELINE_LIST, stamp, timelineCandidates.map { it.item.id })
+    val timelineOrder = appendOnly(stories.articles, before) { it.item.id }
+    listed.put(TIMELINE_LIST, stamp, timelineOrder.map { it.item.id })
+    val timelineCandidates = if (filtering) timelineOrder.filter { keep(it.item) } else timelineOrder
     val timeline = verifiedList(timelineCandidates, TIMELINE_LIST, verify) { it.item.id }
     // A story on a "Für dich" card is not repeated below the cards – nor is its twin from another feed.
     val above = onTop + onTop.mapNotNull(stories.twins::get)
@@ -313,6 +337,7 @@ internal fun buildFeed(
         timelineCandidates = timelineCandidates.size,
         more = timeline.shown.filter { it.item.id !in above },
         olderNext = nextToPage(depths),
+        timelineHeldBack = timelineOrder.size - timelineCandidates.size,
     )
     return BuiltFeed(feed, listed.build())
 }

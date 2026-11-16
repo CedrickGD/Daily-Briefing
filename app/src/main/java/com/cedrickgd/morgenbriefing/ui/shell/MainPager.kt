@@ -125,12 +125,14 @@ internal fun MainPager(
                         onOpenSearch = { navigator.openSearch() },
                         onOpenDiscover = { categoryId -> navigator.openDiscover(categoryId) },
                         onAddPlace = { navigator.openPlaceSearch() },
+                        onOpenHistory = { navigator.openHistory() },
                         viewModel = todayViewModel,
                     )
 
                     MainPage.SETTINGS -> SettingsScreen(
                         contentPadding = contentPadding,
                         onOpenDiscover = { navigator.openDiscover() },
+                        onOpenHistory = { navigator.openHistory() },
                     )
                 }
             }

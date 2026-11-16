@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -23,11 +24,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.VerifiedUser
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.WbCloudy
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -67,16 +72,20 @@ internal class FeedCardActions(
     val onReadInApp: (Boolean) -> Unit,
     val onReadableOnly: (Boolean) -> Unit,
     val onPrefetch: (PrefetchMode) -> Unit,
+    val onHideRead: (Boolean) -> Unit,
+    /** Opens "Gelesen & ausgeblendet". */
+    val onOpenHistory: () -> Unit,
 )
 
 /**
  * Settings section "Feed": in the feed – how many articles a topic shows in "Für dich", how far
- * back the feed reaches, pictures; while reading – the in-app reader, readable-only articles
- * and preloading.
+ * back the feed reaches, pictures, hiding read stories and the way to the read and hidden ones
+ * ([readCount], [hiddenCount]); while reading – the in-app reader, readable-only articles and
+ * preloading.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-internal fun FeedCard(settings: AppSettings, actions: FeedCardActions, modifier: Modifier = Modifier) {
+internal fun FeedCard(settings: AppSettings, actions: FeedCardActions, modifier: Modifier = Modifier, readCount: Int = 0, hiddenCount: Int = 0) {
     val strings = settingsStrings()
     val colors = MaterialTheme.colorScheme
     // Local while dragging; follows the stored value whenever it changes.
@@ -139,6 +148,18 @@ internal fun FeedCard(settings: AppSettings, actions: FeedCardActions, modifier:
             onCheckedChange = actions.onShowImages,
             leading = { IconTile(Icons.Rounded.Image) },
         )
+        ToggleRow(
+            title = strings.hideRead,
+            subtitle = if (settings.hideRead) strings.hideReadOn else strings.hideReadOff,
+            checked = settings.hideRead,
+            onCheckedChange = actions.onHideRead,
+            leading = { IconTile(Icons.Rounded.VisibilityOff, tint = colors.tertiary) },
+        )
+        HistoryRow(
+            title = strings.historyTitle,
+            summary = strings.historySummary(readCount, hiddenCount),
+            onClick = actions.onOpenHistory,
+        )
 
         HorizontalDivider(Modifier.padding(vertical = 14.dp), color = colors.onSurface.copy(alpha = 0.08f))
         Overline(strings.whileReading, color = colors.primary)
@@ -193,6 +214,29 @@ internal fun FeedCard(settings: AppSettings, actions: FeedCardActions, modifier:
                 }
             }
         }
+    }
+}
+
+/** The row to "Gelesen & ausgeblendet": an icon tile, the title, how many stories it holds and a chevron. */
+@Composable
+private fun HistoryRow(title: String, summary: String, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
+            .heightIn(min = 56.dp)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        IconTile(Icons.Rounded.History, tint = colors.secondary)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
+            Text(summary, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = colors.onSurfaceVariant)
     }
 }
 

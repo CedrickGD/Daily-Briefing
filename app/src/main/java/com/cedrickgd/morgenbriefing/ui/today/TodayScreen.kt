@@ -181,6 +181,7 @@ private const val PREFETCH_SETTLE_MS = 350L
  * @param onOpenSearch opens the search screen.
  * @param onOpenDiscover opens the discover screen, at [categoryId]'s detail when not null.
  * @param onAddPlace opens the discover screen with its place search ("Ort hinzufügen").
+ * @param onOpenHistory opens "Gelesen & ausgeblendet" (the button beside the search field).
  */
 @Composable
 fun TodayScreen(
@@ -192,6 +193,7 @@ fun TodayScreen(
     onOpenSearch: () -> Unit = {},
     onOpenDiscover: (categoryId: String?) -> Unit = {},
     onAddPlace: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
     viewModel: TodayViewModel = viewModel(factory = TodayViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -199,7 +201,8 @@ fun TodayScreen(
     val images = viewModel.articleImages.collectAsStateWithLifecycle()
     val statuses = viewModel.articleStatus.collectAsStateWithLifecycle()
     val covers = viewModel.articleCovers.collectAsStateWithLifecycle()
-    val hints = remember(images, statuses, covers) { FeedHints(images, statuses, covers) }
+    val history = viewModel.history.collectAsStateWithLifecycle()
+    val hints = remember(images, statuses, covers, history) { FeedHints(images, statuses, covers, history) }
     val listState = rememberLazyListState()
     // After process death the saved position points into the feed; measuring the header and the
     // loading skeleton first would clamp it to their few items. Until weather and news are known
@@ -238,6 +241,7 @@ fun TodayScreen(
         onOpenSearch = onOpenSearch,
         onOpenDiscover = onOpenDiscover,
         onAddPlace = onAddPlace,
+        onOpenHistory = onOpenHistory,
         onSetTopicOrder = viewModel::setTopicOrder,
         onSetSourceEnabled = viewModel::setSourceEnabled,
         onFollow = viewModel::follow,
@@ -247,6 +251,10 @@ fun TodayScreen(
         onPrefetch = viewModel::prefetch,
         onCovers = viewModel::covers,
         onWeatherExpanded = viewModel::setWeatherExpanded,
+        onHide = viewModel::hide,
+        onUnhide = viewModel::unhide,
+        onSetRead = viewModel::setRead,
+        onViewChanged = viewModel::onViewChanged,
     )
 
     TodayContent(
@@ -279,6 +287,7 @@ private class TodayCallbacks(
     val onOpenSearch: () -> Unit,
     val onOpenDiscover: (String?) -> Unit,
     val onAddPlace: () -> Unit,
+    val onOpenHistory: () -> Unit,
     val onSetTopicOrder: (List<String>) -> Unit,
     val onSetSourceEnabled: (String, Boolean) -> Unit,
     val onFollow: (String, Int?) -> Unit,
@@ -288,6 +297,13 @@ private class TodayCallbacks(
     val onPrefetch: (List<NewsItem>) -> Unit,
     val onCovers: (List<NewsItem>) -> Unit,
     val onWeatherExpanded: (Boolean) -> Unit,
+    /** ⋮ → "Ausblenden": the story leaves every list at once. */
+    val onHide: (NewsItem) -> Unit,
+    /** "Rückgängig" after hiding. */
+    val onUnhide: (NewsItem) -> Unit,
+    val onSetRead: (NewsItem, Boolean) -> Unit,
+    /** Another view was chosen: it is built anew (read stories leave it with "Gelesene Artikel ausblenden"). */
+    val onViewChanged: () -> Unit,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -358,6 +374,11 @@ private fun TodayContent(
             callbacks.onSetSourceEnabled(article.item.sourceId, true)
         }
     }
+    // Hidden at once, from every list; the snackbar brings it back.
+    val hideStory: (FeedArticle) -> Unit = { article ->
+        callbacks.onHide(article.item)
+        snackbar.say(scope, strings.storyHidden, action = strings.undo) { callbacks.onUnhide(article.item) }
+    }
     val actions = rememberFeedActions(
         onMessage = { snackbar.say(scope, it) },
         onHideSource = hideSource,
@@ -366,6 +387,8 @@ private fun TodayContent(
         onFollowTopic = follow,
         followSuggestion = { article -> prefs?.let { followSuggestion(article, it.followedIds, it.language) } },
         canUnfollowTopic = { topic -> prefs?.followedIds?.let { topic.id in it && canUnfollow(it, topic.id) } ?: false },
+        onHide = hideStory,
+        onSetRead = { article, read -> callbacks.onSetRead(article.item, read) },
     )
     // The bar pinned at the top, the view starting right below it.
     val scrollToBar: (animate: Boolean) -> Unit = { animate ->
@@ -381,6 +404,8 @@ private fun TodayContent(
         }
     }
     val switchTo: (TabSwitch) -> Unit = { switch ->
+        // Another view is built anew: stories read until now leave it ("Gelesene Artikel ausblenden").
+        if (switch.filter != selected) callbacks.onViewChanged()
         // Always remember the tap: after an unfollowed topic fell back to "Für dich", the stored
         // key still names that topic, and tapping "Für dich" must replace it.
         selectedKey = switch.filter.key
@@ -393,6 +418,7 @@ private fun TodayContent(
             onSelect = { filter -> switchTo(tabSwitch(filter, selected, parked)) },
             onSearch = callbacks.onOpenSearch,
             onManageTopics = { showTopics = true },
+            onHistory = callbacks.onOpenHistory,
             rowState = tabRowState,
             onGlass = onGlass,
         )
@@ -418,9 +444,10 @@ private fun TodayContent(
         is FeedFilter.OneTopic -> feed?.sectionFor(selected.topicId)?.waiting?.size ?: 0
         FeedFilter.Latest, FeedFilter.ForYou -> feed?.timelineWaiting?.size ?: 0
     }
+    // Stories left out as read or hidden still count: a list of read stories pages on.
     val candidates = when (selected) {
-        is FeedFilter.OneTopic -> feed?.sectionFor(selected.topicId)?.candidates ?: 0
-        FeedFilter.Latest, FeedFilter.ForYou -> feed?.timelineCandidates ?: 0
+        is FeedFilter.OneTopic -> feed?.sectionFor(selected.topicId)?.let { it.candidates + it.heldBack } ?: 0
+        FeedFilter.Latest, FeedFilter.ForYou -> feed?.let { it.timelineCandidates + it.timelineHeldBack } ?: 0
     }
     val lowOnCandidates = waiting < VERIFY_LOW_WATER
     val currentCallbacks by rememberUpdatedState(callbacks)

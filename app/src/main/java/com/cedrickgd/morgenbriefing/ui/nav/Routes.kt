@@ -29,3 +29,10 @@ data class DiscoverRoute(val categoryId: String? = null, val addPlace: Boolean =
 /** The news search, pushed over the pager; [query] runs at once (a followed search, a link). */
 @Serializable
 data class SearchRoute(val query: String? = null)
+
+/**
+ * "Gelesen & ausgeblendet", pushed over the pager: every story the user read or hid, newest
+ * first, to open, share or bring back into the feed.
+ */
+@Serializable
+data object HistoryRoute

@@ -1,5 +1,6 @@
 package com.cedrickgd.morgenbriefing.ui.news
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -28,6 +29,9 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Stop
@@ -47,12 +51,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -177,6 +183,10 @@ internal fun SectionCardHeader(section: SectionUi, onShowAll: (() -> Unit)?, mod
  * page, and the ⋮ menu. Tapping opens the article,
  * a long press opens the same menu. No buttons under the story.
  *
+ * A story the user read already ([FeedHints.isRead]) sits back: its headline in the quieter
+ * text color, its picture faded ([ReadPictureAlpha]) and a small "👁 Gelesen" at the start of the
+ * meta line – no check mark, which once meant "full text".
+ *
  * With "Bilder anzeigen" on every story has its picture slot from the start ([storyVisual]): the
  * generated cover in the topic's colors, and over it the article's picture – its own, or the one
  * found for it (Google News items carry none; it is looked up ahead of the list and fades in).
@@ -211,6 +221,9 @@ internal fun StoryCardItem(
         derivedStateOf { if (item.image == null) hints.heroImage(item.id) else null }
     }
     val badge by remember(hints, item.id) { derivedStateOf { cardBadge(hints.status(item.id)) } }
+    val read by remember(hints, item) { derivedStateOf { hints.isRead(item) } }
+    val pictureAlpha by animateFloatAsState(if (read) ReadPictureAlpha else 1f, label = "readPicture")
+    val headlineColor = if (read) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified
     val visualItem = remember(item, hero) { hero?.let { item.copy(image = ArticleImage(it)) } ?: item }
     val visual = storyVisual(showImage)
     val leadWithPicture = style == StoryStyle.LEAD && visual == StoryVisual.PICTURE
@@ -240,6 +253,7 @@ internal fun StoryCardItem(
             badge = badge,
             listening = listening,
             paused = paused,
+            read = read,
             menuOpen = menuOpen,
             onMenu = { menuOpen = it },
             actions = actions,
@@ -254,6 +268,7 @@ internal fun StoryCardItem(
                     Modifier
                         .fillMaxWidth()
                         .height(LeadPictureHeight)
+                        .graphicsLayer { alpha = pictureAlpha }
                         .clip(RoundedCornerShape(18.dp)),
                 ) {
                     ArticleVisual(
@@ -273,6 +288,7 @@ internal fun StoryCardItem(
                 Text(
                     text = item.headline,
                     style = Reading.storyLead(language = textLanguage),
+                    color = headlineColor,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { heading() },
@@ -289,6 +305,7 @@ internal fun StoryCardItem(
                     Text(
                         text = item.headline,
                         style = if (style == StoryStyle.LEAD) Reading.storyLead(language = textLanguage) else Reading.storyRow(language = textLanguage),
+                        color = headlineColor,
                         maxLines = if (style == StoryStyle.LEAD) 4 else 3,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.semantics { heading() },
@@ -296,19 +313,22 @@ internal fun StoryCardItem(
                     metaRow(0.dp)
                 }
                 Spacer(Modifier.width(14.dp))
-                StoryThumbnail(visualItem, article.topic, visual, showImage)
+                StoryThumbnail(visualItem, article.topic, visual, showImage, Modifier.graphicsLayer { alpha = pictureAlpha })
             }
         }
         if (divider) CardHairline()
     }
 }
 
+/** How far the picture of a story the user read already fades (on glass, light and dark). */
+internal const val ReadPictureAlpha = 0.5f
+
 /** The 80 dp picture of a row: the article's picture over its generated cover, or (pictures off) a tile in the topic's color. */
 @Composable
-private fun StoryThumbnail(item: NewsItem, topic: Topic, visual: StoryVisual, showImage: Boolean) {
+private fun StoryThumbnail(item: NewsItem, topic: Topic, visual: StoryVisual, showImage: Boolean, modifier: Modifier = Modifier) {
     if (visual == StoryVisual.PICTURE) {
         Box(
-            Modifier
+            modifier
                 .size(ThumbnailSize)
                 .clip(RoundedCornerShape(14.dp)),
         ) {
@@ -322,7 +342,7 @@ private fun StoryThumbnail(item: NewsItem, topic: Topic, visual: StoryVisual, sh
             )
         }
     } else {
-        TopicThumbnail(topic, size = ThumbnailSize)
+        TopicThumbnail(topic, size = ThumbnailSize, modifier = modifier)
     }
 }
 
@@ -342,7 +362,8 @@ internal fun TopicLabel(topic: Topic, modifier: Modifier = Modifier) {
 
 /**
  * "Quelle · vor 3 Std." with the readability mark, a headphones mark while the story is read
- * aloud, and the ⋮ button with the story's menu. The time stays whole, only the source shortens.
+ * aloud, "👁 Gelesen" in front once the user read it ([read]), and the ⋮ button with the story's
+ * menu. The time stays whole, only the source shortens.
  *
  * @param menuShift moves the ⋮ towards the card's edge (the lead's full-width meta line).
  */
@@ -353,6 +374,7 @@ private fun StoryMetaRow(
     badge: CardBadge?,
     listening: Boolean,
     paused: Boolean,
+    read: Boolean,
     menuOpen: Boolean,
     onMenu: (Boolean) -> Unit,
     actions: FeedActions,
@@ -372,6 +394,7 @@ private fun StoryMetaRow(
                 Icon(Icons.Rounded.Headphones, contentDescription = null, tint = colors.primary, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
             }
+            if (read) ReadMark(metaStyle, separator = meta.source != null || meta.time != null)
             meta.source?.let { source ->
                 Text(
                     text = source,
@@ -393,8 +416,36 @@ private fun StoryMetaRow(
             IconButton(onClick = { onMenu(true) }) {
                 Icon(Icons.Rounded.MoreVert, contentDescription = strings.moreOptions, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
-            StoryMenu(article = article, open = menuOpen, listening = listening, paused = paused, onDismiss = { onMenu(false) }, actions = actions)
+            StoryMenu(
+                article = article,
+                open = menuOpen,
+                listening = listening,
+                paused = paused,
+                read = read,
+                onDismiss = { onMenu(false) },
+                actions = actions,
+            )
         }
+    }
+}
+
+/**
+ * "👁 Gelesen" at the start of a meta line: a muted eye and the word, in the meta line's own
+ * style (quiet in light and dark), then " · " before the rest when [separator].
+ */
+@Composable
+internal fun ReadMark(style: TextStyle, separator: Boolean, modifier: Modifier = Modifier) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.Visibility, contentDescription = null, tint = muted.copy(alpha = 0.8f), modifier = Modifier.size(13.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = if (separator) "${feedStrings().readMark} · " else feedStrings().readMark,
+            style = style.copy(fontWeight = FontWeight.Medium),
+            color = muted,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
@@ -419,6 +470,7 @@ private fun StoryMenu(
     open: Boolean,
     listening: Boolean,
     paused: Boolean,
+    read: Boolean,
     onDismiss: () -> Unit,
     actions: FeedActions,
 ) {
@@ -434,7 +486,7 @@ private fun StoryMenu(
         shadowElevation = 12.dp,
     ) {
         val source = storySource(article.item)
-        val items = remember(article, listening, paused, actions, source) {
+        val items = remember(article, listening, paused, read, actions, source) {
             storyMenu(
                 article = article,
                 listening = listening,
@@ -443,6 +495,8 @@ private fun StoryMenu(
                 canUnfollow = actions.onUnfollowTopic != null && actions.canUnfollowTopic(article.topic),
                 canHideSource = actions.onHideSource != null,
                 sourceName = source,
+                read = if (actions.onSetRead != null) read else null,
+                canHide = actions.onHide != null,
             )
         }
         for (entry in items) {
@@ -453,6 +507,9 @@ private fun StoryMenu(
                 StoryAction.SHARE -> common.share to Icons.Rounded.Share
                 StoryAction.COPY_LINK -> common.copyLink to Icons.Rounded.ContentCopy
                 StoryAction.OPEN_IN_BROWSER -> common.openInBrowser to Icons.AutoMirrored.Rounded.OpenInNew
+                StoryAction.MARK_READ -> strings.markRead to Icons.Rounded.Visibility
+                StoryAction.MARK_UNREAD -> strings.markUnread to Icons.Rounded.Restore
+                StoryAction.HIDE -> strings.hideStory to Icons.Rounded.VisibilityOff
                 StoryAction.FOLLOW_TOPIC -> strings.followTopic(entry.topic?.title.orEmpty()) to Icons.Rounded.AddCircleOutline
                 StoryAction.UNFOLLOW_TOPIC -> strings.unfollowTopic(entry.topic?.title.orEmpty()) to Icons.Rounded.RemoveCircleOutline
                 StoryAction.HIDE_SOURCE -> strings.hideSource(source) to Icons.AutoMirrored.Rounded.VolumeOff
@@ -475,6 +532,9 @@ private fun runStoryAction(entry: StoryMenuItem, article: FeedArticle, actions: 
         StoryAction.SHARE -> actions.onShare(article)
         StoryAction.COPY_LINK -> actions.onCopyLink(article)
         StoryAction.OPEN_IN_BROWSER -> actions.onOpenExternal(article)
+        StoryAction.MARK_READ -> actions.onSetRead?.invoke(article, true)
+        StoryAction.MARK_UNREAD -> actions.onSetRead?.invoke(article, false)
+        StoryAction.HIDE -> actions.onHide?.invoke(article)
         StoryAction.FOLLOW_TOPIC -> entry.topic?.let { topic -> actions.onFollowTopic?.invoke(topic) }
         StoryAction.UNFOLLOW_TOPIC -> entry.topic?.let { topic -> actions.onUnfollowTopic?.invoke(topic) }
         StoryAction.HIDE_SOURCE -> actions.onHideSource?.invoke(article)

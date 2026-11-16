@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
@@ -76,9 +77,10 @@ private val SearchFieldShape = RoundedCornerShape(16.dp)
 
 /**
  * The feed bar of "Heute" (docs/DESIGN.md §7): a search field – a button that looks like one and
- * opens the search screen – and the tabs "Für dich", "Neueste", one per followed topic (with its
- * icon) and a round "＋" at the end that opens "Deine Themen". It sits in the page below the
- * weather and pins to the top once it reaches it (the page's top glass then carries it).
+ * opens the search screen – with a round history button beside it ("Gelesen & ausgeblendet",
+ * [onHistory]), and the tabs "Für dich", "Neueste", one per followed topic (with its icon) and a
+ * round "＋" at the end that opens "Deine Themen". It sits in the page below the weather and pins
+ * to the top once it reaches it (the page's top glass then carries it).
  *
  * @param rowState hoist it to keep the tabs' scroll position when the bar moves into the top glass.
  * @param onGlass the bar sits on the top glass: field and tabs get a quiet fill and rim instead
@@ -92,11 +94,18 @@ fun FeedBar(
     onSearch: () -> Unit,
     onManageTopics: () -> Unit,
     modifier: Modifier = Modifier,
+    onHistory: (() -> Unit)? = null,
     rowState: LazyListState = rememberLazyListState(),
     onGlass: Boolean = false,
 ) {
     Column(modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp)) {
-        SearchFieldButton(onClick = onSearch, onGlass = onGlass, modifier = Modifier.padding(horizontal = FeedGutter))
+        Row(Modifier.padding(horizontal = FeedGutter), verticalAlignment = Alignment.CenterVertically) {
+            SearchFieldButton(onClick = onSearch, onGlass = onGlass, modifier = Modifier.weight(1f))
+            if (onHistory != null) {
+                Spacer(Modifier.width(8.dp))
+                HistoryButton(onClick = onHistory, onGlass = onGlass)
+            }
+        }
         Spacer(Modifier.height(6.dp))
         FeedTabRow(tabs = tabs, selected = selected, onSelect = onSelect, onManageTopics = onManageTopics, rowState = rowState, onGlass = onGlass)
     }
@@ -136,6 +145,30 @@ private fun SearchFieldButton(onClick: () -> Unit, onGlass: Boolean, modifier: M
             // The button says what it does; the example queries are for the eye only.
             modifier = Modifier.clearAndSetSemantics { },
         )
+    }
+}
+
+/** The round button beside the search field: opens "Gelesen & ausgeblendet", the read and hidden stories. */
+@Composable
+private fun HistoryButton(onClick: () -> Unit, onGlass: Boolean) {
+    val strings = feedStrings()
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .pressScale(interaction, pressedScale = 0.92f)
+            .then(if (onGlass) Modifier.onGlassFill(SearchFieldShape) else Modifier.glass(shape = SearchFieldShape, level = GlassLevel.Thin))
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                role = Role.Button,
+                onClickLabel = strings.openHistory,
+                onClick = onClick,
+            )
+            .semantics { contentDescription = strings.openHistory },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Rounded.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
     }
 }
 

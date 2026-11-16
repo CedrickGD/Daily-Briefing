@@ -147,6 +147,15 @@ enum class StoryAction {
     COPY_LINK,
     OPEN_IN_BROWSER,
 
+    /** The story counts as read from now on (it was not). */
+    MARK_READ,
+
+    /** The story counts as unread again. */
+    MARK_UNREAD,
+
+    /** Take the story out of every list at once ("Ausblenden", undone from the snackbar). */
+    HIDE,
+
     /** Follow the sub-topic the story belongs to ([StoryMenuItem.topic]). */
     FOLLOW_TOPIC,
 
@@ -161,10 +170,12 @@ internal data class StoryMenuItem(val action: StoryAction, val topic: Topic? = n
 
 /**
  * The ⋮ menu of [article], in this order: listening (start, resume or stop), share, copy the
- * link, open in the browser, then – where they apply – follow its sub-topic ([followSuggestion]),
- * stop following the topic it is shown under ([canUnfollow]: the screen offers it and it is not
- * the last followed topic) and hide its source ([canHideSource]: the screen offers it, the
- * story names a source and that source can be switched off, see [canHideSource]).
+ * link, open in the browser, then – where they apply – mark it read or unread ([read]: null
+ * when the screen does not offer it), hide it ([canHide]), follow its sub-topic
+ * ([followSuggestion]), stop following the topic it is shown under ([canUnfollow]: the screen
+ * offers it and it is not the last followed topic) and hide its source ([canHideSource]: the
+ * screen offers it, the story names a source and that source can be switched off, see
+ * [canHideSource]).
  */
 internal fun storyMenu(
     article: FeedArticle,
@@ -174,6 +185,8 @@ internal fun storyMenu(
     canUnfollow: Boolean,
     canHideSource: Boolean,
     sourceName: String,
+    read: Boolean? = null,
+    canHide: Boolean = false,
 ): List<StoryMenuItem> = buildList {
     add(
         StoryMenuItem(
@@ -187,6 +200,12 @@ internal fun storyMenu(
     add(StoryMenuItem(StoryAction.SHARE))
     add(StoryMenuItem(StoryAction.COPY_LINK))
     add(StoryMenuItem(StoryAction.OPEN_IN_BROWSER))
+    when (read) {
+        true -> add(StoryMenuItem(StoryAction.MARK_UNREAD))
+        false -> add(StoryMenuItem(StoryAction.MARK_READ))
+        null -> Unit
+    }
+    if (canHide) add(StoryMenuItem(StoryAction.HIDE))
     if (followSuggestion != null && followSuggestion.id != article.topic.id) add(StoryMenuItem(StoryAction.FOLLOW_TOPIC, followSuggestion))
     if (canUnfollow) add(StoryMenuItem(StoryAction.UNFOLLOW_TOPIC, article.topic))
     if (canHideSource && sourceName.isNotBlank() && canHideSource(article.item)) add(StoryMenuItem(StoryAction.HIDE_SOURCE))

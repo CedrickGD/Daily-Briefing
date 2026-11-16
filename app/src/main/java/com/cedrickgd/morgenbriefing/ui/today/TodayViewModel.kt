@@ -13,6 +13,8 @@ import com.cedrickgd.morgenbriefing.MorgenbriefingApp
 import com.cedrickgd.morgenbriefing.data.BERLIN
 import com.cedrickgd.morgenbriefing.data.MoreResult
 import com.cedrickgd.morgenbriefing.data.article.KnownWalls
+import com.cedrickgd.morgenbriefing.data.local.ReadHistory
+import com.cedrickgd.morgenbriefing.data.local.StoryIndex
 import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
@@ -28,6 +30,7 @@ import com.cedrickgd.morgenbriefing.ui.news.BarrenLoads
 import com.cedrickgd.morgenbriefing.ui.news.FeedOrder
 import com.cedrickgd.morgenbriefing.ui.news.FeedPrefs
 import com.cedrickgd.morgenbriefing.ui.news.NewsFeed
+import com.cedrickgd.morgenbriefing.ui.news.ReadFilter
 import com.cedrickgd.morgenbriefing.ui.news.ReadabilityHides
 import com.cedrickgd.morgenbriefing.ui.news.TIMELINE_LIST
 import com.cedrickgd.morgenbriefing.ui.news.Verification
@@ -58,6 +61,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -125,6 +129,11 @@ data class TodayUiState(
  * hiding sources from the feed, the endless lists ([loadMore] for a topic, [loadOlder] for the
  * timeline of all topics), warming the articles on screen ([prefetch]) and looking up the covers
  * of stories without a picture ([covers]).
+ *
+ * The reading history ([history]) shapes the lists: hidden stories leave them at once ([hide]),
+ * and with "Gelesene Artikel ausblenden" read ones leave them whenever they are built anew – at
+ * start, after a refresh, when the tab changes ([onViewChanged]) – never while the user looks at
+ * them: a story read a moment ago shows, calmer, until then.
  */
 class TodayViewModel(
     private val container: AppContainer,
@@ -149,6 +158,15 @@ class TodayViewModel(
 
     /** What the prefetcher knows about each article's readability, by article id. */
     val articleStatus: StateFlow<Map<String, ArticleStatus>> get() = container.prefetcher.status
+
+    /** The stories the user read or hid (for the calm look of read cards and the ⋮ menu). */
+    val history: StateFlow<ReadHistory> get() = container.history.state
+
+    /**
+     * The stories read when the lists were last built anew ([snapshotReads]): what "Gelesene
+     * Artikel ausblenden" leaves out until the next build, so a card read a moment ago stays put.
+     */
+    private val readAtBuild = MutableStateFlow(StoryIndex.EMPTY)
 
     /**
      * The readable-only snapshot the feed is built with. Taken when a refresh ends (and once at
@@ -190,6 +208,8 @@ class TodayViewModel(
         refreshWeather()
         observeFeed()
         viewModelScope.launch {
+            attempt { container.history.warm() }.onFailure { Log.w(TAG, "Reading history unavailable", it) }
+            snapshotReads()
             attempt { container.news.warm() }.onFailure { Log.w(TAG, "News cache unavailable", it) }
             snapshotHides()
             refreshNews(force = false)
@@ -226,6 +246,8 @@ class TodayViewModel(
             try {
                 joinAll(refreshWeather(), refreshNews(force = true))
             } finally {
+                // The lists are built anew: what was read until now leaves them (also offline).
+                snapshotReads()
                 _state.update { it.copy(refreshing = false) }
             }
         }
@@ -248,6 +270,30 @@ class TodayViewModel(
         // ask again for the same articles, so the last window is sent once more.
         sendPrefetch(prefetchSession.resume())
         sendCovers(coverWindow)
+    }
+
+    /**
+     * Another view of the feed was chosen (a tab, "Alle →"): it is built anew, so with "Gelesene
+     * Artikel ausblenden" the stories read until now leave it.
+     */
+    fun onViewChanged() {
+        viewModelScope.launch { snapshotReads() }
+    }
+
+    /** Hides [item]'s story from every list at once (⋮ → "Ausblenden"); [unhide] undoes it. */
+    fun hide(item: NewsItem) {
+        attempt { container.history.hide(item) }.onFailure { Log.w(TAG, "Could not hide ${item.id}", it) }
+    }
+
+    /** Shows [item]'s story again ("Rückgängig"). */
+    fun unhide(item: NewsItem) {
+        attempt { container.history.unhide(item) }.onFailure { Log.w(TAG, "Could not show ${item.id} again", it) }
+    }
+
+    /** Marks [item]'s story read or unread (⋮); the lists change only when they are built anew. */
+    fun setRead(item: NewsItem, read: Boolean) {
+        attempt { if (read) container.history.markRead(item) else container.history.markUnread(item) }
+            .onFailure { Log.w(TAG, "Could not mark ${item.id}", it) }
     }
 
     fun retryWeather() {
@@ -313,7 +359,8 @@ class TodayViewModel(
         val current = _state.value
         if (!current.canLoadMore(topicId)) return
         val section = current.feed?.sectionFor(topicId)
-        val judged = section?.let { it.candidates - it.waiting.size } ?: 0
+        // Stories left out as read or hidden count as judged: pages of them alone end in "Weiter zurück suchen".
+        val judged = section?.let { it.candidates + it.heldBack - it.waiting.size } ?: 0
         if (!barren.mayLoad(topicId, shown = section?.count ?: 0, judged = judged, byUser = topicId in current.stalled)) {
             _state.update { it.copy(stalled = it.stalled + topicId) }
             return
@@ -348,7 +395,7 @@ class TodayViewModel(
         val feed = current.feed ?: return
         val next = feed.olderNext.let { if (light) it.take(OLDER_TOPICS_LIGHT) else it }
         if (next.isEmpty()) return
-        val judged = feed.timelineCandidates - feed.timelineWaiting.size
+        val judged = feed.timelineCandidates + feed.timelineHeldBack - feed.timelineWaiting.size
         if (!barren.mayLoad(TIMELINE_LIST, shown = feed.timeline.size, judged = judged, byUser = current.olderStalled)) {
             _state.update { it.copy(olderStalled = true) }
             return
@@ -499,6 +546,7 @@ class TodayViewModel(
                 .getOrNull() ?: return@launch
             ensureActive()
             snapshotHides()
+            snapshotReads()
             // Only a round over every followed topic can say "offline"; one failing topic is just that.
             val coversAll = wanted.toSet() == visible.toSet()
             _state.update {
@@ -514,6 +562,17 @@ class TodayViewModel(
                 )
             }
         }.also { newsJob = it }
+    }
+
+    /**
+     * Freezes the stories read until now: with "Gelesene Artikel ausblenden" they leave the lists
+     * from this build on (the index is built off the main thread).
+     */
+    private suspend fun snapshotReads() {
+        val read = withContext(Dispatchers.Default) {
+            attempt { container.history.state.value.read }.onFailure { Log.w(TAG, "Reading history unavailable", it) }.getOrNull()
+        } ?: return
+        readAtBuild.value = read
     }
 
     /** Freezes what "nur lesbare Artikel" hides until the next refresh (file read off the main thread). */
@@ -537,7 +596,8 @@ class TodayViewModel(
 
     /**
      * The feed on screen: repository state × feed settings × readable-only snapshot × the
-     * verdicts of "nur vollständige Artikel", rebuilt off the main thread.
+     * verdicts of "nur vollständige Artikel" × the reading history ([ReadFilter]: hidden stories
+     * at once, read ones as of the last build), rebuilt off the main thread.
      *
      * A build (new news, other settings, a new snapshot) applies removals; between builds new
      * verdicts only append articles, and what a list showed once stays ([keptAfter]). The lists
@@ -559,6 +619,13 @@ class TodayViewModel(
                 if (on) container.prefetcher.status.map(Verification::settled).distinctUntilChanged() else flowOf(emptyMap())
             }
             .catch { e -> Log.w(TAG, "Article verdicts unavailable", e) }
+        // Hidden stories follow the history at once; read ones only as of the last build (readAtBuild).
+        val hidden = container.history.state
+            .map { it.hidden }
+            .distinctUntilChanged()
+            .flowOn(Dispatchers.Default)
+        val reads = combine(hidden, readAtBuild) { h, r -> ReadFilter(h, r) }.distinctUntilChanged()
+        val filters = combine(hides, reads) { h, r -> h to r }
         viewModelScope.launch {
             var kept = emptyMap<String, Set<String>>()
             var built: Triple<Any?, FeedPrefs?, ReadabilityHides?>? = null
@@ -566,8 +633,8 @@ class TodayViewModel(
             // The timeline waits for every topic that can still page – except the ones given up on.
             val stalled = _state.map { it.stalled }.distinctUntilChanged()
             val newsAndPaging = combine(container.news.state, skipped, stalled) { news, skip, stall -> Triple(news, skip, stall) }
-            combine(newsAndPaging, prefs, hides, verdicts, container.prefetcher.waitingForNetwork) { n, p, h, v, off ->
-                FeedInputs(n.first, p.first, p.second, h, v, off, n.second, n.third)
+            combine(newsAndPaging, prefs, filters, verdicts, container.prefetcher.waitingForNetwork) { n, p, f, v, off ->
+                FeedInputs(n.first, p.first, p.second, f.first, v, off, n.second, n.third, f.second)
             }.collectLatest { inputs ->
                 val news = inputs.news
                 val feedPrefs = inputs.prefs
@@ -580,7 +647,7 @@ class TodayViewModel(
                 val verification = Verification(feedPrefs.readableOnly, inputs.verdicts, kept)
                 val open = feedPrefs.pageable - news.endReached - inputs.skipped
                 val result = withContext(Dispatchers.Default) {
-                    buildFeed(news.topics, feedPrefs, clock(), inputs.hides, verification, open, order, inputs.stalled)
+                    buildFeed(news.topics, feedPrefs, clock(), inputs.hides, verification, open, order, inputs.stalled, inputs.reads)
                 }
                 val feed = result.feed
                 order = result.order
@@ -612,6 +679,8 @@ class TodayViewModel(
         val skipped: Set<String>,
         /** Topics whose last load of older articles failed. */
         val stalled: Set<String>,
+        /** What the reading history leaves out. */
+        val reads: ReadFilter,
     )
 
     /**

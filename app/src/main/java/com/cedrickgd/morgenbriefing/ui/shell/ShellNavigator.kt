@@ -15,6 +15,7 @@ import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleHandoff
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleRoute
 import com.cedrickgd.morgenbriefing.ui.nav.DiscoverRoute
+import com.cedrickgd.morgenbriefing.ui.nav.HistoryRoute
 import com.cedrickgd.morgenbriefing.ui.nav.MainRoute
 import com.cedrickgd.morgenbriefing.ui.nav.SearchRoute
 import com.cedrickgd.morgenbriefing.ui.nav.isMain
@@ -37,7 +38,8 @@ internal val PageSpring: AnimationSpec<Float> = spring(dampingRatio = 0.86f, sti
  * read during composition.
  *
  * Every way into an article goes through [openArticle], so "Artikel in der App lesen" is decided
- * in one place: [readInApp] says whether the reader opens, otherwise [openInBrowser] gets the link.
+ * in one place: [readInApp] says whether the reader opens, otherwise [openInBrowser] gets the link
+ * – and the story counts as read ([onReadInBrowser]; the reader notes its own).
  */
 @Stable
 class ShellNavigator internal constructor(
@@ -48,6 +50,7 @@ class ShellNavigator internal constructor(
     private val onTodayRequested: () -> Unit,
     private val readInApp: () -> Boolean,
     private val openInBrowser: (url: String) -> Unit,
+    private val onReadInBrowser: (NewsItem) -> Unit = {},
 ) {
     /** No screen is pushed over the pager right now. */
     val isMainOnTop: Boolean
@@ -81,6 +84,7 @@ class ShellNavigator internal constructor(
         if (!from.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
         if (!readInApp()) {
             openInBrowser(item.url)
+            onReadInBrowser(item)
             return
         }
         // Items the repository does not keep (search results) reach the reader this way.
@@ -100,6 +104,9 @@ class ShellNavigator internal constructor(
 
     /** Opens the news search over the pager, running [query] at once when given (see [NavPlan]). */
     fun openSearch(query: String? = null) = open(SearchRoute(query?.trim()?.ifEmpty { null }))
+
+    /** Opens "Gelesen & ausgeblendet", the archive of read and hidden stories, over the pager. */
+    fun openHistory() = open(HistoryRoute)
 
     /**
      * Closes [from], the pushed screen whose back arrow was tapped. Only while it is still the

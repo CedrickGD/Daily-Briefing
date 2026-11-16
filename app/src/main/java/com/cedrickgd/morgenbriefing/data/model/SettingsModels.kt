@@ -209,6 +209,11 @@ data class AppSettings(
     val localPlaces: List<Place> = emptyList(),
     /** Hide articles of sites the in-app reader cannot show (paywall, consent wall, bot block). */
     val readableOnly: Boolean = true,
+    /**
+     * "Gelesene Artikel ausblenden": stories the user read leave the news lists – when a list is
+     * built anew (start, refresh, another tab), never under the finger. Off: they show, calmer.
+     */
+    val hideRead: Boolean = false,
     /** Load the articles on screen ahead of time. */
     val prefetch: PrefetchMode = PrefetchMode.WIFI_ONLY,
     /** Recent search queries, newest first (at most a handful). */

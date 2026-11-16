@@ -17,6 +17,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cedrickgd.morgenbriefing.MorgenbriefingApp
+import com.cedrickgd.morgenbriefing.data.local.ReadHistoryStore
 import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.listen.ListenController
@@ -68,12 +69,15 @@ internal fun rememberListeningKey(listen: ListenController?): State<NowListening
 
 /**
  * [FeedActions] for a screen: opening (in-app reader or browser), sharing, listening and copying
- * are handled here; following, unfollowing and hiding a source are the screen's. Null callbacks
- * hide those menu items.
+ * are handled here – an article opened in the browser counts as read (the reader and "Zuhören"
+ * note their own); following, unfollowing, hiding a source or a story and marking it read are
+ * the screen's. Null callbacks hide those menu items.
  *
  * @param onMessage shows a short message (snackbar), e.g. "Link kopiert".
  * @param followSuggestion the topic the ⋮ menu offers to follow for an article (always the newest lambda is used).
  * @param canUnfollowTopic false for a topic the menus must not offer to unfollow (the last one).
+ * @param onHide ⋮ → "Ausblenden"; null: not offered.
+ * @param onSetRead ⋮ → "Als gelesen / ungelesen markieren"; null: not offered.
  */
 @Composable
 internal fun rememberFeedActions(
@@ -84,9 +88,12 @@ internal fun rememberFeedActions(
     onFollowTopic: ((Topic) -> Unit)? = null,
     followSuggestion: (FeedArticle) -> Topic? = { null },
     canUnfollowTopic: (Topic) -> Boolean = { true },
+    onHide: ((FeedArticle) -> Unit)? = null,
+    onSetRead: ((FeedArticle, Boolean) -> Unit)? = null,
 ): FeedActions {
     val context = LocalContext.current
     val links = rememberLinkActions()
+    val history = rememberReadHistoryStore()
     val listen = rememberListenController()
     val strings = feedStrings()
     val currentStrings by rememberUpdatedState(strings)
@@ -97,14 +104,26 @@ internal fun rememberFeedActions(
     val follow by rememberUpdatedState(onFollowTopic)
     val suggestion by rememberUpdatedState(followSuggestion)
     val mayUnfollow by rememberUpdatedState(canUnfollowTopic)
+    val hide by rememberUpdatedState(onHide)
+    val setRead by rememberUpdatedState(onSetRead)
     val canHideSource = onHideSource != null
     val readsInApp = onOpenArticle != null
     val canUnfollow = onUnfollowTopic != null
     val canFollow = onFollowTopic != null
-    return remember(context, links, listen, canHideSource, readsInApp, canUnfollow, canFollow) {
+    val canHide = onHide != null
+    val canMarkRead = onSetRead != null
+    return remember(context, links, listen, history, canHideSource, readsInApp, canUnfollow, canFollow, canHide, canMarkRead) {
         FeedActions(
-            onOpen = { article -> openArticle?.invoke(article) ?: links.open(article.item.url) },
-            onOpenExternal = { links.open(it.item.url) },
+            onOpen = { article ->
+                openArticle?.invoke(article) ?: run {
+                    links.open(article.item.url)
+                    history?.markRead(article.item)
+                }
+            },
+            onOpenExternal = { article ->
+                links.open(article.item.url)
+                history?.markRead(article.item)
+            },
             onListen = { article ->
                 try {
                     listen?.play(article.item) ?: message(currentStrings.listenUnavailable)
@@ -135,8 +154,17 @@ internal fun rememberFeedActions(
             onFollowTopic = if (canFollow) { topic -> follow?.invoke(topic) } else null,
             followSuggestion = { article -> suggestion(article) },
             canUnfollowTopic = { topic -> mayUnfollow(topic) },
+            onHide = if (canHide) { article -> hide?.invoke(article) } else null,
+            onSetRead = if (canMarkRead) { article, read -> setRead?.invoke(article, read) } else null,
         )
     }
+}
+
+/** The app's reading history, or null in previews (no MorgenbriefingApp there). */
+@Composable
+internal fun rememberReadHistoryStore(): ReadHistoryStore? {
+    val context = LocalContext.current
+    return remember(context) { (context.applicationContext as? MorgenbriefingApp)?.container?.history }
 }
 
 /** Puts [url] on the clipboard with [label]; false when there is nothing to copy or the system refused. */
