@@ -16,6 +16,7 @@ import com.cedrickgd.morgenbriefing.data.article.LinkResolver
 import com.cedrickgd.morgenbriefing.data.article.ReadabilityStore
 import com.cedrickgd.morgenbriefing.data.article.VerdictStore
 import com.cedrickgd.morgenbriefing.data.local.NewsCache
+import com.cedrickgd.morgenbriefing.data.local.ReadHistoryStore
 import com.cedrickgd.morgenbriefing.data.local.WeatherStore
 import com.cedrickgd.morgenbriefing.data.news.RssParser
 import com.cedrickgd.morgenbriefing.data.remote.GoogleNewsDecoder
@@ -105,6 +106,15 @@ class AppContainer(context: Context) {
         cached = { item -> articles.cachedOrNull(item)?.leadImage },
     ).also { it.follow(prefetcher.images) }
     val location = LocationFinder(app)
+
+    /**
+     * The stories the user read (opened, listened to) or hid by hand – "Gelesen & ausgeblendet"
+     * (`store/read-history.json`). Google News links count with the publisher's link behind them.
+     */
+    val history = ReadHistoryStore(
+        File(storeDir, "read-history.json"), json, CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        resolved = googleNewsDecoder::peek,
+    )
 }
 
 val Context.container: AppContainer
