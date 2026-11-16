@@ -21,6 +21,8 @@ import com.cedrickgd.morgenbriefing.ui.news.verifyAhead
  *   ones of that list; for "Neueste" and a topic's endless list the next waiting ones once
  *   fewer than [com.cedrickgd.morgenbriefing.ui.news.VERIFY_AHEAD] verified articles lie below
  *   the screen ([verifyAhead]). The articles on screen are verified already.
+ *   Before all of them the stories the last refresh brought ([fresh], [freshWaiting]): they
+ *   belong at the top of the lists, above what is on screen, where no other window looks.
  * - Otherwise the articles on screen and the next few ([prefetchWindow]), warmed as
  *   "Artikel vorladen" allows.
  */
@@ -30,6 +32,7 @@ internal fun warmWindow(
     revealed: Int,
     visibleKeys: List<Any?>,
     sectionSize: Int,
+    fresh: Set<String> = emptySet(),
 ): List<NewsItem> {
     val visibleIds = visibleKeys.mapNotNull(::entryItemId)
     if (!feed.verifying) {
@@ -37,7 +40,8 @@ internal fun warmWindow(
         val byId = items.associateBy { it.id }
         return prefetchWindow(items.map { it.id }, visibleIds).mapNotNull(byId::get)
     }
-    return when (selected) {
+    val first = freshWaiting(feed, fresh)
+    val rest = when (selected) {
         FeedFilter.ForYou -> {
             val sections = visibleKeys.mapNotNull(::forYouSectionOf)
             val cards = forYouVerifyWindow(feed.sections, sectionSize, sections.firstOrNull() ?: 0)
@@ -50,6 +54,7 @@ internal fun warmWindow(
             ?.let { section -> verifyAhead(section.all.map(NewsItem::id), visibleIds, section.waiting) }
             .orEmpty()
     }
+    return if (first.isEmpty()) rest else (first + rest).distinctBy { it.id }
 }
 
 /** A story whose cover the list wants; [lead]: it sits in the large picture slot (else a row's thumbnail). */

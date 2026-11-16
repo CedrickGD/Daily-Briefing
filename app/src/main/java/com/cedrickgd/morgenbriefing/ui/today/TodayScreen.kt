@@ -1,6 +1,23 @@
 package com.cedrickgd.morgenbriefing.ui.today
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +46,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -500,15 +518,39 @@ private fun TodayContent(
     // else warm the articles on screen and the next few. Runs again whenever the feed changes
     // (a new verdict appends articles, so the window moves on).
     val sectionSize = prefs?.sectionSize ?: AppSettings.DEFAULT_SECTION_SIZE
-    LaunchedEffect(listState, feed, selected, revealed, sectionSize) {
+    // What the last refresh brought is checked first: it belongs at the top, above the screen.
+    val freshIds = state.fresh?.ids.orEmpty()
+    LaunchedEffect(listState, feed, selected, revealed, sectionSize, freshIds) {
         val current = feed ?: return@LaunchedEffect
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key } }
             .distinctUntilChanged()
             .collectLatest { keys ->
                 delay(PREFETCH_SETTLE_MS)
-                val window = warmWindow(selected, current, revealed, keys, sectionSize)
+                val window = warmWindow(selected, current, revealed, keys, sectionSize, freshIds)
                 if (window.isNotEmpty()) currentCallbacks.onPrefetch(window)
             }
+    }
+
+    // After a refresh: the new stories stand at the top (the lists are sorted afresh, newest first).
+    // Once their checks are done – or after a while – the page goes to the top and says how many
+    // arrived; a pull-to-refresh is always answered, a refresh on its own only when there is news.
+    var freshNote by remember { mutableStateOf<FreshNote?>(null) }
+    val latestFeed by rememberUpdatedState(feed)
+    val latestSelected by rememberUpdatedState(selected)
+    val round = state.fresh
+    LaunchedEffect(round?.round) {
+        val fresh = round ?: return@LaunchedEffect
+        withTimeoutOrNull(FRESH_WAIT_MS) {
+            snapshotFlow { latestFeed?.let { freshWaiting(it, fresh.ids).isEmpty() } ?: false }.first { it }
+        }
+        val shown = latestFeed?.let { freshShown(latestSelected, it, fresh.ids) } ?: 0
+        if (shown == 0 && !fresh.byUser) return@LaunchedEffect
+        if (shown > 0 && (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)) {
+            if (reduceMotion) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+        }
+        freshNote = if (shown > 0) FreshNote(strings.newStories(shown), arrived = true) else FreshNote(strings.noNewStories, arrived = false)
+        delay(FRESH_NOTE_MS)
+        freshNote = null
     }
 
     val greeting = Fmt.greeting(now, language)
@@ -704,6 +746,17 @@ private fun TodayContent(
             },
         )
 
+        FreshPill(
+            note = freshNote,
+            onClick = {
+                freshNote = null
+                scrollToBar(true)
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = statusTop + 10.dp),
+        )
+
         GlassSnackbarHost(
             hostState = snackbar,
             modifier = Modifier
@@ -733,6 +786,55 @@ private fun TodayContent(
 
 /** The list must rest this long before covers are looked up (a fling passes many stories). */
 private const val COVER_SETTLE_MS = 150L
+
+/** How long the page waits for the checks of the new stories before it says how many arrived. */
+private const val FRESH_WAIT_MS = 8_000L
+
+/** How long "12 neue Meldungen" stays. */
+private const val FRESH_NOTE_MS = 3_500L
+
+/** What the pill after a refresh says; [arrived]: new stories stand at the top (an arrow points up). */
+@Immutable
+private data class FreshNote(val text: String, val arrived: Boolean)
+
+/**
+ * "↑ 12 neue Meldungen" after a refresh (or "Keine neuen Meldungen"): a pill in the accent color
+ * under the status bar that drops in, stays a moment and goes; a tap takes the page to the first
+ * stories. Nothing while [note] is null.
+ */
+@Composable
+private fun FreshPill(note: FreshNote?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val still = rememberReduceMotion()
+    var shown by remember { mutableStateOf(note ?: FreshNote("", arrived = false)) }
+    if (note != null) shown = note
+    AnimatedVisibility(
+        visible = note != null,
+        modifier = modifier,
+        enter = if (still) fadeIn() else fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) +
+            slideInVertically(spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)) { -it },
+        exit = if (still) fadeOut() else fadeOut(spring(stiffness = Spring.StiffnessMedium)) +
+            slideOutVertically(spring(stiffness = Spring.StiffnessMedium)) { -it / 2 },
+    ) {
+        val colors = MaterialTheme.colorScheme
+        Row(
+            modifier = Modifier
+                .heightIn(min = 44.dp)
+                .shadow(14.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.14f), spotColor = Color.Black.copy(alpha = 0.14f))
+                .clip(CircleShape)
+                .background(colors.primary)
+                .clickable(role = Role.Button, onClick = onClick)
+                .semantics { liveRegion = LiveRegionMode.Polite }
+                .padding(start = if (shown.arrived) 14.dp else 18.dp, end = 18.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (shown.arrived) {
+                Icon(Icons.Rounded.ArrowUpward, contentDescription = null, tint = colors.onPrimary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(text = shown.text, style = MaterialTheme.typography.labelLarge, color = colors.onPrimary, maxLines = 1)
+        }
+    }
+}
 
 /** Key prefix of the endless list below the "Für dich" cards. */
 private const val MORE_KEY = "foryou-more"

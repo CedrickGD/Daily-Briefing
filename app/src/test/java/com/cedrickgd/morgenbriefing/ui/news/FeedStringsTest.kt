@@ -30,6 +30,7 @@ class FeedStringsTest {
             "readArticle" to readArticle, "hideSource" to hideSource("X"), "followTopic" to followTopic("X"),
             "unfollowTopic" to unfollowTopic("X"), "readMark" to readMark, "markRead" to markRead, "markUnread" to markUnread,
             "hideStory" to hideStory, "storyHidden" to storyHidden, "openHistory" to openHistory,
+            "newStories1" to newStories(1), "newStories5" to newStories(5), "noNewStories" to noNewStories,
             "paywall" to paywall, "paywallDescription" to paywallDescription, "browserOnly" to browserOnly,
             "browserOnlyDescription" to browserOnlyDescription,
             "noArticlesRightNow" to noArticlesRightNow, "moveUp" to moveUp("X"),

@@ -175,7 +175,12 @@ dem Entwurf, den der Besitzer gewählt hat):
   „Schlagzeilen“). Nachgeladen wird ohne Knopf und früh – mehrere Bildschirme vor dem Ende, damit
   ein Wischen nicht an der Lade-Zeile hält; ruhige Tage überspringt die App von selbst.
   **Älteres hängt immer unten an**: keine Karte rutscht, während man liest; neu sortiert wird
-  erst beim Aktualisieren. Derselbe Artikel über zwei Feeds eines Verlags steht einmal da.
+  erst beim Aktualisieren. **Aktualisieren wie bei Google News**: was neu ist, steht oben, neueste
+  zuerst; mit „nur vollständige Artikel“ werden die neuen Meldungen vor allem anderen geprüft.
+  Danach (höchstens 8 s) springt die Seite nach oben, und eine Pill in Akzentfarbe unter der
+  Statusleiste sagt „↑ 12 neue Meldungen“ (antippen: zu den Meldungen) – nach dem Herunterziehen
+  immer, auch „Keine neuen Meldungen“, beim Start oder der Rückkehr nach einer Weile nur, wenn
+  etwas Neues da ist. Derselbe Artikel über zwei Feeds eines Verlags steht einmal da.
   „Weiter zurück suchen“ erscheint nur, wenn das Laden scheitert (offline) oder Seite um Seite
   nichts Vollständiges brachte, „Das war's“ erst, wenn es wirklich nichts Älteres mehr gibt.
   Lange Karten sind aus einzelnen Listen-Elementen gebaut (`glassCardPart`): nur das erste hat die

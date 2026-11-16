@@ -114,6 +114,8 @@ data class TodayUiState(
     val verifyOffline: Boolean = false,
     /** The compact weather card is expanded (remembered across launches). */
     val weatherExpanded: Boolean = false,
+    /** What the last refresh brought ([FreshRound]): checked first, shown at the top, announced. */
+    val fresh: FreshRound? = null,
 ) {
     val today: LocalDate get() = now.toLocalDate()
     val newsLoading: Boolean get() = loadingTopics.isNotEmpty()
@@ -182,6 +184,7 @@ class TodayViewModel(
     private var weatherToggled = false
     private val loadMoreJobs = HashMap<String, Job>()
     private var olderJob: Job? = null
+    private var freshRounds = 0
 
     /**
      * Topics the timeline no longer waits for: their older pages failed twice while other topics
@@ -209,11 +212,15 @@ class TodayViewModel(
         refreshWeather()
         observeFeed()
         viewModelScope.launch {
-            attempt { container.history.warm() }.onFailure { Log.w(TAG, "Reading history unavailable", it) }
-            snapshotReads()
+            // The reading history is read alongside the news cache: the feed waits for neither.
+            val reads = async {
+                attempt { container.history.warm() }.onFailure { Log.w(TAG, "Reading history unavailable", it) }
+                snapshotReads()
+            }
             attempt { container.news.warm() }.onFailure { Log.w(TAG, "News cache unavailable", it) }
             snapshotHides()
-            refreshNews(force = false)
+            reads.await()
+            refreshNews(force = false, announce = Announce.QUIET)
         }
         observeInputs()
         observeLanguage()
@@ -245,7 +252,7 @@ class TodayViewModel(
         _state.update { it.copy(refreshing = true, now = clock(), stalled = emptySet(), olderStalled = false) }
         viewModelScope.launch {
             try {
-                joinAll(refreshWeather(), refreshNews(force = true))
+                joinAll(refreshWeather(), refreshNews(force = true, announce = Announce.USER))
             } finally {
                 // The lists are built anew: what was read until now leaves them (also offline).
                 snapshotReads()
@@ -265,7 +272,8 @@ class TodayViewModel(
             isOlderThan(current.weather.snapshot.fetchedAt, instant, WEATHER_MAX_AGE)
         if (weatherStale && !isWithin(lastWeatherAttempt, instant, WEATHER_MAX_AGE)) refreshWeather()
 
-        if (!isWithin(lastNewsAttempt, instant, NEWS_RETRY_AFTER)) refreshNews(force = false)
+        // Back after a while: what arrived goes to the top, and the page says so (when there is something).
+        if (!isWithin(lastNewsAttempt, instant, NEWS_RETRY_AFTER)) refreshNews(force = false, announce = Announce.QUIET)
 
         // Leaving the screen cancelled the warm-ups of the articles on screen; the list does not
         // ask again for the same articles, so the last window is sent once more.
@@ -516,13 +524,26 @@ class TodayViewModel(
         }.also { weatherJob = it }
     }
 
+    /** Whether a refresh tells the page what it brought ([TodayUiState.fresh]). */
+    private enum class Announce {
+        /** A refresh for other sources: the lists simply change. */
+        NONE,
+
+        /** Start or return after a while: announced when something new arrived. */
+        QUIET,
+
+        /** Pull-to-refresh: always answered, also "Keine neuen Meldungen". */
+        USER,
+    }
+
     /**
      * Fetches the sources of the followed topics ([topicIds]: only these). Without [force] only
      * topics whose articles are older than 15 minutes (or missing) are fetched. The repository
      * skips topics that are already being refreshed, so overlapping calls are harmless. A
-     * finished refresh takes a new readable-only snapshot.
+     * finished refresh takes a new readable-only snapshot and – as [announce] says – hands the
+     * page the stories it brought ([FreshRound]).
      */
-    private fun refreshNews(force: Boolean, topicIds: Collection<String>? = null): Job {
+    private fun refreshNews(force: Boolean, topicIds: Collection<String>? = null, announce: Announce = Announce.NONE): Job {
         val running = newsJob?.takeIf { it.isActive }
         if (!force && running != null) return running
         lastNewsAttempt = clock().toInstant()
@@ -541,13 +562,21 @@ class TodayViewModel(
                 (topicIds?.filter { it in visible } ?: visible)
                     .filter { force || container.news.isStale(it, NEWS_MAX_AGE, settings) }
             }
-            if (wanted.isEmpty()) return@launch
+            if (wanted.isEmpty()) {
+                if (announce == Announce.USER) announceFresh(emptySet(), byUser = true)
+                return@launch
+            }
+            val before = storyIds(container.news.state.value.topics)
             val outcome = attempt { container.news.refresh(wanted, settings) }
                 .onFailure { Log.w(TAG, "News refresh failed", it) }
                 .getOrNull() ?: return@launch
             ensureActive()
             snapshotHides()
             snapshotReads()
+            if (announce != Announce.NONE) {
+                val fresh = freshIds(before, container.news.state.value.topics)
+                if (announce == Announce.USER || fresh.isNotEmpty()) announceFresh(fresh, byUser = announce == Announce.USER)
+            }
             // Only a round over every followed topic can say "offline"; one failing topic is just that.
             val coversAll = wanted.toSet() == visible.toSet()
             _state.update {
@@ -563,6 +592,11 @@ class TodayViewModel(
                 )
             }
         }.also { newsJob = it }
+    }
+
+    /** Hands the page what a refresh brought: checked first, shown at the top, announced. */
+    private fun announceFresh(ids: Set<String>, byUser: Boolean) {
+        _state.update { it.copy(fresh = FreshRound(++freshRounds, ids, byUser)) }
     }
 
     /**

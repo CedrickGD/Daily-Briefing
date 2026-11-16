@@ -134,7 +134,13 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
   **Ältere Seiten hängen nur unten an**: jede endlose Liste merkt sich ihre Reihenfolge
   (`FeedOrder`, im ViewModel von Aufbau zu Aufbau gereicht) und setzt sie fort (`appendOnly`) –
   was eine Seite bringt, steht darunter, auch wenn es dem Datum nach zwischen Gezeigtes gehörte
-  (das Fenster einer Seite beginnt am Tag, an dem die Liste endet). Erst eine Aktualisierung
+  (das Fenster einer Seite beginnt am Tag, an dem die Liste endet). **Neues nach oben**
+  (`ui/today/FreshStories.kt`): eine Aktualisierung merkt sich, welche Meldungen sie gebracht hat
+  (`freshIds`, nur erste Seiten), `warmWindow` prüft diese zuerst (`freshWaiting`) – vorher prüften
+  die Fenster nur unterhalb des Bildschirms und nur, solange dort weniger als 30 geprüfte lagen
+  („Für dich“ nur nicht volle Karten), neue Meldungen oben einer vollen Liste wurden nie geprüft
+  und erschienen nie; und erschienen sie, lagen sie über dem Element, an dem die Liste hing. Die
+  Seite wartet auf die Prüfung (höchstens 8 s), springt nach oben und meldet `freshShown`. Erst eine Aktualisierung
   (neues `fetchedAt`) sortiert neu. Listen-Einträge sind nach Artikel verschlüsselt, nicht nach
   Position. **Jede Geschichte einmal**: derselbe Artikel kommt über zwei Feeds eines Verlags
   („taz Politik“ und Google News' „taz.de“, „heise online“ und „heise IT“) mit zwei Links –

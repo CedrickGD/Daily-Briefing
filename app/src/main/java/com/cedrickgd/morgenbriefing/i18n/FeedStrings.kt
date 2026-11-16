@@ -90,6 +90,10 @@ interface FeedStrings {
     val storyHidden: String
     val openHistory: String
 
+    // After a refresh: what arrived at the top
+    fun newStories(count: Int): String
+    val noNewStories: String
+
     // Readability hints on a card
     val paywall: String
     val paywallDescription: String
@@ -226,6 +230,8 @@ interface FeedStrings {
         override val hideStory = "Ausblenden"
         override val storyHidden = "Ausgeblendet"
         override val openHistory = "Gelesen & ausgeblendet"
+        override fun newStories(count: Int) = if (count == 1) "1 neue Meldung" else "$count neue Meldungen"
+        override val noNewStories = "Keine neuen Meldungen"
 
         override val paywall = "Bezahlinhalt"
         override val paywallDescription = "Bezahlinhalt: nur für Abonnenten"
@@ -343,6 +349,8 @@ interface FeedStrings {
         override val hideStory = "Hide"
         override val storyHidden = "Hidden"
         override val openHistory = "Read & hidden"
+        override fun newStories(count: Int) = if (count == 1) "1 new story" else "$count new stories"
+        override val noNewStories = "No new stories"
 
         override val paywall = "Paywall"
         override val paywallDescription = "Paywall: for subscribers only"
@@ -460,6 +468,8 @@ interface FeedStrings {
         override val hideStory = "Masquer"
         override val storyHidden = "Masqué"
         override val openHistory = "Lus et masqués"
+        override fun newStories(count: Int) = if (count == 1) "1 nouvel article" else "$count nouveaux articles"
+        override val noNewStories = "Pas de nouveaux articles"
 
         override val paywall = "Payant"
         override val paywallDescription = "Article payant : réservé aux abonnés"
@@ -577,6 +587,8 @@ interface FeedStrings {
         override val hideStory = "Ocultar"
         override val storyHidden = "Oculto"
         override val openHistory = "Leídos y ocultos"
+        override fun newStories(count: Int) = if (count == 1) "1 noticia nueva" else "$count noticias nuevas"
+        override val noNewStories = "No hay noticias nuevas"
 
         override val paywall = "De pago"
         override val paywallDescription = "Contenido de pago: solo para suscriptores"
@@ -694,6 +706,8 @@ interface FeedStrings {
         override val hideStory = "Nascondi"
         override val storyHidden = "Nascosto"
         override val openHistory = "Letti e nascosti"
+        override fun newStories(count: Int) = if (count == 1) "1 nuova notizia" else "$count nuove notizie"
+        override val noNewStories = "Nessuna nuova notizia"
 
         override val paywall = "A pagamento"
         override val paywallDescription = "Contenuto a pagamento: solo per abbonati"
