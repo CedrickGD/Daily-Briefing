@@ -217,6 +217,8 @@ data class AppSettings(
     val effects: EffectsMode = EffectsMode.AUTO,
     /** "Vorlesen": engine, voices, speed, pitch and language of "Zuhören". */
     val listen: ListenSettings = ListenSettings(),
+    /** "Darstellung" of the reader (its "A"): text size, font and line spacing of articles. */
+    val reader: ReaderSettings = ReaderSettings(),
 ) {
     /** The interface language to use now. */
     val language: AppLanguage get() = AppLanguage.resolve(uiLanguage)
