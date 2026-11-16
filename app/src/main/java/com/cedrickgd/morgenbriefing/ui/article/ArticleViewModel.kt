@@ -17,6 +17,7 @@ import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.ArticleContent
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.ReadOutcome
+import com.cedrickgd.morgenbriefing.data.model.ReaderSettings
 import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
@@ -28,8 +29,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -74,14 +78,14 @@ data class ArticleUiState(
      */
     val teaser: String = item.summary,
     /**
-     * The picture under the status bar (null = the topic's cover): the feed's until the article
-     * is here, then the one the text was arranged around – no block of [content] shows it again.
+     * The article's one picture, under the status bar (null = the topic's cover): the card's
+     * picture until the article is here, then the one the text was arranged around – the text
+     * itself shows none ([ArticleCleaner.arrange]).
      */
     val hero: String? = item.image?.url,
     val loading: Boolean = true,
     /** Why the article could not be loaded; null while loading or on success. */
     val failure: ArticleFailure? = null,
-    val showImages: Boolean = true,
     /** Reference for "vor 3 Min.". */
     val now: ZonedDateTime,
     /**
@@ -134,7 +138,50 @@ class ArticleViewModel(
             sourceId = "",
             topicId = route.topicId ?: FALLBACK_TOPIC,
         )
-        return ArticleUiState(item = item, topic = Topics.resolveOrNeutral(item.topicId, AppSettings()), now = clock())
+        // The card's picture (FeedEntry.heroImage): the feed's, else what the prefetcher or the cover lookup found.
+        val picture = item.image?.url?.takeIf { it.isNotBlank() }
+            ?: container.prefetcher.images.value[item.id]
+            ?: container.covers.covers.value[item.id]
+        return ArticleUiState(item = item, topic = Topics.resolveOrNeutral(item.topicId, AppSettings()), hero = picture, now = clock())
+    }
+
+    /**
+     * The "Darstellung" chosen on this screen: shown at once – while the text-size slider still
+     * moves, and before the stored settings come back with it (no flicker to the old size).
+     */
+    private val draft = MutableStateFlow<ReaderSettings?>(null)
+
+    /**
+     * How the text looks – the "Darstellung" chosen here ([draft]), else the stored one – and
+     * whether pictures show. Null until the settings are read, so the text never opens in one
+     * size and jumps to another.
+     */
+    val appearance: StateFlow<ReaderAppearance?> = combine(container.settings.settings, draft) { settings, draft ->
+        ReaderAppearance(reader = draft ?: settings.reader, showImages = settings.showImages)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SETTINGS_TIMEOUT_MS), null)
+
+    /** Shows [reader] on the open article at once, without storing it (the slider is still moving). */
+    fun previewReader(reader: ReaderSettings) {
+        draft.value = reader
+    }
+
+    /** Stores [reader] ("Darstellung"); the open article already shows it. */
+    fun setReader(reader: ReaderSettings) {
+        draft.value = reader
+        saveSettings(onFailure = { draft.value = null }) { it.copy(reader = reader) }
+    }
+
+    /** "Bilder anzeigen" – the same setting as in Einstellungen → Feed & Lesen (it hides the feed's pictures too). */
+    fun setShowImages(show: Boolean) = saveSettings { it.copy(showImages = show) }
+
+    private fun saveSettings(onFailure: () -> Unit = {}, transform: (AppSettings) -> AppSettings) {
+        viewModelScope.launch {
+            attempt { container.settings.update(transform) }.onFailure {
+                Log.w(TAG, "Could not store the reader's appearance", it)
+                // Not stored: the article shows what the settings say again.
+                onFailure()
+            }
+        }
     }
 
     /** Loads (or, with [refresh], re-reads) the article. */
@@ -143,20 +190,22 @@ class ArticleViewModel(
         job = viewModelScope.launch {
             _state.update { it.copy(loading = true, failure = null) }
             val settings = attempt { container.settings.current() }.getOrNull() ?: AppSettings()
-            _state.update { s -> s.copy(topic = Topics.resolveOrNeutral(s.item.topicId, settings), showImages = settings.showImages) }
+            _state.update { s -> s.copy(topic = Topics.resolveOrNeutral(s.item.topicId, settings)) }
             attempt { container.articles.pruneOnce() }.onFailure { Log.w(TAG, "Could not prune the article cache", it) }
             val item = _state.value.item
             val result = attempt { container.articles.load(item, refresh, language = settings.edition.language) }
             ensureActive()
             result.fold(
                 onSuccess = { content ->
+                    // The card's picture the reader opened with: the one picture unless the feed has its own.
+                    val cover = _state.value.hero
                     val current = _state.value.item
                     val shown = if (current.headline.isBlank()) current.copy(headline = content.title) else current
                     if (current.headline.isBlank() && shown.headline.isNotBlank()) noteRead(shown)
                     // Cleaning up the blocks and judging completeness walk the whole text: off the main thread.
                     val (arranged, partial) = withContext(Dispatchers.Default) {
                         container.prefetcher.report(item, content)
-                        arrange(content, shown) to !ArticleCompleteness.isComplete(content, item)
+                        arrange(content, shown, cover) to !ArticleCompleteness.isComplete(content, item)
                     }
                     ensureActive()
                     _state.update { s ->
@@ -181,18 +230,22 @@ class ArticleViewModel(
         private const val TAG = "ArticleViewModel"
         private const val FALLBACK_TOPIC = "welt"
 
+        private const val SETTINGS_TIMEOUT_MS = 5_000L
+
         /**
          * [content] arranged under the reader's head for [item]: the teaser is the feed's (else
-         * the page's `og:description`), the hero the feed's picture, else the page's lead picture,
-         * else a picture that opens the text – taken out of the text wherever it stands.
+         * the page's `og:description`); the one picture is the feed's, else the card's [cover],
+         * else the page's lead picture, else the first picture of the text – and the text keeps
+         * none. A line that only names the newsroom goes too.
          */
-        internal fun arrange(content: ArticleContent, item: NewsItem): ArticleCleaner.Arranged =
+        internal fun arrange(content: ArticleContent, item: NewsItem, cover: String? = null): ArticleCleaner.Arranged =
             ArticleCleaner.arrange(
                 content = content,
                 teaser = item.summary.ifBlank { content.description },
                 headline = item.headline,
-                hero = item.image?.url?.takeIf { it.isNotBlank() } ?: content.image,
-                heroFromBlocks = HERO_FROM_BLOCKS,
+                hero = item.image?.url?.takeIf { it.isNotBlank() } ?: cover?.takeIf { it.isNotBlank() } ?: content.image,
+                pictureFromText = true,
+                sources = listOf(item.source, item.publisherDomain, hostOf(item.url).removePrefix("www."), content.site),
             )
 
         /**

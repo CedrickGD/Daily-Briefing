@@ -17,6 +17,7 @@ import com.cedrickgd.morgenbriefing.data.model.FeedSource
 import com.cedrickgd.morgenbriefing.data.model.ListenSettings
 import com.cedrickgd.morgenbriefing.data.model.NewsAge
 import com.cedrickgd.morgenbriefing.data.model.Place
+import com.cedrickgd.morgenbriefing.data.model.ReaderSettings
 import com.cedrickgd.morgenbriefing.data.model.ThemeMode
 import com.cedrickgd.morgenbriefing.data.model.Topic
 import com.cedrickgd.morgenbriefing.data.model.Topics
@@ -192,8 +193,16 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
                 .take(SettingsOps.MAX_RECENT_SEARCHES),
             effects = enumOrDefault(this[Keys.EFFECTS], defaults.effects),
             listen = listenSettings(defaults.listen),
+            reader = readerSettings(defaults.reader),
         )
     }
+
+    /** The reader's "Darstellung"; installs up to 3.4 have none of these keys and read the defaults (as before). */
+    private fun Preferences.readerSettings(defaults: ReaderSettings): ReaderSettings = ReaderSettings(
+        textScale = this[Keys.READER_TEXT_SCALE]?.let(ReaderSettings::snapScale) ?: defaults.textScale,
+        font = enumOrDefault(this[Keys.READER_FONT], defaults.font),
+        spacing = enumOrDefault(this[Keys.READER_SPACING], defaults.spacing),
+    )
 
     /** "Vorlesen"; installs up to 3.2 have none of these keys and read the defaults (as before). */
     private fun Preferences.listenSettings(defaults: ListenSettings): ListenSettings = ListenSettings(
@@ -269,6 +278,9 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
         this[Keys.RECENT_SEARCHES] = AppJson.encodeToString(ListSerializer(String.serializer()), s.recentSearches.take(SettingsOps.MAX_RECENT_SEARCHES))
         this[Keys.EFFECTS] = s.effects.name
         writeListen(s.listen)
+        this[Keys.READER_TEXT_SCALE] = ReaderSettings.snapScale(s.reader.textScale)
+        this[Keys.READER_FONT] = s.reader.font.name
+        this[Keys.READER_SPACING] = s.reader.spacing.name
     }
 
     private fun MutablePreferences.writeListen(l: ListenSettings) {
@@ -369,6 +381,15 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
 
         /** Fixed reading language (ISO 639-1); missing = each article in its own language. */
         val LISTEN_LANGUAGE = stringPreferencesKey("listen_language")
+
+        // The reader's "Darstellung" (after 3.4); missing = serif text at its normal size and spacing.
+        val READER_TEXT_SCALE = floatPreferencesKey("reader_text_scale")
+
+        /** [com.cedrickgd.morgenbriefing.data.model.ReaderFont] by name. */
+        val READER_FONT = stringPreferencesKey("reader_font")
+
+        /** [com.cedrickgd.morgenbriefing.data.model.ReaderSpacing] by name. */
+        val READER_SPACING = stringPreferencesKey("reader_spacing")
     }
 
     private companion object {

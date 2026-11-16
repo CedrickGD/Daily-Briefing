@@ -3,7 +3,6 @@ package com.cedrickgd.morgenbriefing.data.article
 import com.cedrickgd.morgenbriefing.data.model.ArticleBlock
 import com.cedrickgd.morgenbriefing.data.model.ArticleContent
 import com.cedrickgd.morgenbriefing.data.model.ReadOutcome
-import com.cedrickgd.morgenbriefing.ui.article.showsAlt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -34,7 +33,7 @@ class ArticleRepeatsTest {
     // ------------------------------------------------------------------------------ pictures
 
     @Test
-    fun `the hero picture goes wherever the text shows it again, with its caption (BBC, Fox, ANSA)`() {
+    fun `the text keeps no picture - the hero again, other pictures and their captions all go (BBC, Fox, ANSA)`() {
         val feed = "https://ichef.bbci.co.uk/ace/standard/240/cpsprodpb/3c47/live/464f7b70-e0e6-11f1-a701-fddedf244c16.png"
         val blocks = (1..10).map { p(text(it)) } + listOf(
             img("https://ichef.bbci.co.uk/ace/standard/976/cpsprodpb/3c47/live/464f7b70-e0e6-11f1-a701-fddedf244c16.png", "A police car in the middle of a road in Leeds"),
@@ -47,8 +46,8 @@ class ArticleRepeatsTest {
         val arranged = ArticleCleaner.arrange(content(blocks), teaser = "", headline = "Man dies after crash in Leeds", hero = feed)
         assertEquals(feed, arranged.hero)
         val shown = arranged.content.blocks
-        assertEquals(listOf("https://ichef.bbci.co.uk/ace/standard/976/cpsprodpb/90c1/live/77aa0b20-e0e6-11f1-a701-fddedf244c16.png"), shown.filter { it.type == ArticleBlock.IMAGE }.map { it.url })
-        assertEquals(listOf("The crash happened in the early hours of Sunday morning"), shown.filter { it.type == ArticleBlock.CAPTION }.map { it.text })
+        // One picture per article: the one on top.
+        assertTrue(shown.none { it.type == ArticleBlock.IMAGE || it.type == ArticleBlock.CAPTION })
         assertEquals("no paragraph is lost", 12, texts(shown).size)
     }
 
@@ -58,11 +57,13 @@ class ArticleRepeatsTest {
             p(text(1)), img("https://cdn.example.org/2026/11/rathaus.jpg?w=1200", "Das Rathaus"), p(text(2)), p(text(3)),
             img("https://cdn.example.org/2026/11/rathaus.jpg?w=640"), img("https://cdn.example.org/2026/11/markt.jpg"),
         )
-        val arranged = ArticleCleaner.arrange(content(blocks), teaser = "", headline = "Eine Überschrift mit Wörtern", hero = null, heroFromBlocks = 3)
+        val arranged = ArticleCleaner.arrange(content(blocks), teaser = "", headline = "Eine Überschrift mit Wörtern", hero = null, pictureFromText = true)
         assertEquals("https://cdn.example.org/2026/11/rathaus.jpg?w=1200", arranged.hero)
-        assertEquals(listOf("https://cdn.example.org/2026/11/markt.jpg"), arranged.content.blocks.filter { it.type == ArticleBlock.IMAGE }.map { it.url })
-        // Not asked for (the cleaner's default): the text keeps its pictures and there is no hero.
-        assertNull(ArticleCleaner.arrange(content(blocks), teaser = "").hero)
+        assertTrue(arranged.content.blocks.none { it.type == ArticleBlock.IMAGE })
+        // Not asked for (the cleaner's default): no hero – and still no picture in the text.
+        val plain = ArticleCleaner.arrange(content(blocks), teaser = "")
+        assertNull(plain.hero)
+        assertTrue(plain.content.blocks.none { it.type == ArticleBlock.IMAGE })
     }
 
     @Test
@@ -272,9 +273,9 @@ class ArticleRepeatsTest {
         )
         val alts = ArticleCleaner.clean(page, headline).filter { it.type == ArticleBlock.IMAGE }.map { it.alt }
         assertEquals(listOf("", "", "", "Ein großes hölzernes Kreuz steht am Denkmal", "", "Schüler stehen auf dem Gelände der Gedenkstätte."), alts)
-        // The feed's headline is only known when the reader arranges the article.
+        // What the reader arranges keeps no picture at all, and so no alt text either.
         val late = ArticleCleaner.arrange(content(listOf(p(text(1)), img("https://img.example.org/video-still.jpg", headline), p(text(2)))), teaser = "", headline = headline)
-        assertEquals("", late.content.blocks.first { it.type == ArticleBlock.IMAGE }.alt)
+        assertEquals(listOf(ArticleBlock.PARAGRAPH, ArticleBlock.PARAGRAPH), late.content.blocks.map { it.type })
     }
 
     @Test
@@ -289,26 +290,6 @@ class ArticleRepeatsTest {
         assertEquals(listOf(ArticleBlock.PARAGRAPH, ArticleBlock.IMAGE, ArticleBlock.CAPTION, ArticleBlock.PARAGRAPH), cleaned.map { it.type })
         assertEquals("", cleaned[1].alt)
         assertEquals("Leone XIV in volo verso Santa Cruz de Succhabamba (VATICAN MEDIA)", cleaned[2].text)
-    }
-
-    @Test
-    fun `under a picture with a caption the alt text is not printed - unless the caption is only the credit (DW, WDR)`() {
-        val blocks = listOf(
-            img("https://static.dw.com/image/79948695_906.jpg", "UN-Klimakonferenz COP31 2026 | Antalya | Demonstrierende mit einem Banner: Gemeinsam für das Klima"),
-            caption("\"Gemeinsam für das Klima\" heißt es auf dem Banner Bild: Ozan Kose/AFP"),
-            img("https://www1.wdr.de/wuest-100~_v-fullhd.jpg", "Hendrik Wüst, Ministerpräsident NRW, auf der Bühne"),
-            caption("Bildquelle: IMAGO/Chris Emil Janßen"),
-            img("https://img.example.org/ansa.jpg", "Lavrov in conferenza stampa a Mosca"),
-            caption("©Ansa"),
-            img("https://img.example.org/ndr.jpg", "Soldatengräber aus dem Zweiten Weltkrieg auf dem Friedenshügel in Flensburg"),
-            p(text(1)),
-        )
-        assertFalse(showsAlt(blocks, 0))
-        assertTrue(showsAlt(blocks, 2))
-        assertTrue(showsAlt(blocks, 4))
-        assertTrue(showsAlt(blocks, 6))
-        assertTrue(ArticleCleaner.isCreditOnly("Gerald Herbert/AP"))
-        assertFalse(ArticleCleaner.isCreditOnly("Foto: Der Kanzler bei seiner Rede im Bundestag am Mittwoch"))
     }
 
     // ---------------------------------------------------------------------------------- text

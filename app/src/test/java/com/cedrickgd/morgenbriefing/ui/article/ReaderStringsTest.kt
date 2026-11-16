@@ -3,6 +3,8 @@ package com.cedrickgd.morgenbriefing.ui.article
 import com.cedrickgd.morgenbriefing.data.article.ArticleException
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.ReadOutcome
+import com.cedrickgd.morgenbriefing.data.model.ReaderFont
+import com.cedrickgd.morgenbriefing.data.model.ReaderSpacing
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.ReaderStrings
 import org.junit.Assert.assertEquals
@@ -26,7 +28,10 @@ class ReaderStringsTest {
             assertTrue(s.failureReason(ReadOutcome.BLOCKED, "kicker", 403).contains("403"))
             assertTrue(s.failureReason(ReadOutcome.NOT_ARTICLE, "", 404).contains("404"))
             assertTrue(s.failureReason(ReadOutcome.NETWORK, "", 429).contains("429"))
-            assertTrue(s.source("BBC").contains("BBC"))
+            assertTrue(s.percent(115).contains("115"))
+            ReaderFont.entries.forEach { assertTrue("$lang $it", s.fontName(it).isNotBlank()) }
+            ReaderSpacing.entries.forEach { assertTrue("$lang $it", s.spacingName(it).isNotBlank()) }
+            listOf(s.appearance, s.textSize, s.font, s.spacing, s.showImages, s.showImagesHint, s.resetAppearance).forEach { assertTrue("$lang", it.isNotBlank()) }
             assertEquals("", s.status(ArticleStatus.UNKNOWN))
             ArticleStatus.entries.filter { it != ArticleStatus.UNKNOWN }.forEach { assertTrue("$lang $it", s.status(it).isNotBlank()) }
             listOf(s.listen, s.pauseListening, s.readInApp, s.truncatedNote).forEach { assertTrue(it.isNotBlank()) }

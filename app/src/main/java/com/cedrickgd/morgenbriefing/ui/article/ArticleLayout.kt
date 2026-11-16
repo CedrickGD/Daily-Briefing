@@ -1,40 +1,6 @@
 package com.cedrickgd.morgenbriefing.ui.article
 
-import com.cedrickgd.morgenbriefing.data.article.ArticleCleaner
-import com.cedrickgd.morgenbriefing.data.model.ArticleBlock
 import com.cedrickgd.morgenbriefing.data.model.ReadOutcome
-
-/**
- * How early in the text a picture may stand to become the hero (pages without `og:image`
- * often open with their lead picture as the first or second block).
- */
-internal const val HERO_FROM_BLOCKS = 3
-
-/**
- * The reader's picture under the status bar is chosen once, where the text is arranged
- * ([com.cedrickgd.morgenbriefing.data.article.ArticleCleaner.arrange]): the feed's picture, else
- * the page's announced lead picture, else a picture among the first [HERO_FROM_BLOCKS] blocks –
- * and every copy of it is taken out of the text there, so it never shows twice.
- *
- * Under a picture the reader prints its alt text – unless the picture has a caption: then the
- * caption is what the newsroom wants read, and the alt text (a description for screen readers,
- * often the caption in other words) stays the picture's content description only. A caption
- * that is just the photo credit ("Bildquelle: IMAGO/…") says nothing about the picture: the alt
- * text is printed above it.
- */
-internal fun showsAlt(blocks: List<ArticleBlock>, index: Int): Boolean {
-    val block = blocks.getOrNull(index) ?: return false
-    if (block.type != ArticleBlock.IMAGE || block.alt.isBlank()) return false
-    val next = blocks.getOrNull(index + 1)
-    return next?.type != ArticleBlock.CAPTION || ArticleCleaner.isCreditOnly(next.text)
-}
-
-/**
- * What a screen reader says for a picture in the text: its alt text – unless the reader prints
- * that very text under the picture ([altShown], see [showsAlt]). Then the printed line is read,
- * once, and the picture itself stays silent instead of saying the same sentence before it.
- */
-internal fun imageDescription(alt: String, altShown: Boolean): String? = alt.takeIf { it.isNotBlank() && !altShown }
 
 /** What a failed article offers, in order: the first is the main action of the panel. */
 internal enum class FailureAction { RETRY, OPEN_IN_BROWSER }

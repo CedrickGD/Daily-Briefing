@@ -68,7 +68,7 @@ für Android.
   ein – er soll sich nie wie eine Leiste anfühlen. Während eine Liste scrollt, hält die Aurora
   still. Mit 3-Tasten-Navigation hebt ein weicher Verlauf die Systemtasten vom Inhalt ab.
 * Haptik: leichter Tick beim Seitenwechsel.
-* Artikel öffnen im Reader der App (§7: Bild unter der Statusleiste, Serif-Überschrift, Textblöcke, Glas-Controls); „Im Browser öffnen“ bleibt als Ausweg; Sheets („Deine Themen“, Ort)
+* Artikel öffnen im Reader der App (§7: ein Bild unter der Statusleiste, Serif-Überschrift, Textblöcke, Glas-Controls); „Im Browser öffnen“ bleibt als Ausweg (im ⋮ des Lesers); Sheets („Deine Themen“, Ort, „Darstellung“)
   liegen als Glas über der Seite.
 * Innere horizontale Scroller (Tabs der Feed-Leiste, Leser-Pager) haben Vorrang vor dem
   Seitenwischen: was die Tab-Reihe am Anfang/Ende nicht mehr nutzt, verschluckt sie (kein
@@ -216,23 +216,43 @@ Untertitel und Zähler (gefolgt/Unterthemen). Antippen → Kategorie: farbiger K
 Kategorie folgen“, die drei neuesten Schlagzeilen, darunter die Unterthemen als Zeilen mit
 Icon-Kachel und Folgen-Knopf. Darunter „Lokal“ (Orte) und „Deine Suchen“.
 
-**Leser** – über die Seite geschoben, ruhige deckende Fläche: das Bild **randlos** unter der
-Statusleiste, darunter Quelle · Zeit, die Serif-Überschrift, der Teaser und der Text. Der Text
-nutzt die Breite: Kopf, Absätze, Bildunterschriften und Ausklang stehen **16 dp** vom Rand, Bilder
-im Text und die „nicht lesbar“-Karte **10 dp**, die schwebenden Glas-Knöpfe (Zurück, Zuhören,
-Teilen, Browser; je 48 dp) **10 dp**. Die Knöpfe sind eine Stufe dunkler (hell) bzw. heller
-(dunkel) als die Seite getönt (`surfaceContainerHighest`), damit sie auf der weißen Seite, auf
-der Leiste und über jedem Foto sichtbar sind. Über dem Bild schweben sie allein; sobald der Text
-sie erreicht, liegt hinter ihnen eine **Glas-Kopfleiste** (Statusleiste + 64 dp, Haarlinie und
-weicher Schatten an der unteren Kante, die Quelle klein in Serif) – Text läuft nie unter der Uhr
-oder den Knöpfen durch. **Nichts steht doppelt:** Das Bild oben wird einmal
-bestimmt (Feed-Bild, sonst das Aufmacherbild der Seite, sonst das erste Bild im Text) und
-verschwindet überall aus dem Text, auch in anderer Größe; Überschrift und Teaser stehen nur im
-Kopf (wiederholt der Text den Teaser, bleibt der Text und der Teaser schrumpft oder entfällt);
-unter einem Bild steht die Bildunterschrift der Redaktion – der Alt-Text nur, wenn es keine gibt
-(oder nur die Bildquelle) und er nicht wiederholt, was daneben ohnehin steht. Steht der Alt-Text
-als Zeile unter dem Bild, ist er nicht zugleich dessen Content-Description (TalkBack liest ihn
-einmal).
+**Leser** – über die Seite geschoben, ruhige deckende Fläche, kurz und aufgeräumt wie Google News
+oder Perplexity: **ein** Bild **randlos** unter der Statusleiste, darunter die Zeit, die
+Serif-Überschrift, der Teaser und der Text – keine Quelle, kein zweites Bild. Der Text nutzt die
+Breite: Kopf, Absätze und Ausklang stehen **16 dp** vom Rand, die „nicht lesbar“-Karte **10 dp**,
+die schwebenden Glas-Knöpfe (je 48 dp) **10 dp**: links Zurück, rechts **„A“** (Darstellung),
+**Zuhören** und **⋮** (Teilen, Link kopieren, Im Browser öffnen – im Stil des ⋮-Menüs der Karten).
+Die Knöpfe sind eine Stufe dunkler (hell) bzw. heller (dunkel) als die Seite getönt
+(`surfaceContainerHighest`), damit sie auf der weißen Seite, auf der Leiste und über jedem Foto
+sichtbar sind. Über dem Bild schweben sie allein; sobald der Text sie erreicht, liegt hinter ihnen
+eine **Glas-Kopfleiste** (Statusleiste + 64 dp, Haarlinie und weicher Schatten an der unteren
+Kante, **ohne Titel** – die Quelle ist nicht die Geschichte) – Text läuft nie unter der Uhr oder
+den Knöpfen durch.
+
+**„A“ → „Darstellung“** (Glas-Sheet; der Scrim bleibt leicht, jede Änderung wirkt sofort auf den
+offenen Artikel darüber): **Textgröße** als ruhiger Slider zwischen einem kleinen und einem großen
+„A“ (85–140 % in 5-%-Schritten, der Wert in Prozent darüber; der Artikel folgt beim Ziehen,
+gespeichert wird beim Loslassen), **Schrift** (Mit Serifen · Ohne Serifen), **Zeilenabstand**
+(Eng · Normal · Weit) und **Bilder anzeigen** – dieselbe Einstellung wie in Feed & Lesen, das
+Sheet sagt, dass sie auch den Feed betrifft. „Zurücksetzen“ erscheint, sobald etwas vom Standard
+abweicht. Fließtext, Teaser, Listen und Zitate folgen Größe, Schrift und Zeilenabstand (ohne
+Serifen eine Stufe kleiner, 17 statt 18 sp); Überschrift und Zwischenüberschriften wachsen
+gedämpft mit (60 % des Zuwachses: bei 140 % Text eine Überschrift von 124 %) und bleiben in Serif.
+Lange Wörter werden in der Sprache des Artikels getrennt.
+
+**Ein Bild pro Artikel:** das Bild der Karte (Feed-Bild, sonst ihr Titelbild), sonst das
+Aufmacherbild der Seite, sonst das erste Bild im Text. Weitere Bilder, Galerien, Videostandbilder,
+Bildunterschriften und Alt-Texte gibt es im Text nicht. **Quellen fallen immer weg** (Deutsch,
+Englisch, Französisch): Quellenlisten („Quellen“, „Sources“), „Quelle: dpa“, „Mit Material von
+dpa“, „jdl/dpa“, „Avec AFP“, „Mitarbeit: …“, „Reporting by …; Editing by …“, „… contributed to
+this report“, Fotonachweise („Foto: …“, „Bild: …“, „©“, „AP Photo/…“), die Autorenzeile als eigene
+Zeile, Kästen mit anderen Artikeln („Mehr zum Thema“, „Related“, „À lire aussi“) samt ihren Links,
+„Dieser Artikel erschien zuerst …“, Newsletter- und Social-Hinweise, eine Zeile nur mit dem Namen
+der Redaktion – und „Quelle: …“ am Ende, die Quelle im Kopf und in der Kopfleiste. Ein Satz, der
+eine Quelle nennt („…, sagte er der dpa.“), bleibt. **Nichts steht doppelt:** Überschrift und
+Teaser stehen nur im Kopf (wiederholt der Text den Teaser, bleibt der Text und der Teaser schrumpft
+oder entfällt). Am Ende steht nur bei vermutlich gekürzten Artikeln ein Hinweis mit „Im Browser
+öffnen“.
 
 **Gelesen & ausgeblendet** – über die Seite geschoben, Glas über dem Himmel wie „Themen
 entdecken“: Overline „DEIN VERLAUF“ und Serif-Titel, darunter eine Glaskarte mit zwei Zählern
