@@ -24,6 +24,15 @@ keine Cloud und keine KI. (Paket und applicationId heißen aus Update-Gründen w
         │     · Region × Sprache ohne eigene Google-News-Ausgabe (USA auf Deutsch): Ausgabe der
         │       Sprache; Heimat-Themen und Orte als Suche nach dem Namen (CountryQuery)
         │     · Regions: Sender des Bundeslandes (nur Deutschland auf Deutsch) · eigene Feeds
+        │     · Themen, die nicht das eigene Land betreffen (TopicSources.mixes: nicht Schlagzeilen,
+        │       Politik/Inland/Wahlen, Konjunktur/Geld/Immobilien, Region, Orte, eigene Themen),
+        │       mischen dazu, je mit Schalter unter Einstellungen › Quellen (Standard an):
+        │       „Internationale Quellen auf Deutsch“ (AppSettings.internationalSources: Redaktionen
+        │       aus AT/CH und deutsche Ausgaben internationaler Marken, CatalogFeed.abroad, höchstens
+        │       3 und halb so viele wie die eigenen) und „Englischsprachige Quellen“
+        │       (AppSettings.englishSources: englische Feeds ohne Länderbindung, höchstens 3 und halb
+        │       so viele wie die deutschsprachigen). Heimat-Ressorts von AT/CH (Titelseiten, Wirtschaft
+        │       daheim) bleiben in ihrer Ausgabe; jeder gemischte Feed hat seinen eigenen Schalter
         ├─ RssClient (OkHttp + RssParser) holt bis zu 6 parallel
         ├─ zusammenführen, gleiche Meldung (Link oder Überschrift) raus, neueste zuerst,
         │   ausgefallene Quellen behalten ihre letzten Meldungen (3 Tage)
@@ -235,7 +244,7 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
 | `ui/today`, `ui/news` | Heute-Seite: kompakte Wetterkarte (`TodayWeather`), Feed-Leiste mit Suche und Tabs (`FeedChips`, pinnt oben), Glaskarten je Thema aus Listen-Stücken (`FeedCards` = reine Logik, `StoryCards`, `FeedSections`), endlose Listen, „Deine Themen“-Sheet, Vorladen |
 | `ui/discover` | „Themen entdecken“: Kategorie-Kacheln, Kategorie mit Unterthemen und Vorschau, lokale Orte, gefolgte Suchen |
 | `ui/search` | Suche: Feld, letzte Suchen, „Gerade wichtig“, endlose Ergebnisse (Relevanz/Neueste, Alle Sprachen/Nur Ausgabe, „EN“-Marke, mit „nur lesbar“ nur geprüfte: `SearchView`), „Diesem Thema folgen“ |
-| `ui/settings` | Einstellungen: Status, Sprache & Region (App-Sprache, Nachrichten-Region, Nachrichten-Sprache: `EditionLogic`, `LanguageRegion`), lokale Nachrichten, Wecker, Deine Themen (sortieren, eigene), Quellen, Feed & Lesen, Vorlesen (`ListenSection`), Darstellung, Orte, Wetterblöcke, App/Updates |
+| `ui/settings` | Einstellungen: Status, Sprache & Region (App-Sprache, Nachrichten-Region, Nachrichten-Sprache: `EditionLogic`, `LanguageRegion`), lokale Nachrichten, Wecker, Deine Themen (sortieren, eigene), Quellen (oben die Schalter für internationale und englischsprachige Quellen, wo die Ausgabe sie nutzen kann), Feed & Lesen, Vorlesen (`ListenSection`), Darstellung, Orte, Wetterblöcke, App/Updates |
 | `ui/onboarding` | Erster Start: App-Sprache, Nachrichten (Region und Sprache getrennt), Benachrichtigungen, Ort |
 | `ui/theme` | Theme, Akzent-Schemata, Typografie, `Reading` (Serif-Lesestile) |
 | `ui/history` | „Gelesen & ausgeblendet“: `HistoryScreen` + `HistoryViewModel`, `HistoryLogic` (Suche, Filter, Tage – rein, getestet); die Bausteine (`ArchiveRow`, `ArchiveSearchField`, `DayHeading`, `EmptyNote`) nutzt auch `ui/favorites` |

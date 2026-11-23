@@ -338,6 +338,10 @@ class SettingsViewModel(
 
     fun setReadableOnly(only: Boolean) = edit { it.copy(readableOnly = only) }
 
+    fun setInternationalSources(on: Boolean) = edit { it.copy(internationalSources = on) }
+
+    fun setEnglishSources(on: Boolean) = edit { it.copy(englishSources = on) }
+
     fun setHideRead(hide: Boolean) = edit { it.copy(hideRead = hide) }
 
     fun setHideLong(hide: Boolean) = edit { it.copy(hideLong = hide) }

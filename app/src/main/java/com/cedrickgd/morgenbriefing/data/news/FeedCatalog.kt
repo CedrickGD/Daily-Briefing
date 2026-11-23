@@ -12,26 +12,39 @@ import com.cedrickgd.morgenbriefing.data.model.Topics
  * @property language ISO 639-1 of the feed's articles.
  * @property countries the editions' countries (ISO alpha-2) that show it; empty = every
  *   edition of [language] (a world or science desk), set for domestic desks (tagesschau
- *   Inland → `DE`, NPR Politics → `US`).
+ *   Inland → `DE`, NPR Politics → `US`) and for the home of a newsroom [abroad].
+ * @property abroad a newsroom from outside the editions that read [language] by default: one of
+ *   a neighbouring country (Der Standard, SRF) or the [language] desk of an international brand
+ *   (Euronews). Its home [countries] read it like any feed; every other edition of [language]
+ *   only with [AppSettings.internationalSources] and only for topics that are not about the
+ *   reader's country ([TopicSources]).
  */
 data class CatalogFeed(
     val source: FeedSource,
     val language: String,
     val countries: Set<String> = emptySet(),
+    val abroad: Boolean = false,
 ) {
-    /** Whether readers of [edition] get this feed. */
+    /** Whether readers of [edition] get this feed as one of their own. */
     fun serves(edition: NewsEdition): Boolean =
-        language == edition.language && (countries.isEmpty() || edition.country in countries)
+        language == edition.language && (if (countries.isEmpty()) !abroad else edition.country in countries)
+
+    /** Whether readers of [edition] may get this feed as an international source ([AppSettings.internationalSources]). */
+    fun servesAbroad(edition: NewsEdition): Boolean =
+        abroad && language == edition.language && edition.country !in countries
 }
 
 /**
  * The built-in RSS/Atom sources: newsrooms with public feeds whose article pages the in-app
  * reader can show, each attached to the (sub-)topic it covers best. A category also reads the
  * feeds of its sub-topics ([TopicSources]). Every feed was checked with curl and the app's
- * headers (German ones 29./30.10. and again 05.11.2026, English ones 05.11.2026, each with one
- * article page under a mobile Chrome UA). Left out on purpose: PBS NewsHour and ESPN (bot wall
- * on every article), Politico US, Sky News, phys.org (403), MarketWatch (401), USA Today (402),
- * Yahoo Finance and Investopedia (no feed any more).
+ * headers (German ones 29./30.10. and again 05.11.2026, English ones 05.11.2026, the Austrian,
+ * Swiss and international German ones and Wired, Engadget and TechCrunch AI 23.11.2026, each
+ * with one article page under a mobile Chrome UA). Left out on purpose: PBS NewsHour, ESPN and
+ * Forbes (bot wall on every article), Politico US, Sky News, phys.org (403), MarketWatch (401),
+ * USA Today (402), Yahoo Finance and Investopedia (no feed any more), swissinfo (410), Forbes
+ * Austria (404), Handelszeitung (404), Kleine Zeitung (404), Tages-Anzeiger (articles redirect
+ * away) and NZZ (paywall, [com.cedrickgd.morgenbriefing.data.article.KnownWalls]).
  *
  * Every source can be switched off in the settings; the user adds their own with
  * [AppSettings.customFeeds]. The "Region" topic takes its sources from [Regions].
@@ -44,7 +57,13 @@ object FeedCatalog {
     private fun en(id: String, name: String, topic: String, url: String, vararg countries: String) =
         CatalogFeed(FeedSource(id, name, url, topic), "en", countries.toSet())
 
+    /** A German newsroom from abroad ([CatalogFeed.abroad]), at home in [countries] (none: an international brand). */
+    private fun abroad(id: String, name: String, topic: String, url: String, vararg countries: String) =
+        CatalogFeed(FeedSource(id, name, url, topic), "de", countries.toSet(), abroad = true)
+
     private const val DE = "DE"
+    private const val AT = "AT"
+    private const val CH = "CH"
     private val US = arrayOf("US")
     private val UK = arrayOf("GB", "IE")
     private val NORTH_AMERICA = arrayOf("US", "CA")
@@ -185,6 +204,32 @@ object FeedCatalog {
         de("heise-autos", "heise Autos", "auto", "https://www.heise.de/autos/rss/news-atom.xml"),
         de("electrive-de", "electrive.net", "auto/elektro", "https://www.electrive.net/feed/"),
 
+        // ---- Deutsch aus Österreich und der Schweiz, deutsche Ausgaben internationaler Marken --
+        // Home desks (front pages, domestic economy) serve their own country only; the desks
+        // marked abroad also join the other German editions' topics that are not about the
+        // reader's country, with "Internationale Quellen auf Deutsch" ([TopicSources.mixes]).
+
+        // Österreich
+        de("derstandard", "Der Standard", "top", "https://www.derstandard.at/rss", AT),
+        de("orf", "ORF", "top", "https://rss.orf.at/news.xml", AT),
+        de("diepresse", "Die Presse", "top", "https://www.diepresse.com/rss/", AT),
+        de("derstandard-wirtschaft", "Der Standard Wirtschaft", "wirtschaft", "https://www.derstandard.at/rss/wirtschaft", AT),
+        abroad("derstandard-web", "Der Standard Web", "ki", "https://www.derstandard.at/rss/web", AT),
+        abroad("derstandard-international", "Der Standard International", "welt", "https://www.derstandard.at/rss/international", AT),
+        abroad("derstandard-wissenschaft", "Der Standard Wissenschaft", "wissenschaft", "https://www.derstandard.at/rss/wissenschaft", AT),
+        abroad("orf-science", "science.ORF.at", "wissenschaft", "https://rss.orf.at/science.xml", AT),
+
+        // Schweiz
+        de("srf", "SRF News", "top", "https://www.srf.ch/news/bnf/rss/1646", CH),
+        de("watson", "watson", "top", "https://www.watson.ch/api/2.0/rss/index.xml", CH),
+        de("srf-wirtschaft", "SRF Wirtschaft", "wirtschaft", "https://www.srf.ch/news/bnf/rss/1926", CH),
+        abroad("srf-international", "SRF International", "welt", "https://www.srf.ch/news/bnf/rss/1922", CH),
+        abroad("watson-digital", "watson Digital", "ki", "https://www.watson.ch/api/2.0/rss/index.xml?tag=Digital", CH),
+
+        // Internationale Marken
+        abroad("euronews-de", "Euronews", "welt", "https://de.euronews.com/rss"),
+        abroad("businessinsider-de", "Business Insider", "wirtschaft", "https://www.businessinsider.de/rss"),
+
         // ---- English ------------------------------------------------------------------------
 
         // Top stories
@@ -239,9 +284,12 @@ object FeedCatalog {
         en("guardian-property", "The Guardian Property", "wirtschaft/immobilien", "https://www.theguardian.com/money/property/rss", *UK),
         en("techcrunch", "TechCrunch", "wirtschaft/startups", "https://techcrunch.com/feed/"),
 
-        // Tech & AI
+        // Tech & AI. The first ones join German Tech news with "Englischsprachige Quellen".
+        en("techcrunch-ai", "TechCrunch AI", "ki", "https://techcrunch.com/category/artificial-intelligence/feed/"),
         en("verge", "The Verge", "ki", "https://www.theverge.com/rss/index.xml"),
+        en("wired", "Wired", "ki", "https://www.wired.com/feed/rss"),
         en("ars", "Ars Technica", "ki", "https://feeds.arstechnica.com/arstechnica/index"),
+        en("engadget", "Engadget", "ki", "https://www.engadget.com/rss.xml"),
         en("bbc-tech", "BBC Technology", "ki", "https://feeds.bbci.co.uk/news/technology/rss.xml"),
         en("guardian-tech", "The Guardian Technology", "ki", "https://www.theguardian.com/technology/rss"),
         en("npr-tech", "NPR Technology", "ki", "https://feeds.npr.org/1019/rss.xml", *US),

@@ -280,6 +280,8 @@ fun SettingsScreen(
             dialogTopicId = topic.id
             dialog = SettingsDialog.DELETE_TOPIC
         },
+        onInternationalSources = viewModel::setInternationalSources,
+        onEnglishSources = viewModel::setEnglishSources,
     )
 
     val topicsActions = TopicsActions(

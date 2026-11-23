@@ -183,6 +183,8 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
             followed = followed,
             localPlaces = localPlaces,
             readableOnly = this[Keys.READABLE_ONLY] ?: defaults.readableOnly,
+            internationalSources = this[Keys.INTERNATIONAL_SOURCES] ?: defaults.internationalSources,
+            englishSources = this[Keys.ENGLISH_SOURCES] ?: defaults.englishSources,
             hideRead = this[Keys.HIDE_READ] ?: defaults.hideRead,
             hideLong = this[Keys.HIDE_LONG] ?: defaults.hideLong,
             prefetch = enumOrDefault(this[Keys.PREFETCH], defaults.prefetch),
@@ -272,6 +274,8 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
         this[Keys.FOLLOWED] = AppJson.encodeToString(ListSerializer(String.serializer()), Topics.followedIds(s).filter { it.isNotBlank() }.distinct())
         this[Keys.LOCAL_PLACES] = AppJson.encodeToString(ListSerializer(Place.serializer()), s.localPlaces)
         this[Keys.READABLE_ONLY] = s.readableOnly
+        this[Keys.INTERNATIONAL_SOURCES] = s.internationalSources
+        this[Keys.ENGLISH_SOURCES] = s.englishSources
         this[Keys.HIDE_READ] = s.hideRead
         this[Keys.HIDE_LONG] = s.hideLong
         this[Keys.PREFETCH] = s.prefetch.name
@@ -357,6 +361,12 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
         val FOLLOWED = stringPreferencesKey("followed_topics")
         val LOCAL_PLACES = stringPreferencesKey("local_places")
         val READABLE_ONLY = booleanPreferencesKey("readable_only")
+
+        /** "Internationale Quellen auf Deutsch" (since 3.6); missing (older installs) = on, like a new install. */
+        val INTERNATIONAL_SOURCES = booleanPreferencesKey("international_sources")
+
+        /** "Englischsprachige Quellen" (since 3.6); missing (older installs) = on, like a new install. */
+        val ENGLISH_SOURCES = booleanPreferencesKey("english_sources")
 
         /** "Gelesene Artikel ausblenden"; missing (older installs) = off. */
         val HIDE_READ = booleanPreferencesKey("hide_read")

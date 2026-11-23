@@ -309,8 +309,9 @@ gefüllte Pill.
 4. **Deine Themen**: Banner „Themen entdecken“ (Verlauf), gefolgte Themen als Zeilen mit
    Icon-Kachel – ziehen zum Sortieren, ✕ zum Entfernen; „Eigenes Thema“ (Name, Icon aus dem
    Raster, Farbe aus zwölf Perlen, Feeds oder Suchbegriff).
-5. **Quellen**: eine Glaskarte mit „Deine Region“ (Bundesland-Preset) und je Thema einer
-   aufklappbaren Zeile: alle Feeds mit Schalter, „Eigene Quelle“ (Adresse oder Website, die App
+5. **Quellen**: eine Glaskarte mit „Deine Region“ (Bundesland-Preset), darunter die Schalter
+   „Internationale Quellen auf Deutsch“ und „Englischsprachige Quellen“ (nur bei Ausgaben, die sie
+   nutzen können), und je Thema einer aufklappbaren Zeile: alle Feeds mit Schalter, „Eigene Quelle“ (Adresse oder Website, die App
    findet den Feed und zeigt Titel + Anzahl vor dem Speichern), bei eigenen Themen Bearbeiten/Löschen.
 6. **Feed & Lesen**: Meldungen pro Thema als große Zahl mit ruhigem Slider, Zeitraum als
    Auswahl-Pills, „Bilder anzeigen“, „Gelesene Artikel ausblenden“ (Standard aus, mit einer

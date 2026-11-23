@@ -83,6 +83,19 @@ class SettingsStringsTest {
     }
 
     @Test
+    fun `the switches for sources from abroad and in English name real examples, in every language`() {
+        for (lang in AppLanguage.entries) {
+            val s = SourcesStrings.of(lang)
+            assertTrue("$lang: ${s.internationalSourcesOn}", "Der Standard" in s.internationalSourcesOn && "Euronews" in s.internationalSourcesOn)
+            assertTrue("$lang: ${s.englishSourcesOn}", "TechCrunch" in s.englishSourcesOn)
+            listOf(s.internationalSources, s.internationalSourcesOn, s.internationalSourcesOff, s.englishSources, s.englishSourcesOn, s.englishSourcesOff)
+                .forEach { assertTrue("$lang: \"$it\"", it.isNotBlank() && it.length <= 110 && '—' !in it) }
+        }
+        assertEquals("Internationale Quellen auf Deutsch", SourcesStrings.of(AppLanguage.DE).internationalSources)
+        assertEquals("Englischsprachige Quellen", SourcesStrings.of(AppLanguage.DE).englishSources)
+    }
+
+    @Test
     fun `the readable-only setting says what it does, in every language`() {
         for (lang in AppLanguage.entries) {
             val s = SettingsStrings.of(lang)
