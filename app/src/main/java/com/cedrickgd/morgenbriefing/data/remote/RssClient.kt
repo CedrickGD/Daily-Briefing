@@ -228,7 +228,11 @@ class RssClient(
         throw lastError ?: FeedException(FeedError.NO_FEED_FOUND)
     }
 
-    private suspend fun fetchFeed(url: String): ParsedFeed {
+    /**
+     * The feed at [url], parsed (also feeds that are not news: Google Trends' RSS).
+     * @throws FeedException when it is unreachable or not a feed.
+     */
+    suspend fun fetchFeed(url: String): ParsedFeed {
         val request = Request.Builder()
             .url(url.toHttpUrlOrNull() ?: throw FeedException(FeedError.INVALID_URL))
             .header("Accept", ACCEPT)

@@ -46,7 +46,7 @@ class FeedStringsTest {
             "verifying" to verifying, "verifyOffline" to verifyOffline, "noneComplete" to noneComplete,
             "noCompleteTitle" to noCompleteTitle, "noCompleteText" to noCompleteText,
             "verifyOfflineTitle" to verifyOfflineTitle, "verifyOfflineText" to verifyOfflineText,
-            "manageTopics" to manageTopics, "searchPlaceholder" to searchPlaceholder, "showAll" to showAll,
+            "manageTopics" to manageTopics, "searchPlaceholder" to searchPlaceholder(emptyList()), "showAll" to showAll,
             "continueListening" to continueListening, "yourTopicsTitle" to yourTopicsTitle,
             "yourTopicsHint" to yourTopicsHint, "addPlace" to addPlace, "dry" to dry,
             "weatherExpand" to weatherExpand, "weatherCollapse" to weatherCollapse,
@@ -71,6 +71,9 @@ class FeedStringsTest {
             assertTrue(s.listEnd(12).contains("12"))
             // The hint names the ✕ the rows show.
             assertTrue(s.yourTopicsHint.contains("✕"))
+            // The search bar names the current examples, else fixed ones.
+            assertTrue(s.searchPlaceholder(listOf("bali", "mt melsungen")).endsWith("bali, mt melsungen"))
+            assertNotEquals(s.searchPlaceholder(emptyList()), s.searchPlaceholder(listOf("bali", "sylt")))
         }
     }
 

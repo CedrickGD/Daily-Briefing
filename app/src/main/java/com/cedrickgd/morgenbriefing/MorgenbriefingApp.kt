@@ -12,6 +12,7 @@ import com.cedrickgd.morgenbriefing.update.UpdateWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -42,6 +43,14 @@ class MorgenbriefingApp : Application() {
                 .map { Triple(it.notificationsEnabled, it.notifyHour, it.notifyMinute) }
                 .distinctUntilChanged()
                 .collect { AlarmScheduler.sync(this@MorgenbriefingApp, container.settings.current()) }
+        }
+
+        // Fresh search suggestions on every start, and for another edition when it changes.
+        appScope.launch {
+            container.settings.settings
+                .map { it.edition.country to it.edition.language }
+                .distinctUntilChanged()
+                .collectLatest { (country, language) -> container.trending.load(country, language) }
         }
 
         scheduleUpdateChecks()

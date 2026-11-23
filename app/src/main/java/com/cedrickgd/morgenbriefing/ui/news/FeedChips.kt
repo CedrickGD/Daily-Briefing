@@ -111,11 +111,15 @@ fun FeedBar(
     }
 }
 
-/** "🔍 Suchen – z. B. SLV-ETF, Midterms": looks like a field, opens the search screen. */
+/**
+ * "🔍 Suchen – z. B. champions league, christian sewing": looks like a field, opens the search
+ * screen. The examples are two of what people search for right now, new on every app start.
+ */
 @Composable
 private fun SearchFieldButton(onClick: () -> Unit, onGlass: Boolean, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     val strings = feedStrings()
+    val trends by rememberTrendSuggestions()
     val interaction = remember { MutableInteractionSource() }
     Row(
         modifier = modifier
@@ -137,7 +141,7 @@ private fun SearchFieldButton(onClick: () -> Unit, onGlass: Boolean, modifier: M
         Icon(Icons.Rounded.Search, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Text(
-            text = strings.searchPlaceholder,
+            text = strings.searchPlaceholder(trends.examples),
             style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurfaceVariant,
             maxLines = 1,

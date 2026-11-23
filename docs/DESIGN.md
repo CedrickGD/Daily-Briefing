@@ -132,11 +132,13 @@ dem Entwurf, den der Besitzer gewählt hat):
   Serif-Temperatur, „Ort · Zustand“ und **eine** Zeile „min – max · Regen 60 % / trocken ·
   Kleidungstipp“, rechts ein Chevron. Antippen klappt sie weich auf (`animateContentSize`, Chevron
   dreht sich): die Serif-Headline des Tages, „Vor der Tür“ (gefühlt, Chips, Hinweis fürs
-  Losgehen), die Tageskurve mit Zusammenfassung und die Anzieh-Kacheln – jeweils nur, wenn der
+  Losgehen), die Tageskurve (sie nutzt die ganze Kartenbreite, die erste und letzte Stunde 6 dp
+  vom Kartenrand; Titel und Zusammenfassung bleiben auf der Textkante) mit Zusammenfassung und die Anzieh-Kacheln – jeweils nur, wenn der
   Wetterblock in den Einstellungen an ist. Auf/zu bleibt über App-Starts erhalten.
   **Warnungen** stehen immer sichtbar unter der Karte (getönte Glas-Banner), auch zugeklappt.
 * **Feed-Leiste** unter dem Wetter: ein Suchfeld (sieht aus wie ein Feld, ist ein Knopf und
-  öffnet die Suche: „Suchen – z. B. SLV-ETF, Midterms“), rechts daneben ein runder Glasknopf mit
+  öffnet die Suche: „Suchen – z. B. champions league, christian sewing“ – zwei Suchbegriffe, nach
+  denen gerade gesucht wird, bei jedem Start andere; ohne Netz und Cache „SLV-ETF, Midterms“), rechts daneben ein runder Glasknopf mit
   Verlaufs-Uhr (**„Gelesen & ausgeblendet“**, gleiche Höhe und Rundung wie das Feld), und darunter die Tabs **„Für dich“ ·
   „Neueste“ · je ein Tab pro gefolgtem Thema** (mit Icon; aktiver Tab gefüllt in Themen- bzw.
   Akzentfarbe) und am Ende ein runder **„＋“**. Die Tabs scrollen waagerecht und laufen rechts weich
@@ -270,7 +272,10 @@ Browser öffnen, „Wieder einblenden“, „Als ungelesen markieren“ – beid
 löschen“ mit Rückfrage. Leer: ein Verlaufs-Symbol in weichem Akzentschein und eine Zeile, was hier
 landet. Erreichbar über den Knopf neben dem Suchfeld auf „Heute“ und Einstellungen → Feed & Lesen.
 
-**Suche** – Glas-Suchfeld oben, letzte Suchen als Chips, „Gerade wichtig“, Ergebnisse als
+**Suche** – Glas-Suchfeld oben, letzte Suchen als Chips, darunter „Im Trend“: die Suchbegriffe
+des Moments (Google Trends des Ausgabe-Landes) als Glas-Chips mit Trend-Pfeil, antippen sucht sie
+(ohne Trends „Aus den Schlagzeilen“: was die Top-Meldungen vor ihrem Doppelpunkt nennen), dann
+„Gerade wichtig“, Ergebnisse als
 große redaktionelle Einträge ohne Kartenrahmen (Bild in voller Breite, Serif-Headline, Lead mit
 „… Weiterlesen“, Meta-Zeile mit „Zuhören“, Teilen und ⋮), endlos; „Diesem Thema folgen“ als
 gefüllte Pill.

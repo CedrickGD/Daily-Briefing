@@ -41,6 +41,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.FactCheck
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
@@ -108,6 +109,7 @@ import com.cedrickgd.morgenbriefing.container
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.data.model.Topics
+import com.cedrickgd.morgenbriefing.data.news.TrendSuggestions
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.SearchStrings
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
@@ -136,6 +138,7 @@ import com.cedrickgd.morgenbriefing.ui.news.FeedEntry
 import com.cedrickgd.morgenbriefing.ui.news.FeedGutter
 import com.cedrickgd.morgenbriefing.ui.news.FeedHints
 import com.cedrickgd.morgenbriefing.ui.news.copyLink
+import com.cedrickgd.morgenbriefing.ui.news.rememberTrendSuggestions
 import com.cedrickgd.morgenbriefing.ui.shell.reportChromeScroll
 import com.cedrickgd.morgenbriefing.util.horizontalSafeDrawing
 import com.cedrickgd.morgenbriefing.util.pageSideInset
@@ -223,6 +226,7 @@ fun SearchScreen(
     }
 
     val results = state.results
+    val trends by rememberTrendSuggestions()
     // A new query, or another order, starts at the top – once: coming back from an article
     // rebuilds the screen, and the list must stay where the reader left it.
     val listing = SearchView.listingKey(results.query, state.options.sort.name)
@@ -303,6 +307,7 @@ fun SearchScreen(
             when (results.phase) {
                 SearchPhase.IDLE -> suggestions(
                     state = state,
+                    trends = trends,
                     strings = strings,
                     now = now,
                     onSearch = { query ->
@@ -582,9 +587,13 @@ private fun SearchBar(
     }
 }
 
-/** Before a search: a hint, the recent searches and the top stories of the edition. */
+/**
+ * Before a search: a hint, the recent searches, what people search for right now ([trends]: a
+ * tap searches it) and the top stories of the edition.
+ */
 private fun androidx.compose.foundation.lazy.LazyListScope.suggestions(
     state: SearchUiState,
+    trends: TrendSuggestions,
     strings: SearchStrings,
     now: ZonedDateTime,
     onSearch: (String) -> Unit,
@@ -605,6 +614,11 @@ private fun androidx.compose.foundation.lazy.LazyListScope.suggestions(
     if (state.recent.isNotEmpty()) {
         item(key = "recent", contentType = "recent") {
             RecentSearches(state.recent, strings, onSearch, onRemoveRecent, onClearRecent)
+        }
+    }
+    if (trends.terms.isNotEmpty()) {
+        item(key = "terms", contentType = "terms") {
+            TrendTerms(trends, strings, onSearch)
         }
     }
     item(key = "trending", contentType = "trending") {
@@ -667,6 +681,45 @@ private fun RecentSearches(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             recent.forEach { query -> RecentChip(query, strings, onSearch, onRemove) }
         }
+    }
+}
+
+/**
+ * "Im Trend": the search terms of the moment as chips (Google Trends of the edition's country);
+ * without them the subjects of the top stories, under their own overline.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TrendTerms(trends: TrendSuggestions, strings: SearchStrings, onSearch: (String) -> Unit) {
+    Column(Modifier.padding(top = 16.dp)) {
+        Overline(
+            text = if (trends.fromTrends) strings.trendTermsOverline else strings.headlineTermsOverline,
+            modifier = Modifier.padding(start = SkyTextInset, top = 14.dp, bottom = 12.dp),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            trends.terms.forEach { term -> TermChip(term, strings, onSearch) }
+        }
+    }
+}
+
+/** One suggested term: a tap searches it. */
+@Composable
+private fun TermChip(term: String, strings: SearchStrings, onSearch: (String) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .pressScale(interaction, pressedScale = 0.95f)
+            .glass(shape = GlassShapes.pill, level = GlassLevel.Thin)
+            .clip(CircleShape)
+            .clickable(interactionSource = interaction, indication = ripple(), role = Role.Button, onClickLabel = strings.searchFor(term), onClick = { onSearch(term) })
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.AutoMirrored.Rounded.TrendingUp, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(term, style = MaterialTheme.typography.labelLarge, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

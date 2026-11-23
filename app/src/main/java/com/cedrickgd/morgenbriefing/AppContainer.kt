@@ -18,7 +18,9 @@ import com.cedrickgd.morgenbriefing.data.article.VerdictStore
 import com.cedrickgd.morgenbriefing.data.local.NewsCache
 import com.cedrickgd.morgenbriefing.data.local.ReadHistoryStore
 import com.cedrickgd.morgenbriefing.data.local.WeatherStore
+import com.cedrickgd.morgenbriefing.data.model.Topics
 import com.cedrickgd.morgenbriefing.data.news.RssParser
+import com.cedrickgd.morgenbriefing.data.news.TrendingRepository
 import com.cedrickgd.morgenbriefing.data.remote.GoogleNewsDecoder
 import com.cedrickgd.morgenbriefing.data.remote.OpenMeteoClient
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
@@ -77,6 +79,21 @@ class AppContainer(context: Context) {
             googleNewsDecoder.warm()
             withContext(Dispatchers.IO) { readability.blockedDomains() }
         },
+    )
+
+    /**
+     * What people search for right now (Google Trends of the edition's country, loaded on every
+     * start, `store/trending.json`), else the subjects of the top stories: the search suggestions.
+     */
+    val trending = TrendingRepository(
+        fetch = rss::fetchFeed,
+        file = File(storeDir, "trending.json"),
+        json = json,
+        headlines = news.state.map { state ->
+            val top = state.topics[Topics.TOP_ID]?.items.orEmpty()
+            (top.ifEmpty { state.topics.values.flatMap { it.items } }).map { it.headline }
+        },
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     )
 
     /** Pages read for checks and preloading are parsed on two low-priority threads with light effects. */

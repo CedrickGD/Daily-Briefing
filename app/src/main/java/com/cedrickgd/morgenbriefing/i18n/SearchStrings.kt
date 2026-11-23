@@ -25,6 +25,13 @@ interface SearchStrings {
     val trendingTitle: String
     val trendingEmpty: String
 
+    /** Over the search terms of the moment: from Google Trends / from the top stories' subjects. */
+    val trendTermsOverline: String
+    val headlineTermsOverline: String
+
+    /** Click label of a suggested search term. */
+    fun searchFor(term: String): String
+
     val resultsOverline: String
     fun resultCount(count: Int): String
 
@@ -96,6 +103,9 @@ interface SearchStrings {
         override val trendingOverline = "Gerade wichtig"
         override val trendingTitle = "Die Schlagzeilen von jetzt"
         override val trendingEmpty = "Die Schlagzeilen laden gleich."
+        override val trendTermsOverline = "Im Trend"
+        override val headlineTermsOverline = "Aus den Schlagzeilen"
+        override fun searchFor(term: String) = "Nach „$term“ suchen"
         override val resultsOverline = "Treffer"
         override fun resultCount(count: Int) = if (count == 1) "1 Meldung" else "$count Meldungen"
         override val sortRelevance = "Relevanz"
@@ -140,6 +150,9 @@ interface SearchStrings {
         override val trendingOverline = "Right now"
         override val trendingTitle = "Today’s top stories"
         override val trendingEmpty = "The top stories are on their way."
+        override val trendTermsOverline = "Trending"
+        override val headlineTermsOverline = "From the headlines"
+        override fun searchFor(term: String) = "Search for “$term”"
         override val resultsOverline = "Results"
         override fun resultCount(count: Int) = if (count == 1) "1 story" else "$count stories"
         override val sortRelevance = "Most relevant"
@@ -184,6 +197,9 @@ interface SearchStrings {
         override val trendingOverline = "En ce moment"
         override val trendingTitle = "Les gros titres du moment"
         override val trendingEmpty = "Les gros titres arrivent."
+        override val trendTermsOverline = "Tendances"
+        override val headlineTermsOverline = "Dans les gros titres"
+        override fun searchFor(term: String) = "Rechercher « $term »"
         override val resultsOverline = "Résultats"
         override fun resultCount(count: Int) = if (count == 1) "1 article" else "$count articles"
         override val sortRelevance = "Pertinence"
@@ -228,6 +244,9 @@ interface SearchStrings {
         override val trendingOverline = "Ahora mismo"
         override val trendingTitle = "Los titulares del momento"
         override val trendingEmpty = "Los titulares están en camino."
+        override val trendTermsOverline = "Tendencias"
+        override val headlineTermsOverline = "En los titulares"
+        override fun searchFor(term: String) = "Buscar «$term»"
         override val resultsOverline = "Resultados"
         override fun resultCount(count: Int) = if (count == 1) "1 noticia" else "$count noticias"
         override val sortRelevance = "Relevancia"
@@ -272,6 +291,9 @@ interface SearchStrings {
         override val trendingOverline = "In questo momento"
         override val trendingTitle = "I titoli del momento"
         override val trendingEmpty = "I titoli stanno arrivando."
+        override val trendTermsOverline = "Di tendenza"
+        override val headlineTermsOverline = "Dai titoli"
+        override fun searchFor(term: String) = "Cerca «$term»"
         override val resultsOverline = "Risultati"
         override fun resultCount(count: Int) = if (count == 1) "1 notizia" else "$count notizie"
         override val sortRelevance = "Rilevanza"

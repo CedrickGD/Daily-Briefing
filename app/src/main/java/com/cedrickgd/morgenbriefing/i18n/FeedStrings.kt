@@ -137,7 +137,9 @@ interface FeedStrings {
 
     // Feed bar (search field, tabs, "＋") and the "Für dich" cards
     val manageTopics: String
-    val searchPlaceholder: String
+
+    /** The search bar: "Suchen – z. B. " and two current [examples]; without any, two fixed ones. */
+    fun searchPlaceholder(examples: List<String>): String
     val showAll: String
     val continueListening: String
 
@@ -269,7 +271,7 @@ interface FeedStrings {
         override val weatherUnavailableText = "Check kurz deine Verbindung – dann hol ich das Wetter nochmal."
 
         override val manageTopics = "Deine Themen verwalten"
-        override val searchPlaceholder = "Suchen – z. B. SLV-ETF, Midterms"
+        override fun searchPlaceholder(examples: List<String>) = "Suchen – z. B. " + examples.ifEmpty { listOf("SLV-ETF", "Midterms") }.joinToString(", ")
         override val showAll = "Alle"
         override val continueListening = "Weiter zuhören"
         override val yourTopicsTitle = "Deine Themen"
@@ -388,7 +390,7 @@ interface FeedStrings {
         override val weatherUnavailableText = "Check your connection quickly – then I'll fetch the weather again."
 
         override val manageTopics = "Manage your topics"
-        override val searchPlaceholder = "Search – e.g. SLV ETF, midterms"
+        override fun searchPlaceholder(examples: List<String>) = "Search – e.g. " + examples.ifEmpty { listOf("SLV ETF", "midterms") }.joinToString(", ")
         override val showAll = "See all"
         override val continueListening = "Keep listening"
         override val yourTopicsTitle = "Your topics"
@@ -507,7 +509,7 @@ interface FeedStrings {
         override val weatherUnavailableText = "Vérifie ta connexion – je récupère ensuite la météo."
 
         override val manageTopics = "Gérer tes thèmes"
-        override val searchPlaceholder = "Rechercher – p. ex. ETF SLV, midterms"
+        override fun searchPlaceholder(examples: List<String>) = "Rechercher – p. ex. " + examples.ifEmpty { listOf("ETF SLV", "midterms") }.joinToString(", ")
         override val showAll = "Tout voir"
         override val continueListening = "Reprendre l'écoute"
         override val yourTopicsTitle = "Tes thèmes"
@@ -626,7 +628,7 @@ interface FeedStrings {
         override val weatherUnavailableText = "Revisa tu conexión y vuelvo a consultar el tiempo."
 
         override val manageTopics = "Gestionar tus temas"
-        override val searchPlaceholder = "Buscar – p. ej. ETF SLV, elecciones"
+        override fun searchPlaceholder(examples: List<String>) = "Buscar – p. ej. " + examples.ifEmpty { listOf("ETF SLV", "elecciones") }.joinToString(", ")
         override val showAll = "Ver todas"
         override val continueListening = "Seguir escuchando"
         override val yourTopicsTitle = "Tus temas"
@@ -745,7 +747,7 @@ interface FeedStrings {
         override val weatherUnavailableText = "Controlla la connessione, poi riprovo a caricare il meteo."
 
         override val manageTopics = "Gestisci i tuoi temi"
-        override val searchPlaceholder = "Cerca – ad es. ETF SLV, midterm"
+        override fun searchPlaceholder(examples: List<String>) = "Cerca – ad es. " + examples.ifEmpty { listOf("ETF SLV", "midterm") }.joinToString(", ")
         override val showAll = "Vedi tutte"
         override val continueListening = "Continua ad ascoltare"
         override val yourTopicsTitle = "I tuoi temi"

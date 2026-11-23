@@ -20,8 +20,9 @@ class DiscoverTextsTest {
                 d.placeAdded("Washington"), d.removePlace("Washington"), d.placeNothingFound("Washington"),
                 d.removeSearch("Washington"), d.searchRemoved("Washington"), d.followCategoryHint("Washington"),
                 s.followed("Washington"), s.unfollowed("Washington"), s.emptyTitle("Washington"), s.removeRecent("Washington"),
-                s.searching("Washington"),
+                s.searching("Washington"), s.searchFor("Washington"),
             ).forEach { text -> assertTrue("$lang: $text", "Washington" in text) }
+            listOf(s.trendTermsOverline, s.headlineTermsOverline).forEach { text -> assertTrue("$lang", text.isNotBlank()) }
             assertTrue("$lang", "Englisch" in d.placeNews("Englisch", "USA") && "USA" in d.placeNews("Englisch", "USA"))
             assertTrue("$lang", d.tileDescription("Sport", "Fußball", 2).startsWith("Sport. Fußball."))
             listOf(d.title, d.follow, d.following, d.lastTopicHint, s.fieldHint, s.follow, s.following, s.offline)
