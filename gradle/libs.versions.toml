@@ -20,6 +20,7 @@ jsoup = "1.18.3"
 readability4j = "1.0.8"
 desugar = "2.1.5"
 kxml2 = "2.3.0"
+commonsCompress = "1.27.1"
 junit = "4.13.2"
 
 [libraries]
@@ -54,6 +55,7 @@ jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 readability4j = { group = "net.dankito.readability4j", name = "readability4j", version.ref = "readability4j" }
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 kxml2 = { group = "net.sf.kxml", name = "kxml2", version.ref = "kxml2" }
+commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 

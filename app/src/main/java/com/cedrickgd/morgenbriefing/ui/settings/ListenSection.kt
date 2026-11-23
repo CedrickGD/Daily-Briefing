@@ -26,7 +26,13 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.material.icons.rounded.AutoMode
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -39,6 +45,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -47,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -74,9 +82,17 @@ import com.cedrickgd.morgenbriefing.i18n.ListenStrings
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
 import com.cedrickgd.morgenbriefing.i18n.listenStrings
 import com.cedrickgd.morgenbriefing.listen
+import com.cedrickgd.morgenbriefing.container
+import com.cedrickgd.morgenbriefing.listen.GoogleVoiceHint
+import com.cedrickgd.morgenbriefing.listen.GoogleVoices
 import com.cedrickgd.morgenbriefing.listen.ListenBars
 import com.cedrickgd.morgenbriefing.listen.ListenLanguages
 import com.cedrickgd.morgenbriefing.listen.ListenVoices
+import com.cedrickgd.morgenbriefing.listen.NeuralRuntime
+import com.cedrickgd.morgenbriefing.listen.NeuralVoice
+import com.cedrickgd.morgenbriefing.listen.NeuralVoiceCatalog
+import com.cedrickgd.morgenbriefing.listen.NeuralVoiceIds
+import com.cedrickgd.morgenbriefing.listen.NeuralVoicesState
 import com.cedrickgd.morgenbriefing.listen.VoiceCatalog
 import com.cedrickgd.morgenbriefing.listen.VoiceEntry
 import com.cedrickgd.morgenbriefing.listen.VoiceGender
@@ -103,7 +119,8 @@ internal class ListenCardActions(
  * Settings section "Vorlesen": the engine (when the phone has several), the reading language
  * (automatic or fixed), the voice per language with "Probehören" – "Automatisch" first, then the
  * installed voices ("Stimme 1 · weiblich · offline"), a gender preference only where the voices
- * reveal one –, speed and pitch with a live sample, and "Weitere Stimmen installieren". Honest
+ * reveal one –, "Natürliche Stimmen" to download (only when the speech library loads), a hint to
+ * Google's engine, speed and pitch with a live sample, and "Weitere Stimmen installieren". Honest
  * notes when the phone has no (offline) voice for a language or a chosen voice is gone.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -128,6 +145,12 @@ internal fun ListenCard(settings: AppSettings, actions: ListenCardActions, modif
     val country = ListenLanguages.preferredCountry(language, settings.edition)
     val panel = remember(voices.voices, language, listen, country) { VoiceCatalog.panel(voices.voices, language, listen, country) }
     val preview: (String?, Float, Float) -> Unit = { voice, rate, pitch -> controller.preview(language, voice, rate, pitch) }
+    // Natural voices: only when the speech library loads (probed once, off the main thread).
+    val neuralReady by produceState(initialValue = false) { value = NeuralRuntime.probe() }
+    val neural = if (neuralReady) remember(context) { context.container.neuralVoices } else null
+    val neuralState = neural?.state?.collectAsStateWithLifecycle()?.value ?: NeuralVoicesState()
+    // The chosen natural voice reads only while it is on the phone; otherwise "Automatisch" does.
+    val neuralSelected = panel.neuralChosen?.takeIf { neuralReady && it in neuralState.installed }
 
     GlassCard(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -186,6 +209,7 @@ internal fun ListenCard(settings: AppSettings, actions: ListenCardActions, modif
             voices = voices,
             panel = panel,
             listen = listen,
+            neuralSelected = neuralSelected != null,
             strings = strings,
             onRetry = controller::refreshVoices,
             onInstall = { controller.openVoiceInstaller(context, language) },
@@ -194,9 +218,42 @@ internal fun ListenCard(settings: AppSettings, actions: ListenCardActions, modif
             onPreview = { voice -> preview(voice, listen.rate, listen.pitch) },
         )
 
+        val offered = remember(language) { NeuralVoiceCatalog.forLanguage(language) }
+        if (neuralReady && offered.isNotEmpty()) {
+            HorizontalDivider(Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            NeuralSection(
+                offered = offered,
+                state = neuralState,
+                selected = neuralSelected,
+                previewing = voices.previewing,
+                metered = remember { !context.container.network.isUnmetered() },
+                strings = strings,
+                onSelect = { voice -> actions.onVoice(language, NeuralVoiceIds.choice(voice.id)) },
+                onPreview = { voice -> preview(NeuralVoiceIds.choice(voice.id), listen.rate, listen.pitch) },
+                onDownload = controller::downloadNeural,
+                onCancel = controller::cancelNeural,
+                onDelete = controller::deleteNeural,
+            )
+        }
+
+        GoogleVoices.hint(voices, language)?.let { hint ->
+            Spacer(Modifier.height(14.dp))
+            GoogleHintCard(
+                hint = hint,
+                strings = strings,
+                onAction = {
+                    when (hint) {
+                        GoogleVoiceHint.INSTALL -> openGoogleTtsListing(context)
+                        // The phone's default engine is stored as "default", so it follows a change there.
+                        GoogleVoiceHint.USE -> actions.onEngine(GoogleVoices.PACKAGE.takeIf { it != voices.defaultEngine })
+                    }
+                },
+            )
+        }
+
         HorizontalDivider(Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         // The sample after a change uses the voice this language reads with.
-        val sampleVoice = panel.chosen?.voice?.name
+        val sampleVoice = neuralSelected?.let(NeuralVoiceIds::choice) ?: panel.chosen?.voice?.name
         SpeedAndPitch(
             listen = listen,
             strings = strings,
@@ -273,6 +330,7 @@ private fun VoiceSection(
     voices: ListenVoices,
     panel: VoicePanel,
     listen: ListenSettings,
+    neuralSelected: Boolean,
     strings: ListenStrings,
     onRetry: () -> Unit,
     onInstall: () -> Unit,
@@ -329,7 +387,15 @@ private fun VoiceSection(
                 }
                 Spacer(Modifier.height(8.dp))
             }
-            VoiceList(panel = panel, listen = listen, previewing = voices.previewing, strings = strings, onVoice = onVoice, onPreview = onPreview)
+            VoiceList(
+                panel = panel,
+                listen = listen,
+                neuralSelected = neuralSelected,
+                previewing = voices.previewing,
+                strings = strings,
+                onVoice = onVoice,
+                onPreview = onPreview,
+            )
             if (panel.chosenMissing) {
                 Spacer(Modifier.height(8.dp))
                 Note(strings.chosenVoiceMissing, icon = Icons.Rounded.WarningAmber, tint = StatusPalette.attention())
@@ -347,6 +413,7 @@ private fun VoiceSection(
 private fun VoiceList(
     panel: VoicePanel,
     listen: ListenSettings,
+    neuralSelected: Boolean,
     previewing: String?,
     strings: ListenStrings,
     onVoice: (String?) -> Unit,
@@ -358,7 +425,7 @@ private fun VoiceList(
         VoiceRow(
             title = strings.voiceAuto,
             subtitle = strings.voiceAutoText(panel.auto.source, autoGender, panel.autoEntry?.number),
-            selected = panel.chosen == null,
+            selected = panel.chosen == null && !neuralSelected,
             previewing = previewing == ListenVoices.AUTO_VOICE,
             previewLabel = strings.previewVoice(strings.voiceAuto),
             strings = strings,
@@ -423,6 +490,7 @@ private fun VoiceRow(
     strings: ListenStrings,
     onSelect: () -> Unit,
     onPreview: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val haptic = rememberToggleHaptics()
@@ -456,6 +524,7 @@ private fun VoiceRow(
             }
         }
         PreviewButton(previewing = previewing, label = previewLabel, playingLabel = strings.previewPlaying, onClick = onPreview)
+        trailing?.invoke()
     }
 }
 
@@ -481,6 +550,179 @@ private fun PreviewButton(previewing: Boolean, label: String, playingLabel: Stri
         }
     }
 }
+
+/**
+ * "Natürliche Stimmen" for one language: installed voices are choices of the same kind as the
+ * engine's (radio, sample, delete), the others offer their download with its size; a running
+ * download shows its progress and can be stopped. The recordings and their licence stand under
+ * each voice, the source of all of them below the list.
+ */
+@Composable
+private fun NeuralSection(
+    offered: List<NeuralVoice>,
+    state: NeuralVoicesState,
+    selected: String?,
+    previewing: String?,
+    metered: Boolean,
+    strings: ListenStrings,
+    onSelect: (NeuralVoice) -> Unit,
+    onPreview: (NeuralVoice) -> Unit,
+    onDownload: (NeuralVoice) -> Unit,
+    onCancel: (NeuralVoice) -> Unit,
+    onDelete: (NeuralVoice) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Overline(strings.neuralOverline, color = colors.primary)
+    Spacer(Modifier.height(6.dp))
+    Text(strings.neuralHint, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+    val missing = offered.any { it.id !in state.installed }
+    if (metered && missing) {
+        Spacer(Modifier.height(10.dp))
+        Note(strings.neuralMetered, icon = Icons.Rounded.WarningAmber, tint = StatusPalette.attention())
+    }
+    Spacer(Modifier.height(6.dp))
+    Column(Modifier.selectableGroup()) {
+        offered.forEach { voice ->
+            val title = strings.neuralVoiceTitle(voice.name, voice.gender)
+            val details = strings.neuralVoiceDetails(voice.dataset, voice.licence)
+            val download = state.downloads[voice.id]
+            when {
+                voice.id in state.installed -> VoiceRow(
+                    title = title,
+                    subtitle = details,
+                    selected = selected == voice.id,
+                    previewing = previewing == NeuralVoiceIds.choice(voice.id),
+                    previewLabel = strings.previewVoice(title),
+                    strings = strings,
+                    onSelect = { onSelect(voice) },
+                    onPreview = { onPreview(voice) },
+                    trailing = {
+                        IconButton(onClick = { onDelete(voice) }) {
+                            Icon(Icons.Rounded.DeleteOutline, contentDescription = strings.neuralDelete(voice.name), tint = colors.onSurfaceVariant)
+                        }
+                    },
+                )
+                download != null -> NeuralDownloadRow(title, download.unpacking, download.fraction, download.done, download.total, strings) {
+                    onCancel(voice)
+                }
+                else -> NeuralOfferRow(
+                    title = title,
+                    details = details,
+                    failed = voice.id in state.failed,
+                    action = strings.neuralDownload(megabytes(voice.bytes)),
+                    strings = strings,
+                    onDownload = { onDownload(voice) },
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(strings.neuralSource, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+}
+
+/** A voice that is not on the phone: who it is, whose recordings, and "Laden · 21 MB". */
+@Composable
+private fun NeuralOfferRow(title: String, details: String, failed: Boolean, action: String, strings: ListenStrings, onDownload: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().padding(start = 38.dp, top = 8.dp, bottom = 8.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = colors.onSurface)
+        Text(details, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        if (failed) {
+            Spacer(Modifier.height(4.dp))
+            Text(strings.neuralFailed, style = MaterialTheme.typography.bodySmall, color = StatusPalette.attention())
+        }
+        Spacer(Modifier.height(8.dp))
+        GlassPillButton(text = action, onClick = onDownload, icon = Icons.Rounded.Download, style = PillStyle.Tonal)
+    }
+}
+
+/** A voice on its way: "8 von 21 MB" with a bar, or "Wird entpackt …", and a button to stop it. */
+@Composable
+private fun NeuralDownloadRow(
+    title: String,
+    unpacking: Boolean,
+    fraction: Float,
+    done: Long,
+    total: Long,
+    strings: ListenStrings,
+    onCancel: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val status = if (unpacking) strings.neuralUnpacking else strings.neuralProgress(megabytes(done), megabytes(total))
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 38.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .semantics(mergeDescendants = true) { stateDescription = status },
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = colors.onSurface)
+            if (unpacking) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = colors.primary, trackColor = colors.primary.copy(alpha = 0.16f))
+            } else {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = colors.primary,
+                    trackColor = colors.primary.copy(alpha = 0.16f),
+                )
+            }
+            Text(status, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        }
+        IconButton(onClick = onCancel, enabled = !unpacking) {
+            Icon(Icons.Rounded.Close, contentDescription = strings.neuralCancel(title), tint = colors.onSurfaceVariant)
+        }
+    }
+}
+
+/** Points to "Google Sprachausgabe": get it from the Play Store, or read with it when it is already there. */
+@Composable
+private fun GoogleHintCard(hint: GoogleVoiceHint, strings: ListenStrings, onAction: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .lamina(RoundedCornerShape(16.dp))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.Top, modifier = Modifier.semantics(mergeDescendants = true) { }) {
+            Icon(Icons.Rounded.RecordVoiceOver, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = if (hint == GoogleVoiceHint.INSTALL) strings.googleInstallHint else strings.googleUseHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        GlassPillButton(
+            text = if (hint == GoogleVoiceHint.INSTALL) strings.googleInstallAction else strings.googleUseAction,
+            onClick = onAction,
+            icon = if (hint == GoogleVoiceHint.INSTALL) Icons.Rounded.Download else null,
+            style = PillStyle.Tonal,
+            maxLines = 2,
+        )
+    }
+}
+
+/** Opens Google's text-to-speech in the Play Store app, else on the web. */
+private fun openGoogleTtsListing(context: Context) {
+    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${GoogleVoices.PACKAGE}"))
+    val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=${GoogleVoices.PACKAGE}"))
+    listOf(market, web).firstOrNull { intent ->
+        try {
+            context.startActivity(intent)
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
+        }
+    }
+}
+
+/** Bytes as whole megabytes (10^6, as file managers show them), at least 1. */
+private fun megabytes(bytes: Long): Int = ((bytes + 500_000) / 1_000_000).toInt().coerceAtLeast(if (bytes > 0) 1 else 0)
 
 /** Speed as a big factor with a calm slider, pitch in words; both play a sample when let go. */
 @OptIn(ExperimentalMaterial3Api::class)

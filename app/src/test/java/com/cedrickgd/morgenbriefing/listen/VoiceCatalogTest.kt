@@ -164,4 +164,49 @@ class VoiceCatalogTest {
         assertEquals("eSpeak NG", TtsEngine("com.reecedunn.espeak", " eSpeak NG ").shortLabel)
         assertEquals("rhvoice", TtsEngine("com.github.olga_yakovleva.rhvoice", "").shortLabel)
     }
+
+    @Test
+    fun `within a country the best quality comes first`() {
+        val voices = listOf(
+            voice("de-de-x-aaa-local"),
+            voice("de-de-x-zzz-local", quality = VoiceInfo.QUALITY_VERY_HIGH),
+            voice("de-at-x-bbb-local", quality = VoiceInfo.QUALITY_VERY_HIGH),
+        )
+        assertEquals(
+            listOf("de-de-x-zzz-local", "de-de-x-aaa-local", "de-at-x-bbb-local"),
+            VoiceCatalog.entries(voices, "de", preferredCountry = "DE").map { it.voice.name },
+        )
+    }
+
+    @Test
+    fun `a chosen natural voice is neither an engine voice nor missing`() {
+        val settings = ListenSettings().withVoice("de", NeuralVoiceIds.choice("de_DE-thorsten-medium"))
+        val panel = VoiceCatalog.panel(german, "de", settings, preferredCountry = "DE")
+        assertEquals("de_DE-thorsten-medium", panel.neuralChosen)
+        assertNull(panel.chosen)
+        assertFalse(panel.chosenMissing)
+        assertNull(VoiceCatalog.panel(german, "de", ListenSettings(), "DE").neuralChosen)
+        // The engine itself never gets the stored natural choice.
+        assertEquals(VoiceSource.BEST_OFFLINE, VoiceChoice.resolve(german, "de", null, settings.voicePreference, "DE").source)
+    }
+
+    @Test
+    fun `the hint to Google's engine shows only where it helps`() {
+        val samsung = TtsEngine("com.samsung.SMT", "Samsung")
+        val google = TtsEngine(GoogleVoices.PACKAGE, "Speech Services by Google")
+        val plain = listOf(voice("de-DE-SMTf00", country = "DE"))
+        fun state(engines: List<TtsEngine>, engine: String, voices: List<VoiceInfo> = plain) =
+            ListenVoices(engines = engines, engine = engine, voices = voices, loaded = true)
+        assertEquals(GoogleVoiceHint.USE, GoogleVoices.hint(state(listOf(samsung, google), samsung.name), "de"))
+        assertEquals(GoogleVoiceHint.INSTALL, GoogleVoices.hint(state(listOf(samsung), samsung.name), "de"))
+        // Google already reads: nothing to say.
+        assertNull(GoogleVoices.hint(state(listOf(samsung, google), google.name), "de"))
+        // Not loaded yet: wait.
+        assertNull(GoogleVoices.hint(ListenVoices(), "de"))
+        // The engine in use already has a very high quality offline voice for the language.
+        val excellent = listOf(voice("de-DE-SMTl03", country = "DE", quality = VoiceInfo.QUALITY_VERY_HIGH))
+        assertNull(GoogleVoices.hint(state(listOf(samsung), samsung.name, excellent), "de"))
+        // ... but not for English: then the hint is back.
+        assertEquals(GoogleVoiceHint.INSTALL, GoogleVoices.hint(state(listOf(samsung), samsung.name, excellent), "en"))
+    }
 }

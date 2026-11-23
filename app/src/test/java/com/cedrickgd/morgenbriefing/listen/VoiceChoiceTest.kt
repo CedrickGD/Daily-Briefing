@@ -23,14 +23,26 @@ class VoiceChoiceTest {
     )
 
     @Test
-    fun `nothing configured picks the best offline voice, exactly as before`() {
+    fun `nothing configured picks the best offline voice, the very high quality ones first`() {
         val pick = VoiceChoice.resolve(samsung, "en", chosen = null, preference = VoicePreference.ANY, preferredCountry = "US")
         assertEquals("en-US-SMTl03", pick.voice?.name)
         assertEquals(VoiceSource.BEST_OFFLINE, pick.source)
         assertFalse(pick.chosenMissing)
-        // Equal quality: the first in the engine's order (the old maxByOrNull), not the edition's country.
+        // Equal quality: the edition's country, then the one that starts sooner, then the engine's order.
         val tie = listOf(voice("en-GB-a", "GB"), voice("en-US-b", "US"))
-        assertEquals("en-GB-a", VoiceChoice.resolve(tie, "en", null, VoicePreference.ANY, "US").voice?.name)
+        assertEquals("en-US-b", VoiceChoice.resolve(tie, "en", null, VoicePreference.ANY, "US").voice?.name)
+        assertEquals("en-GB-a", VoiceChoice.resolve(tie, "en", null, VoicePreference.ANY, null).voice?.name)
+        val slow = listOf(
+            VoiceInfo("en-US-slow", "en", "US", VoiceInfo.QUALITY_HIGH, VoiceInfo.LATENCY_HIGH),
+            VoiceInfo("en-US-quick", "en", "US", VoiceInfo.QUALITY_HIGH, VoiceInfo.LATENCY_NORMAL),
+        )
+        assertEquals("en-US-quick", VoiceChoice.resolve(slow, "en", null, VoicePreference.ANY, "US").voice?.name)
+        // A very high quality voice of another country beats a normal one of the edition's country.
+        val mixed = listOf(voice("en-US-plain", "US"), voice("en-GB-great", "GB", quality = VoiceInfo.QUALITY_VERY_HIGH))
+        assertEquals("en-GB-great", VoiceChoice.resolve(mixed, "en", null, VoicePreference.ANY, "US").voice?.name)
+        // Never a network voice, however good.
+        val online = listOf(voice("en-US-net", "US", quality = VoiceInfo.QUALITY_VERY_HIGH, network = true), voice("en-US-local", "US"))
+        assertEquals("en-US-local", VoiceChoice.resolve(online, "en", null, VoicePreference.ANY, "US").voice?.name)
     }
 
     @Test
