@@ -69,6 +69,15 @@ interface SourcesStrings {
     /** Why a source failed (also the add-feed dialog); [httpCode] when the server answered with one. */
     fun feedError(error: FeedError, httpCode: Int?): String
 
+    // Sources from beyond the edition (only German editions have newsrooms from abroad, and only
+    // they offer the English switch: the texts name German).
+    val internationalSources: String
+    val internationalSourcesOn: String
+    val internationalSourcesOff: String
+    val englishSources: String
+    val englishSourcesOn: String
+    val englishSourcesOff: String
+
     // Add a feed
     fun addFeedTitle(topic: String): String
     val addFeedIntro: String
@@ -139,6 +148,12 @@ interface SourcesStrings {
         override val edit = "Bearbeiten"
         override val ownSource = "eigene Quelle"
         override val removeSource = "Quelle entfernen"
+        override val internationalSources = "Internationale Quellen auf Deutsch"
+        override val internationalSourcesOn = "Der Standard, SRF, Euronews und weitere ergänzen Welt, Tech, Wissenschaft und Wirtschaft"
+        override val internationalSourcesOff = "Nur Redaktionen deiner Ausgabe"
+        override val englishSources = "Englischsprachige Quellen"
+        override val englishSourcesOn = "TechCrunch, The Verge, BBC und weitere, in Maßen. Nachrichten über dein Land bleiben deutsch"
+        override val englishSourcesOff = "Nur Quellen in der Sprache deiner Ausgabe"
         override val noSourceInTopic = "Dieses Thema hat noch keine Quelle."
         override fun articles(count: Int) = if (count == 1) "1 Meldung" else "$count Meldungen"
         override val googleTopStories = "Google News · Schlagzeilen"
@@ -230,6 +245,12 @@ interface SourcesStrings {
         override val edit = "Edit"
         override val ownSource = "own source"
         override val removeSource = "Remove source"
+        override val internationalSources = "International sources in German"
+        override val internationalSourcesOn = "Der Standard, SRF, Euronews and more join world, tech, science and business"
+        override val internationalSourcesOff = "Only the newsrooms of your edition"
+        override val englishSources = "English-language sources"
+        override val englishSourcesOn = "TechCrunch, The Verge, BBC and more, in moderation. News about your country stays German"
+        override val englishSourcesOff = "Only sources in your edition's language"
         override val noSourceInTopic = "This topic has no source yet."
         override fun articles(count: Int) = if (count == 1) "1 story" else "$count stories"
         override val googleTopStories = "Google News · Top stories"
@@ -321,6 +342,12 @@ interface SourcesStrings {
         override val edit = "Modifier"
         override val ownSource = "source perso"
         override val removeSource = "Supprimer la source"
+        override val internationalSources = "Sources internationales en allemand"
+        override val internationalSourcesOn = "Der Standard, SRF, Euronews et d'autres complètent monde, tech, sciences et économie"
+        override val internationalSourcesOff = "Seulement les rédactions de ton édition"
+        override val englishSources = "Sources en anglais"
+        override val englishSourcesOn = "TechCrunch, The Verge, la BBC et d'autres, avec mesure. L'actualité de ton pays reste en allemand"
+        override val englishSourcesOff = "Seulement des sources dans la langue de ton édition"
         override val noSourceInTopic = "Ce thème n'a pas encore de source."
         override fun articles(count: Int) = if (count == 1) "1 article" else "$count articles"
         override val googleTopStories = "Google News · À la une"
@@ -412,6 +439,12 @@ interface SourcesStrings {
         override val edit = "Editar"
         override val ownSource = "fuente propia"
         override val removeSource = "Quitar fuente"
+        override val internationalSources = "Fuentes internacionales en alemán"
+        override val internationalSourcesOn = "Der Standard, SRF, Euronews y otros completan mundo, tecnología, ciencia y economía"
+        override val internationalSourcesOff = "Solo las redacciones de tu edición"
+        override val englishSources = "Fuentes en inglés"
+        override val englishSourcesOn = "TechCrunch, The Verge, la BBC y otros, con medida. Las noticias de tu país siguen en alemán"
+        override val englishSourcesOff = "Solo fuentes en el idioma de tu edición"
         override val noSourceInTopic = "Este tema aún no tiene fuentes."
         override fun articles(count: Int) = if (count == 1) "1 noticia" else "$count noticias"
         override val googleTopStories = "Google News · Titulares"
@@ -503,6 +536,12 @@ interface SourcesStrings {
         override val edit = "Modifica"
         override val ownSource = "fonte personale"
         override val removeSource = "Rimuovi fonte"
+        override val internationalSources = "Fonti internazionali in tedesco"
+        override val internationalSourcesOn = "Der Standard, SRF, Euronews e altri completano mondo, tech, scienza ed economia"
+        override val internationalSourcesOff = "Solo le redazioni della tua edizione"
+        override val englishSources = "Fonti in inglese"
+        override val englishSourcesOn = "TechCrunch, The Verge, la BBC e altri, con misura. Le notizie sul tuo paese restano in tedesco"
+        override val englishSourcesOff = "Solo fonti nella lingua della tua edizione"
         override val noSourceInTopic = "Questo tema non ha ancora fonti."
         override fun articles(count: Int) = if (count == 1) "1 notizia" else "$count notizie"
         override val googleTopStories = "Google News · Notizie principali"

@@ -27,7 +27,9 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.RssFeed
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.TravelExplore
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.HorizontalDivider
@@ -52,6 +54,7 @@ import com.cedrickgd.morgenbriefing.data.model.AppSettings
 import com.cedrickgd.morgenbriefing.data.model.FeedSource
 import com.cedrickgd.morgenbriefing.data.model.SourceStatus
 import com.cedrickgd.morgenbriefing.data.model.Topic
+import com.cedrickgd.morgenbriefing.data.news.TopicSources
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
@@ -68,13 +71,18 @@ internal class SourcesActions(
     val onRemoveFeed: (sourceId: String) -> Unit,
     val onEditTopic: (Topic) -> Unit,
     val onDeleteTopic: (Topic) -> Unit,
+    /** "Internationale Quellen auf Deutsch" ([AppSettings.internationalSources]). */
+    val onInternationalSources: (Boolean) -> Unit,
+    /** "Englischsprachige Quellen" ([AppSettings.englishSources]). */
+    val onEnglishSources: (Boolean) -> Unit,
 )
 
 /**
  * Settings section "Quellen": for the current news edition, every followed topic (and the own
  * topics that are paused) with each source it reads – publisher feeds, the Google News page as
  * one understandable line ("Google News · Suche: Börse, DAX, Aktien …"), own feeds – a switch
- * per source and how its last fetch went. Own feeds can be removed, own topics edited or
+ * per source and how its last fetch went. Above the topics, where the edition can use them, the
+ * switches for newsrooms from abroad and for English feeds ([TopicSources.mixes]). Own feeds can be removed, own topics edited or
  * deleted, "Eigene Quelle" adds a feed to any topic.
  *
  * @param blocked the sites the reader cannot show (their feeds are left out with "readable only").
@@ -109,6 +117,33 @@ internal fun SourcesSection(
             modifier = Modifier.padding(vertical = 6.dp),
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
         )
+        // The two switches widen every topic below, so they sit above the topics; each only
+        // where it can add something for this edition.
+        val offers = remember(settings.edition) { TopicSources.readsAbroad(settings.edition) to TopicSources.readsEnglish(settings.edition) }
+        if (offers.first) {
+            ToggleRow(
+                title = strings.internationalSources,
+                subtitle = if (settings.internationalSources) strings.internationalSourcesOn else strings.internationalSourcesOff,
+                checked = settings.internationalSources,
+                onCheckedChange = actions.onInternationalSources,
+                leading = { IconTile(Icons.Rounded.Public) },
+            )
+        }
+        if (offers.second) {
+            ToggleRow(
+                title = strings.englishSources,
+                subtitle = if (settings.englishSources) strings.englishSourcesOn else strings.englishSourcesOff,
+                checked = settings.englishSources,
+                onCheckedChange = actions.onEnglishSources,
+                leading = { IconTile(Icons.Rounded.Translate, tint = MaterialTheme.colorScheme.secondary) },
+            )
+        }
+        if (offers.first || offers.second) {
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 6.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+            )
+        }
         groups.forEachIndexed { index, group ->
             key(group.topic.id) {
                 if (index > 0) {
