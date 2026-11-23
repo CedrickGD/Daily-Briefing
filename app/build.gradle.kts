@@ -127,6 +127,8 @@ dependencies {
     // Reader view: Mozilla's Readability (Readability4J) on jsoup
     implementation(libs.jsoup)
     implementation(libs.readability4j)
+    // Natural voices arrive as .tar.bz2 archives (Apache Commons Compress: bzip2 + tar).
+    implementation(libs.commons.compress)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

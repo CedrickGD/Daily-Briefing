@@ -22,6 +22,7 @@ import com.cedrickgd.morgenbriefing.data.news.RssParser
 import com.cedrickgd.morgenbriefing.data.remote.GoogleNewsDecoder
 import com.cedrickgd.morgenbriefing.data.remote.OpenMeteoClient
 import com.cedrickgd.morgenbriefing.data.remote.RssClient
+import com.cedrickgd.morgenbriefing.listen.NeuralVoices
 import com.cedrickgd.morgenbriefing.location.LocationFinder
 import com.cedrickgd.morgenbriefing.perf.BackgroundWork
 import com.cedrickgd.morgenbriefing.perf.Performance
@@ -115,6 +116,18 @@ class AppContainer(context: Context) {
         File(storeDir, "read-history.json"), json, CoroutineScope(SupervisorJob() + Dispatchers.IO),
         resolved = googleNewsDecoder::peek,
     )
+
+    /**
+     * "Natürliche Stimmen" downloaded in the settings (`files/neural-voices`, about 20 MB each).
+     * Downloads get no overall time limit: a voice on a slow line takes minutes.
+     */
+    val neuralVoices: NeuralVoices by lazy {
+        NeuralVoices(
+            File(app.filesDir, "neural-voices"),
+            http.newBuilder().callTimeout(0, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build(),
+            CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        )
+    }
 }
 
 val Context.container: AppContainer
