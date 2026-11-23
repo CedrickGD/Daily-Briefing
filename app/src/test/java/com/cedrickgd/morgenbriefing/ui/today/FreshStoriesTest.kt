@@ -115,4 +115,22 @@ class FreshStoriesTest {
         assertEquals("12 neue Meldungen", FeedStrings.of(AppLanguage.DE).newStories(12))
         assertEquals("1 neue Meldung", FeedStrings.of(AppLanguage.DE).newStories(1))
     }
+
+    @Test
+    fun `a fresh round is announced once`() {
+        val round = FreshRound(3, setOf("a"), byUser = true)
+        // Not handled yet: the page announces it.
+        assertEquals(round, freshToHandle(round, NO_ROUND))
+        // Back from the reader the page is rebuilt with the round it handled: no second jump to the top.
+        assertEquals(null, freshToHandle(round, handled = 3))
+        assertEquals(null, freshToHandle(null, NO_ROUND))
+        // The next refresh is a new round.
+        assertEquals(4, freshToHandle(round.copy(round = 4), handled = 3)?.round)
+
+        // The view model forgets a round the page is done with, never a newer one.
+        val state = TodayUiState(now = now, fresh = round)
+        assertEquals(null, state.consumed(3).fresh)
+        assertEquals(round, state.consumed(2).fresh)
+        assertEquals(null, TodayUiState(now = now).consumed(3).fresh)
+    }
 }

@@ -265,4 +265,16 @@ class FeedLogicTest {
         // The headline ends inside a word of the teaser: no clean cut, the teaser stays whole.
         assertEquals("Midterms-Wahl entschieden: die Demokraten jubeln", cardTeaser("Midterms", "Midterms-Wahl entschieden: die Demokraten jubeln"))
     }
+
+    @Test
+    fun `story keys follow the story, not its position`() {
+        val before = StoryKeys("foryou-s0-welt").let { keys -> listOf("a", "b", "c").mapIndexed { i, id -> keys.next(i, id) } }
+        // A story above went away: the others keep their keys (the list does not jump).
+        val after = StoryKeys("foryou-s0-welt").let { keys -> listOf("b", "c").mapIndexed { i, id -> keys.next(i, id) } }
+        assertEquals(before.drop(1), after)
+        assertEquals("b", entryItemId(after.first()))
+        // The same story twice still gets two keys.
+        val twice = StoryKeys("latest").let { keys -> listOf("a", "a").mapIndexed { i, id -> keys.next(i, id) } }
+        assertEquals(2, twice.toSet().size)
+    }
 }

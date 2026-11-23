@@ -176,7 +176,7 @@ internal fun <T> appendOnly(sorted: List<T>, shown: List<String>, id: (T) -> Str
  * What the endless lists listed at the last build, per list (a topic's id, [TIMELINE_LIST]): the
  * ids in order – the candidates, verified or not. The next build goes on from it ([appendOnly]),
  * as long as the list still comes from the same fetch ([stamps]): a refresh brings new stories
- * for the top and sorts the list afresh.
+ * for the top and sorts the list afresh – but only a refresh the list may adopt ([stampFor]).
  */
 @Immutable
 internal class FeedOrder(
@@ -185,6 +185,19 @@ internal class FeedOrder(
 ) {
     /** What [list] listed, in order – nothing when it was listed from another fetch than [stamp]. */
     fun of(list: String, stamp: String): List<String> = if (stamps[list] == stamp) ids[list].orEmpty() else emptyList()
+
+    /**
+     * The fetch [list] is built from now. [stamp] (the fetch the repository holds) when the list
+     * was never built, was listed from it already, or [adopt] says the list may take it (a refresh
+     * the screen made itself); else the fetch it was listed from last. Another screen refreshed the
+     * topic (the search, "Entdecken", the morning notification): the list keeps its order, and
+     * what that fetch brought follows the stories on screen ([appendOnly]) until the screen's own
+     * next refresh sorts it afresh.
+     */
+    fun stampFor(list: String, stamp: String, adopt: Boolean): String {
+        val previous = stamps[list] ?: return stamp
+        return if (previous == stamp || adopt) stamp else previous
+    }
 
     /** Collects the order of the lists of one build. */
     class Builder {

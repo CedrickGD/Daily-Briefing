@@ -37,6 +37,16 @@ object SearchView {
     /** With this many results still being verified the list does not ask for more pages yet. */
     const val MAX_CHECKING_BEFORE_MORE = 12
 
+    /** What the result list shows: a query in an order ([sort]: a [SearchSort] name). */
+    fun listingKey(query: String, sort: String): String = "$sort\u0000$query"
+
+    /**
+     * Whether the list goes to the top for [listing]: a new query or another order does, the one
+     * the list started at the top for already ([started], kept with the screen state) does not –
+     * coming back from an article keeps the reader's place.
+     */
+    fun startsAtTop(listing: String, started: String?): Boolean = listing != started
+
     /** [items] in [sort]: as ranked, or newest first (undated last, otherwise as ranked). */
     fun ordered(items: List<NewsItem>, sort: SearchSort): List<NewsItem> = when (sort) {
         SearchSort.RELEVANCE -> items

@@ -27,12 +27,21 @@ internal const val FRESH_VERIFY_CAP = 24
 /**
  * What one refresh brought ([TodayUiState.fresh]): the new story ids, and whether the user asked
  * for it (pull-to-refresh: the page always answers, also "Keine neuen Meldungen") or it ran by
- * itself on start or return (the page speaks up only when something new is shown).
+ * itself on start (the page speaks up only when something new is shown).
  *
  * @property round counts the refreshes, so the same result twice is announced twice.
  */
 @Immutable
 data class FreshRound(val round: Int, val ids: Set<String>, val byUser: Boolean)
+
+/** No fresh round handled yet (rounds count from 1). */
+internal const val NO_ROUND = 0
+
+/**
+ * The round the page still has to announce: [round], unless it is the one it [handled] already
+ * (the page was rebuilt, e.g. back from the reader). Each round goes to the top once.
+ */
+internal fun freshToHandle(round: FreshRound?, handled: Int): FreshRound? = round?.takeIf { it.round != handled }
 
 /** Every story id the repository holds for [topics]. */
 internal fun storyIds(topics: Map<String, TopicNews>): Set<String> =

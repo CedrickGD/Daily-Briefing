@@ -379,4 +379,48 @@ class FeedTimelineTest {
         )
         assertEquals(listOf("a1"), storiesOnce(agency).articles.map { it.item.id })
     }
+
+    @Test
+    fun `a refresh another screen made keeps the order, the screen's own sorts afresh`() {
+        val prefs = prefs("welt")
+        val own = now.toOffsetDateTime().toString()
+        val first = buildFeed(topic(), prefs, now, adopted = mapOf("welt" to own))
+        val shown = ids(first.feed)
+        val top = first.feed.sections.single().top.map { it.id }
+
+        // The search (or "Entdecken", the morning notification) fetched the topic again: x0 is the newest story.
+        val later = now.plusMinutes(20)
+        val foreign = topic(item("x0", "welt", 0), fetched = later)
+        val kept = buildFeed(foreign, prefs, now, order = first.order, adopted = mapOf("welt" to own))
+        // Nothing moves: the cards on screen stay, the new story follows them.
+        assertEquals(shown + "x0", ids(kept.feed))
+        assertEquals(top, kept.feed.sections.single().top.map { it.id })
+        assertEquals("x0", kept.feed.timeline.last().item.id)
+        // And it stays so for the builds after it (a verdict, the reading history).
+        val again = buildFeed(foreign, prefs, now, order = kept.order, adopted = mapOf("welt" to own))
+        assertEquals(shown + "x0", ids(again.feed))
+
+        // The screen's own refresh takes the fetch: sorted afresh, the newest story on top.
+        val adopted = mapOf("welt" to later.toOffsetDateTime().toString())
+        val refreshed = buildFeed(foreign, prefs, now, order = again.order, adopted = adopted)
+        assertEquals("x0", ids(refreshed.feed).first())
+        assertEquals("x0", refreshed.feed.timeline.first().item.id)
+
+        // Paging still appends while a foreign fetch is held back.
+        val paged = buildFeed(topic(item("x0", "welt", 0), item("p300", "welt", 300, "page"), fetched = later), prefs, now, order = kept.order, adopted = mapOf("welt" to own))
+        assertEquals(shown + listOf("x0", "p300"), ids(paged.feed))
+    }
+
+    @Test
+    fun `a list takes a new fetch only when it may`() {
+        val order = FeedOrder.Builder().apply { put("welt", "07:00", listOf("a", "b")) }.build()
+        // Never built: whatever the repository holds.
+        assertEquals("07:30", order.stampFor("sport", "07:30", adopt = false))
+        // Same fetch, or one the screen made itself.
+        assertEquals("07:00", order.stampFor("welt", "07:00", adopt = false))
+        assertEquals("07:30", order.stampFor("welt", "07:30", adopt = true))
+        // Another screen's fetch: the list goes on from the one it was listed from.
+        assertEquals("07:00", order.stampFor("welt", "07:30", adopt = false))
+        assertEquals(listOf("a", "b"), order.of("welt", order.stampFor("welt", "07:30", adopt = false)))
+    }
 }

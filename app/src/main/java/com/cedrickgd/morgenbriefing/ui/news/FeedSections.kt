@@ -218,6 +218,8 @@ internal fun LazyListScope.forYouItems(
 ) {
     sections.forEach { section ->
         val sectionKey = "$keyPrefix-s${section.index}-${section.id}"
+        // Keyed by story, not by position: when a card above changes, the ones below keep their place.
+        val keys = StoryKeys(sectionKey)
         for (row in sectionRows(section, verifyOffline)) {
             when (row.kind) {
                 SectionRowKind.HEADER -> item(key = "$sectionKey-header", contentType = "card-header") {
@@ -231,7 +233,7 @@ internal fun LazyListScope.forYouItems(
 
                 SectionRowKind.STORY -> {
                     val story = row.item ?: continue
-                    item(key = entryKey(sectionKey, row.storyIndex, story.key), contentType = "story-${row.style}") {
+                    item(key = keys.next(row.storyIndex, story.key), contentType = "story-${row.style}") {
                         val article = remember(story, section.topic) { FeedArticle(story, section.topic) }
                         CardPiece(row.part, Modifier.animateItem().padding(horizontal = FeedGutter)) {
                             StoryCardItem(
@@ -301,12 +303,10 @@ internal fun LazyListScope.storyListItems(
     leadFirst: Boolean,
 ) {
     val count = articles.size
-    val keyed = HashSet<String>(count)
+    val keys = StoryKeys(keyPrefix, count)
     articles.forEachIndexed { index, article ->
         val style = listStoryStyle(index, leadFirst)
-        // A story is in a list once; should one ever come twice, its position keeps the key unique.
-        val key = entryKey(keyPrefix, if (keyed.add(article.feedKey)) 0 else index, article.feedKey)
-        item(key = key, contentType = "story-$style") {
+        item(key = keys.next(index, article.feedKey), contentType = "story-$style") {
             CardPiece(cardPart(index, count), Modifier.animateItem().padding(horizontal = FeedGutter)) {
                 StoryCardItem(
                     article = article,

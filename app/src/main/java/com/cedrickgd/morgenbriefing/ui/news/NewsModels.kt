@@ -232,6 +232,9 @@ data class NewsFeed(
  * @param reads the stories the reading history leaves out: hidden ones always, read ones with
  *   [FeedPrefs.hideRead] ([ReadFilter]). They keep their place in [order], so a story shown again
  *   (unhidden, marked unread) comes back where it was.
+ * @param adopted per topic, the fetch ([TopicNews.fetchedAt]) of the screen's own last refresh:
+ *   only that one sorts the topic's lists afresh; a fetch another screen made keeps the order
+ *   ([FeedOrder.stampFor]). Null: every new fetch sorts afresh.
  */
 internal fun buildNewsFeed(
     news: Map<String, TopicNews>,
@@ -243,7 +246,8 @@ internal fun buildNewsFeed(
     order: FeedOrder = FeedOrder.NONE,
     released: Set<String> = emptySet(),
     reads: ReadFilter = ReadFilter.NONE,
-): NewsFeed = buildFeed(news, prefs, now, hides, verification, open, order, released, reads).feed
+    adopted: Map<String, String>? = null,
+): NewsFeed = buildFeed(news, prefs, now, hides, verification, open, order, released, reads, adopted).feed
 
 /** A built feed and the order its endless lists have now – what the next build goes on from. */
 internal class BuiltFeed(val feed: NewsFeed, val order: FeedOrder)
@@ -259,6 +263,7 @@ internal fun buildFeed(
     order: FeedOrder = FeedOrder.NONE,
     released: Set<String> = emptySet(),
     reads: ReadFilter = ReadFilter.NONE,
+    adopted: Map<String, String>? = null,
 ): BuiltFeed {
     val reference = now.toInstant()
     // The history's stories leave the lists after their order is taken (a story shown again keeps its place).
@@ -272,6 +277,8 @@ internal fun buildFeed(
     val everything = ArrayList<Pair<Topic, List<NewsItem>>>(prefs.topics.size)
     val depths = LinkedHashMap<String, Instant>()
     val listed = FeedOrder.Builder()
+    // The fetch each topic's lists are built from ([FeedOrder.stampFor]); the timeline follows them.
+    val stamps = HashMap<String, String>()
     val sections = prefs.topics.mapIndexed { index, topic ->
         val topicNews = news[topic.id]
         val held = shortItems(
@@ -282,7 +289,9 @@ internal fun buildFeed(
         val depth = if (topic.id in open) pagedDepth(topicNews?.items.orEmpty(), reference) else null
         if (depth != null) depths[topic.id] = depth
         // The topic's own list: as far back as the topic has been read, in the order it had before.
-        val stamp = topicNews?.fetchedAt.orEmpty()
+        val fetched = topicNews?.fetchedAt.orEmpty()
+        val stamp = order.stampFor(topic.id, fetched, adopt = adopted == null || adopted[topic.id] == fetched)
+        stamps[topic.id] = stamp
         val before = order.of(topic.id, stamp)
         val reached = if (depth == null || topic.id in released) held else readSoFar(held, depth, floor, before)
         val ordered = appendOnly(reached, before, NewsItem::id)
@@ -320,7 +329,7 @@ internal fun buildFeed(
     val latestCandidates = latestOf(fresh)
     val latest = verifiedList(latestCandidates, LATEST_LIST, verify) { it.item.id }
     // The timeline of all topics: every story once, in the order it had before.
-    val stamp = sections.joinToString("|") { "${it.id}@${it.fetchedAt.orEmpty()}" }
+    val stamp = sections.joinToString("|") { "${it.id}@${stamps[it.id].orEmpty()}" }
     val before = order.of(TIMELINE_LIST, stamp)
     val stories = timelineStories(everything, horizon = depths.values.maxOrNull(), floor = floor, shown = before)
     val timelineOrder = appendOnly(stories.articles, before) { it.item.id }

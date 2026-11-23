@@ -108,4 +108,16 @@ class SearchViewTest {
         assertEquals("de", ui.editionLanguage)
         assertFalse(buildSearchUi(AppSettings(edition = NewsEdition.USA), AppLanguage.EN, ready(), emptyMap(), null, false, emptyMap()).offerLanguages)
     }
+
+    @Test
+    fun `the results go to the top once per query and order`() {
+        val listing = SearchView.listingKey("SLV ETF", SearchSort.RELEVANCE.name)
+        // A new query (or none before): to the top.
+        assertTrue(SearchView.startsAtTop(listing, null))
+        assertTrue(SearchView.startsAtTop(listing, SearchView.listingKey("Gold", SearchSort.RELEVANCE.name)))
+        // Another order of the same query: to the top.
+        assertTrue(SearchView.startsAtTop(SearchView.listingKey("SLV ETF", SearchSort.NEWEST.name), listing))
+        // Back from an article: the same listing, the list stays where it was.
+        assertFalse(SearchView.startsAtTop(listing, listing))
+    }
 }

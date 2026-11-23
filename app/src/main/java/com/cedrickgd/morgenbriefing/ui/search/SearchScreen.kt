@@ -223,8 +223,15 @@ fun SearchScreen(
     }
 
     val results = state.results
-    // A new query, or another order, starts at the top.
-    LaunchedEffect(results.query, state.options.sort) { if (listState.firstVisibleItemIndex > 0) listState.scrollToItem(0) }
+    // A new query, or another order, starts at the top – once: coming back from an article
+    // rebuilds the screen, and the list must stay where the reader left it.
+    val listing = SearchView.listingKey(results.query, state.options.sort.name)
+    var listed by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(listing) {
+        if (!SearchView.startsAtTop(listing, listed)) return@LaunchedEffect
+        listed = listing
+        if (listState.firstVisibleItemIndex > 0) listState.scrollToItem(0)
+    }
     // Scrolling the results by hand puts the keyboard away.
     val hideKeyboardOnDrag = remember(keyboard) {
         object : NestedScrollConnection {

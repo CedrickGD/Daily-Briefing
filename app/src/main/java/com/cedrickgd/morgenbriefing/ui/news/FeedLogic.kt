@@ -164,6 +164,17 @@ private const val ENTRY_KEY_PREFIX = "entry|"
  */
 internal fun entryKey(prefix: String, index: Int, itemId: String): String = "$ENTRY_KEY_PREFIX$prefix|$index|$itemId"
 
+/**
+ * The keys of one list's stories: by story ([entryKey] with slot 0), not by position, so a story
+ * keeps its key when cards above it come or go. A story is in a list once; should one ever come
+ * twice, its position ([next]'s index, never 0 for a second one) keeps the key unique.
+ */
+internal class StoryKeys(private val prefix: String, expected: Int = 16) {
+    private val seen = HashSet<String>(expected * 2)
+
+    fun next(index: Int, id: String): String = entryKey(prefix, if (seen.add(id)) 0 else index, id)
+}
+
 /** The article id inside a key made by [entryKey]; null for every other list item. */
 internal fun entryItemId(key: Any?): String? {
     val text = key as? String ?: return null

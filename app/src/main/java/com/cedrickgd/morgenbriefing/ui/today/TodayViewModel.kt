@@ -2,9 +2,11 @@ package com.cedrickgd.morgenbriefing.ui.today
 
 import android.util.Log
 import androidx.compose.runtime.Immutable
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -66,9 +68,11 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -114,10 +118,16 @@ data class TodayUiState(
     val verifyOffline: Boolean = false,
     /** The compact weather card is expanded (remembered across launches). */
     val weatherExpanded: Boolean = false,
-    /** What the last refresh brought ([FreshRound]): checked first, shown at the top, announced. */
+    /**
+     * What the last refresh brought ([FreshRound]): checked first, shown at the top, announced –
+     * once: the page hands it back when it is done with it ([consumed]).
+     */
     val fresh: FreshRound? = null,
 ) {
     val today: LocalDate get() = now.toLocalDate()
+
+    /** This state without the fresh round [round] (the page announced it); a newer round stays. */
+    fun consumed(round: Int): TodayUiState = if (fresh?.round == round) copy(fresh = null) else this
     val newsLoading: Boolean get() = loadingTopics.isNotEmpty()
 
     /** Whether [topicId]'s list can still bring older articles. */
@@ -126,9 +136,13 @@ data class TodayUiState(
 
 /**
  * Today: shows cached weather and the cached feed instantly, then refreshes both in parallel.
- * Weather is refreshed again on resume once it is older than 10 minutes, the news once they
- * are older than 15 minutes — and whenever the sources of a followed topic change in the
- * settings. The weather texts follow the interface language. Also drives following topics and
+ * The news load by themselves only on a cold start (topics older than 15 minutes) or when
+ * nothing is cached – never when the process comes back after Android stopped it, never on a
+ * return to the screen ([Reload]) – and whenever the sources of a followed topic change in the
+ * settings; otherwise only by hand (pull-to-refresh, "Erneut versuchen"). The weather is
+ * refreshed again on resume once it is older than 10 minutes: it does not move the list.
+ * Refreshes other screens make (search, "Entdecken", the morning notification) never reorder
+ * the open feed ([adopted]). The weather texts follow the interface language. Also drives following topics and
  * hiding sources from the feed, the endless lists ([loadMore] for a topic, [loadOlder] for the
  * timeline of all topics), warming the articles on screen ([prefetch]) and looking up the covers
  * of stories without a picture ([covers]).
@@ -141,6 +155,7 @@ data class TodayUiState(
 class TodayViewModel(
     private val container: AppContainer,
     private val clock: () -> ZonedDateTime = { ZonedDateTime.now(BERLIN) },
+    private val saved: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(TodayUiState(now = clock()))
@@ -180,11 +195,24 @@ class TodayViewModel(
     private var weatherJob: Job? = null
     private var newsJob: Job? = null
     private var lastWeatherAttempt: Instant? = null
-    private var lastNewsAttempt: Instant? = null
     private var weatherToggled = false
     private val loadMoreJobs = HashMap<String, Job>()
     private var olderJob: Job? = null
-    private var freshRounds = 0
+
+    /**
+     * Numbers the fresh rounds. Kept in the saved state: the page remembers the last round it
+     * announced across a restored process, so a new round must never reuse that number.
+     */
+    private var freshRounds: Int = saved[KEY_FRESH_ROUNDS] ?: 0
+
+    /**
+     * Per topic, the fetch of this screen's own last refresh: only that one sorts the lists
+     * afresh ([FeedOrder.stampFor]). What other screens fetch is appended, nothing moves.
+     */
+    private val adopted = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /** The [adopted] map the last finished build used (a refresh waits for it before announcing). */
+    private val builtWith = MutableStateFlow<Map<String, String>?>(null)
 
     /**
      * Topics the timeline no longer waits for: their older pages failed twice while other topics
@@ -208,6 +236,9 @@ class TodayViewModel(
     private val prefetchSession = PrefetchSession()
 
     init {
+        // Set in the saved state: present again only when Android restores a stopped process.
+        val restored = saved.get<Boolean>(KEY_STARTED) == true
+        saved[KEY_STARTED] = true
         viewModelScope.launch { showCachedWeather() }
         refreshWeather()
         observeFeed()
@@ -220,7 +251,8 @@ class TodayViewModel(
             attempt { container.news.warm() }.onFailure { Log.w(TAG, "News cache unavailable", it) }
             snapshotHides()
             reads.await()
-            refreshNews(force = false, announce = Announce.QUIET)
+            val cached = container.news.state.value.topics.values.any { it.items.isNotEmpty() }
+            if (Reload.atStart(restored = restored, cached = cached).news) refreshNews(force = false, announce = Announce.QUIET)
         }
         observeInputs()
         observeLanguage()
@@ -261,7 +293,11 @@ class TodayViewModel(
         }
     }
 
-    /** Called on every resume of the screen (also after a notification tap). */
+    /**
+     * Called on every resume of the screen (back from the reader, from the background, after a
+     * notification tap): the weather may refresh, the news never ([Reload.onResume]), so the list
+     * stays where the reader left it.
+     */
     fun onResume() {
         val now = clock()
         _state.update { it.copy(now = now) }
@@ -270,15 +306,19 @@ class TodayViewModel(
 
         val weatherStale = current.weather == null ||
             isOlderThan(current.weather.snapshot.fetchedAt, instant, WEATHER_MAX_AGE)
-        if (weatherStale && !isWithin(lastWeatherAttempt, instant, WEATHER_MAX_AGE)) refreshWeather()
-
-        // Back after a while: what arrived goes to the top, and the page says so (when there is something).
-        if (!isWithin(lastNewsAttempt, instant, NEWS_RETRY_AFTER)) refreshNews(force = false, announce = Announce.QUIET)
+        val reload = Reload.onResume(weatherStale = weatherStale, weatherTriedLately = isWithin(lastWeatherAttempt, instant, WEATHER_MAX_AGE))
+        if (reload.weather) refreshWeather()
+        if (reload.news) refreshNews(force = false, announce = Announce.QUIET)
 
         // Leaving the screen cancelled the warm-ups of the articles on screen; the list does not
         // ask again for the same articles, so the last window is sent once more.
         sendPrefetch(prefetchSession.resume())
         sendCovers(coverWindow)
+    }
+
+    /** The page announced the fresh round [round] (or let it go): it is not announced again. */
+    fun consumeFresh(round: Int) {
+        _state.update { it.consumed(round) }
     }
 
     /**
@@ -546,7 +586,6 @@ class TodayViewModel(
     private fun refreshNews(force: Boolean, topicIds: Collection<String>? = null, announce: Announce = Announce.NONE): Job {
         val running = newsJob?.takeIf { it.isActive }
         if (!force && running != null) return running
-        lastNewsAttempt = clock().toInstant()
         return viewModelScope.launch {
             // A forced refresh (changed sources, pull-to-refresh) waits for a running one: the
             // repository skips topics that are mid-fetch, and that fetch still uses the old settings.
@@ -571,6 +610,7 @@ class TodayViewModel(
                 .onFailure { Log.w(TAG, "News refresh failed", it) }
                 .getOrNull() ?: return@launch
             ensureActive()
+            adopt(wanted)
             snapshotHides()
             snapshotReads()
             if (announce != Announce.NONE) {
@@ -594,9 +634,23 @@ class TodayViewModel(
         }.also { newsJob = it }
     }
 
+    /**
+     * Lets the lists of [topicIds] take the fetch this refresh brought: they sort afresh, newest
+     * on top. Waits (briefly) for that build, so the page announces what it already shows.
+     */
+    private suspend fun adopt(topicIds: Collection<String>) {
+        val topics = container.news.state.value.topics
+        val stamps = topicIds.mapNotNull { id -> topics[id]?.fetchedAt?.let { id to it } }
+        if (stamps.isEmpty()) return
+        val next = adopted.updateAndGet { it + stamps }
+        withTimeoutOrNull(ADOPT_WAIT_MS) { builtWith.first { it == next } }
+    }
+
     /** Hands the page what a refresh brought: checked first, shown at the top, announced. */
     private fun announceFresh(ids: Set<String>, byUser: Boolean) {
-        _state.update { it.copy(fresh = FreshRound(++freshRounds, ids, byUser)) }
+        val round = ++freshRounds
+        saved[KEY_FRESH_ROUNDS] = round
+        _state.update { it.copy(fresh = FreshRound(round, ids, byUser)) }
     }
 
     /**
@@ -660,7 +714,7 @@ class TodayViewModel(
             .distinctUntilChanged()
             .flowOn(Dispatchers.Default)
         val reads = combine(hidden, readAtBuild) { h, r -> ReadFilter(h, r) }.distinctUntilChanged()
-        val filters = combine(hides, reads) { h, r -> h to r }
+        val filters = combine(hides, reads, adopted) { h, r, a -> Triple(h, r, a) }
         viewModelScope.launch {
             var kept = emptyMap<String, Set<String>>()
             var built: Triple<Any?, FeedPrefs?, ReadabilityHides?>? = null
@@ -669,7 +723,7 @@ class TodayViewModel(
             val stalled = _state.map { it.stalled }.distinctUntilChanged()
             val newsAndPaging = combine(container.news.state, skipped, stalled) { news, skip, stall -> Triple(news, skip, stall) }
             combine(newsAndPaging, prefs, filters, verdicts, container.prefetcher.waitingForNetwork) { n, p, f, v, off ->
-                FeedInputs(n.first, p.first, p.second, f.first, v, off, n.second, n.third, f.second)
+                FeedInputs(n.first, p.first, p.second, f.first, v, off, n.second, n.third, f.second, f.third)
             }.collectLatest { inputs ->
                 val news = inputs.news
                 val feedPrefs = inputs.prefs
@@ -684,7 +738,7 @@ class TodayViewModel(
                 val verification = Verification(feedPrefs.readableOnly, inputs.verdicts, kept, long)
                 val open = feedPrefs.pageable - news.endReached - inputs.skipped
                 val result = withContext(Dispatchers.Default) {
-                    buildFeed(news.topics, feedPrefs, clock(), inputs.hides, verification, open, order, inputs.stalled, inputs.reads)
+                    buildFeed(news.topics, feedPrefs, clock(), inputs.hides, verification, open, order, inputs.stalled, inputs.reads, inputs.adopted)
                 }
                 val feed = result.feed
                 order = result.order
@@ -701,6 +755,7 @@ class TodayViewModel(
                         verifyOffline = feedPrefs.readableOnly && inputs.offline,
                     )
                 }
+                builtWith.value = inputs.adopted
             }
         }
     }
@@ -718,6 +773,8 @@ class TodayViewModel(
         val stalled: Set<String>,
         /** What the reading history leaves out. */
         val reads: ReadFilter,
+        /** The fetches the lists may sort afresh from ([adopted]). */
+        val adopted: Map<String, String>,
     )
 
     /**
@@ -778,7 +835,13 @@ class TodayViewModel(
         private const val STOP_TIMEOUT_MS = 5_000L
         private val WEATHER_MAX_AGE: Duration = Duration.ofMinutes(10)
         private val NEWS_MAX_AGE: Duration = Duration.ofMinutes(15)
-        private val NEWS_RETRY_AFTER: Duration = Duration.ofMinutes(3)
+
+        /** How long a refresh waits for the lists to sort afresh before it announces anyway. */
+        private const val ADOPT_WAIT_MS = 2_000L
+
+        /** Saved state: the screen started in this task already (absent on a cold start). */
+        private const val KEY_STARTED = "today.started"
+        private const val KEY_FRESH_ROUNDS = "today.freshRounds"
 
         /** Calls in a row that may find only quiet days before a topic's search counts as stuck. */
         private const val MAX_EMPTY_ROUNDS = 8
@@ -808,7 +871,7 @@ class TodayViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as MorgenbriefingApp
-                TodayViewModel(container = app.container)
+                TodayViewModel(container = app.container, saved = createSavedStateHandle())
             }
         }
     }

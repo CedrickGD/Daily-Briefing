@@ -273,6 +273,7 @@ fun TodayScreen(
         onUnhide = viewModel::unhide,
         onSetRead = viewModel::setRead,
         onViewChanged = viewModel::onViewChanged,
+        onFreshHandled = viewModel::consumeFresh,
     )
 
     TodayContent(
@@ -322,6 +323,8 @@ private class TodayCallbacks(
     val onSetRead: (NewsItem, Boolean) -> Unit,
     /** Another view was chosen: it is built anew (read stories leave it with "Gelesene Artikel ausblenden"). */
     val onViewChanged: () -> Unit,
+    /** The page is done with a fresh round (announced or let go): it is not announced again. */
+    val onFreshHandled: (Int) -> Unit,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -534,21 +537,34 @@ private fun TodayContent(
     // After a refresh: the new stories stand at the top (the lists are sorted afresh, newest first).
     // Once their checks are done – or after a while – the page goes to the top and says how many
     // arrived; a pull-to-refresh is always answered, a refresh on its own only when there is news.
+    // Each round once: coming back from the reader rebuilds this content, and the round must not
+    // send the reader to the top a second time. The saved number survives that; the view model
+    // forgets the round once the page is done with it.
     var freshNote by remember { mutableStateOf<FreshNote?>(null) }
     val latestFeed by rememberUpdatedState(feed)
     val latestSelected by rememberUpdatedState(selected)
+    var handledRound by rememberSaveable { mutableIntStateOf(NO_ROUND) }
     val round = state.fresh
     LaunchedEffect(round?.round) {
-        val fresh = round ?: return@LaunchedEffect
-        withTimeoutOrNull(FRESH_WAIT_MS) {
-            snapshotFlow { latestFeed?.let { freshWaiting(it, fresh.ids).isEmpty() } ?: false }.first { it }
+        val fresh = freshToHandle(round, handledRound) ?: return@LaunchedEffect
+        handledRound = fresh.round
+        try {
+            withTimeoutOrNull(FRESH_WAIT_MS) {
+                snapshotFlow { latestFeed?.let { freshWaiting(it, fresh.ids).isEmpty() } ?: false }.first { it }
+            }
+            val shown = latestFeed?.let { freshShown(latestSelected, it, fresh.ids) } ?: 0
+            if (shown == 0 && !fresh.byUser) return@LaunchedEffect
+            if (shown > 0 && (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)) {
+                if (reduceMotion) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+            }
+            freshNote = if (shown > 0) FreshNote(strings.newStories(shown), arrived = true) else FreshNote(strings.noNewStories, arrived = false)
+        } finally {
+            currentCallbacks.onFreshHandled(fresh.round)
         }
-        val shown = latestFeed?.let { freshShown(latestSelected, it, fresh.ids) } ?: 0
-        if (shown == 0 && !fresh.byUser) return@LaunchedEffect
-        if (shown > 0 && (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)) {
-            if (reduceMotion) listState.scrollToItem(0) else listState.animateScrollToItem(0)
-        }
-        freshNote = if (shown > 0) FreshNote(strings.newStories(shown), arrived = true) else FreshNote(strings.noNewStories, arrived = false)
+    }
+    // The note stays a moment on its own: handing the round back ends the effect above.
+    LaunchedEffect(freshNote) {
+        if (freshNote == null) return@LaunchedEffect
         delay(FRESH_NOTE_MS)
         freshNote = null
     }
