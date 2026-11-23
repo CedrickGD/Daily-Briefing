@@ -136,8 +136,9 @@ dem Entwurf, den der Besitzer gewählt hat):
   Wetterblock in den Einstellungen an ist. Auf/zu bleibt über App-Starts erhalten.
   **Warnungen** stehen immer sichtbar unter der Karte (getönte Glas-Banner), auch zugeklappt.
 * **Feed-Leiste** unter dem Wetter: ein Suchfeld (sieht aus wie ein Feld, ist ein Knopf und
-  öffnet die Suche: „Suchen – z. B. SLV-ETF, Midterms“), rechts daneben ein runder Glasknopf mit
-  Verlaufs-Uhr (**„Gelesen & ausgeblendet“**, gleiche Höhe und Rundung wie das Feld), und darunter die Tabs **„Für dich“ ·
+  öffnet die Suche: „Suchen – z. B. SLV-ETF, Midterms“), rechts daneben zwei Glasknöpfe in Höhe und
+  Rundung des Felds: die Verlaufs-Uhr (**„Gelesen & ausgeblendet“**) und der Stern (**„Favoriten“**),
+  und darunter die Tabs **„Für dich“ ·
   „Neueste“ · je ein Tab pro gefolgtem Thema** (mit Icon; aktiver Tab gefüllt in Themen- bzw.
   Akzentfarbe) und am Ende ein runder **„＋“**. Die Tabs scrollen waagerecht und laufen rechts weich
   aus. Erreicht die Leiste den oberen Rand, **pinnt** sie dort: Die Glasfläche oben – beim
@@ -220,8 +221,13 @@ Icon-Kachel und Folgen-Knopf. Darunter „Lokal“ (Orte) und „Deine Suchen“
 oder Perplexity: **ein** Bild **randlos** unter der Statusleiste, darunter die Zeit, die
 Serif-Überschrift, der Teaser und der Text – keine Quelle, kein zweites Bild. Der Text nutzt die
 Breite: Kopf, Absätze und Ausklang stehen **16 dp** vom Rand, die „nicht lesbar“-Karte **10 dp**,
-die schwebenden Glas-Knöpfe (je 48 dp) **10 dp**: links Zurück, rechts **„A“** (Darstellung),
-**Zuhören** und **⋮** (Teilen, Link kopieren, Im Browser öffnen – im Stil des ⋮-Menüs der Karten).
+die schwebenden Glas-Knöpfe (je 48 dp) **10 dp**: links Zurück, rechts **„Aa“** (Darstellung),
+der **Stern** (Favoriten; gemerkt: gefüllt in Akzentfarbe), **Zuhören** (liest, was sichtbar ist)
+und **⋮** (Teilen, Link kopieren, Im Browser öffnen – im Stil des ⋮-Menüs der Karten).
+**Kurzfassung:** Ein langer Artikel (über ~350 Wörter) öffnet mit seinem Anfang, ganze Absätze bis
+~220 Wörter, höchstens ~300; ein riesiger erster Absatz wird am Satzende geschnitten. Darunter die
+Pill **„Ganzen Artikel lesen · noch X Min.“** an der Stelle des Ausklangs; ein Tipp hängt den Rest
+darunter an, ohne dass der Text springt.
 Die Knöpfe sind eine Stufe dunkler (hell) bzw. heller (dunkel) als die Seite getönt
 (`surfaceContainerHighest`), damit sie auf der weißen Seite, auf der Leiste und über jedem Foto
 sichtbar sind. Über dem Bild schweben sie allein; sobald der Text sie erreicht, liegt hinter ihnen
@@ -265,6 +271,13 @@ Browser öffnen, „Wieder einblenden“, „Als ungelesen markieren“ – beid
 öffnet den Leser, auch wenn der Feed die Meldung längst nicht mehr hat. Oben rechts „Verlauf
 löschen“ mit Rückfrage. Leer: ein Verlaufs-Symbol in weichem Akzentschein und eine Zeile, was hier
 landet. Erreichbar über den Knopf neben dem Suchfeld auf „Heute“ und Einstellungen → Feed & Lesen.
+
+**Favoriten** – gebaut aus denselben Teilen wie „Gelesen & ausgeblendet“: Overline „DEINE
+SAMMLUNG“, Serif-Titel, eine Glaskarte mit dem Stern-Zähler, das Suchfeld und die Geschichten nach
+dem Tag, an dem sie den Stern bekamen (ohne Marke). ⋮: Teilen, Link kopieren, Im Browser öffnen,
+„Aus Favoriten entfernen“ mit „Rückgängig“. Nichts wird von selbst gelöscht. Leer: ein Stern und
+eine Zeile, wie eine Geschichte hierher kommt. Den Stern setzt man im ⋮ jeder Karte oder in der
+Leiste des Lesers.
 
 **Suche** – Glas-Suchfeld oben, letzte Suchen als Chips, „Gerade wichtig“, Ergebnisse als
 große redaktionelle Einträge ohne Kartenrahmen (Bild in voller Breite, Serif-Headline, Lead mit

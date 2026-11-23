@@ -221,7 +221,7 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
 | `data/model` | `Topic`, `TopicIcon`, `FeedSource`, `NewsItem`, `TopicNews`, `NewsEdition`, `Topics` (Fassade), Wetter, `AppSettings`, `ReaderSettings` |
 | `data/news` | `Taxonomy` (Kategorien + Unterthemen), `TopicSources` (Quellen eines Themas), `GoogleNews` (URLs, Suchbegriffe, Ausschlüsse, Zeitfenster, Kursseiten), `CountryQuery` (wie Nachrichten ein Land in einer Sprache nennen), `SearchQuery` (Suchanfrage verstehen, ganze Wörter), `SearchRanking` (Relevanz der Treffer), `FeedCatalog` + `Regions`, `RssParser`, `RssDates`, `HtmlText` |
 | `data/remote` | `OpenMeteoClient`, `RssClient` (Feeds lesen, Feed hinter einer Website finden), `GoogleNewsDecoder` (Google-News-Link → Artikel-URL) |
-| `data/local` | `WeatherStore`, `NewsCache` (JSON-Dateien, atomar geschrieben), `ReadHistoryStore` + `ReadHistory`/`StoryIndex`/`HistoryEntry` (gelesen & ausgeblendet) |
+| `data/local` | `WeatherStore`, `NewsCache` (JSON-Dateien, atomar geschrieben), `ReadHistoryStore` + `ReadHistory`/`StoryIndex`/`HistoryEntry` (gelesen & ausgeblendet), `FavoritesStore` + `Favorites` (Stern, `store/favorites.json`, nie gekürzt) |
 | `data` | `SettingsRepository` (DataStore) + `SettingsOps` (folgen, sortieren, Orte, Suchen) + `SettingsMigration`, `WeatherRepository`, `NewsRepository` |
 | `data/article` | `ArticleExtractor`, `ArticleCleaner`, `PageSignals` (Bezahlschranke/Cookie-Wand), `ArticleCompleteness` (vollständig oder Anriss), `ArticleRepository`, `ReadabilityStore` (`store/readability.json`, Startliste `KnownWalls`), `ArticlePrefetcher` + `NetworkMeter` + `VerdictStore` (`store/verdicts.json`), `CoverResolver` + `CoverLookup` + `CoverStore` (`store/covers.json`: Titelbilder für Meldungen ohne Bild), `LinkResolver`, `SessionCookies`. Prüfung gegen echte Seiten: `ArticleLiveEvaluation` (`MB_LIVE=1`) |
 | `domain` | `Condition`, `WeatherInsights`, `ClothingAdvisor` (Headline, Kleidung, Warnungen, Notification-Text in jeder Sprache), `Fmt` |
@@ -238,9 +238,10 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
 | `ui/settings` | Einstellungen: Status, Sprache & Region (App-Sprache, Nachrichten-Region, Nachrichten-Sprache: `EditionLogic`, `LanguageRegion`), lokale Nachrichten, Wecker, Deine Themen (sortieren, eigene), Quellen, Feed & Lesen, Vorlesen (`ListenSection`), Darstellung, Orte, Wetterblöcke, App/Updates |
 | `ui/onboarding` | Erster Start: App-Sprache, Nachrichten (Region und Sprache getrennt), Benachrichtigungen, Ort |
 | `ui/theme` | Theme, Akzent-Schemata, Typografie, `Reading` (Serif-Lesestile) |
-| `ui/history` | „Gelesen & ausgeblendet“: `HistoryScreen` + `HistoryViewModel`, `HistoryLogic` (Suche, Filter, Tage – rein, getestet) |
+| `ui/history` | „Gelesen & ausgeblendet“: `HistoryScreen` + `HistoryViewModel`, `HistoryLogic` (Suche, Filter, Tage – rein, getestet); die Bausteine (`ArchiveRow`, `ArchiveSearchField`, `DayHeading`, `EmptyNote`) nutzt auch `ui/favorites` |
+| `ui/favorites` | „Favoriten“: `FavoritesScreen` + `FavoritesViewModel` (`favoriteDays`: Suche und Tage des Sterns) |
 | `ui/nav` | `MainRoute` (der Pager), `ArticleRoute`, `DiscoverRoute`, `SearchRoute`, `HistoryRoute` (darüber geschoben) |
-| `ui/article` | `ArticleScreen` + `ArticleViewModel`: der Lesemodus (ein Bild, Zeit, Überschrift, Teaser, Textblöcke; Leiste Zurück · „A“ · Zuhören · ⋮ mit Teilen, Link kopieren, Browser als Ausweg; eigene Zustände für Bezahlschranke, Cookie-Wand und Sperre), `ReaderAppearanceSheet` („Darstellung“), `ReaderType` (`ReaderMetrics`, Textstile je Darstellung) |
+| `ui/article` | `ArticleScreen` + `ArticleViewModel`: der Lesemodus (ein Bild, Zeit, Überschrift, Teaser, Textblöcke; Leiste Zurück · „Aa“ · Stern · Zuhören · ⋮ mit Teilen, Link kopieren, Browser als Ausweg; eigene Zustände für Bezahlschranke, Cookie-Wand und Sperre), `ReaderAppearanceSheet` („Darstellung“), `ReaderType` (`ReaderMetrics`, Textstile je Darstellung), `ArticleShort` (`shorten`: die Kurzfassung langer Artikel; Extractor, Cache und Prefetcher behalten den Volltext) |
 
 Kein DI-Framework: `AppContainer` (ein Objekt pro Prozess) wird über `context.container`
 erreicht, Vorlesen über `context.listen`. ViewModels über `viewModelFactory { initializer { … } }`.
