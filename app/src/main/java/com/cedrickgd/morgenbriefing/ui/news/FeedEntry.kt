@@ -41,6 +41,8 @@ import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -84,6 +86,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cedrickgd.morgenbriefing.data.model.ArticleImage
+import com.cedrickgd.morgenbriefing.data.local.Favorites
 import com.cedrickgd.morgenbriefing.data.local.ReadHistory
 import com.cedrickgd.morgenbriefing.data.model.ArticleStatus
 import com.cedrickgd.morgenbriefing.data.model.NewsItem
@@ -92,6 +95,7 @@ import com.cedrickgd.morgenbriefing.domain.ItemEdition
 import com.cedrickgd.morgenbriefing.i18n.FeedStrings
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
+import com.cedrickgd.morgenbriefing.i18n.favoritesStrings
 import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.ui.components.motionDisabled
 import com.cedrickgd.morgenbriefing.ui.components.rememberLoopPhase
@@ -138,13 +142,15 @@ class FeedActions(
     val onHide: ((FeedArticle) -> Unit)? = null,
     /** Marks the story read (true) or unread (⋮ → "Als gelesen / ungelesen markieren"); null: not offered. */
     val onSetRead: ((FeedArticle, Boolean) -> Unit)? = null,
+    /** Stars the story (true) or takes its star off (⋮ → "Zu Favoriten hinzufügen" / "Aus Favoriten entfernen"); null: not offered. */
+    val onSetStarred: ((FeedArticle, Boolean) -> Unit)? = null,
 )
 
 /**
  * What the app learned about the articles on screen: the picture of articles that came without
  * one (Google News) – the lead picture the prefetcher read, else the cover looked up ahead of
  * the list ([com.cedrickgd.morgenbriefing.data.article.CoverResolver]) – whether the reader
- * can show them, and whether the user read them already ([history]). Entries read single values
+ * can show them, whether the user read them already ([history]) and starred them ([favorites]). Entries read single values
  * through `derivedStateOf`, so one new status recomposes only its own card.
  */
 @Stable
@@ -153,6 +159,7 @@ class FeedHints(
     private val statuses: State<Map<String, ArticleStatus>>,
     private val covers: State<Map<String, String>> = NO_COVERS,
     private val history: State<ReadHistory> = NO_HISTORY,
+    private val favorites: State<Favorites> = NO_FAVORITES,
 ) {
     /** The article's picture found by the prefetcher or the cover lookup, if any. */
     fun heroImage(itemId: String): String? = images.value[itemId] ?: covers.value[itemId]
@@ -162,10 +169,14 @@ class FeedHints(
     /** True when the user read [item]'s story (opened, listened to, marked) – also from another feed. */
     fun isRead(item: NewsItem): Boolean = history.value.isRead(item)
 
+    /** True when the user starred [item]'s story – also under another link. */
+    fun isStarred(item: NewsItem): Boolean = favorites.value.isStarred(item)
+
     companion object {
         // Declared before [None]: companion fields initialise in order, and None's default reads them.
         private val NO_COVERS: State<Map<String, String>> = mutableStateOf(emptyMap())
         private val NO_HISTORY: State<ReadHistory> = mutableStateOf(ReadHistory.EMPTY)
+        private val NO_FAVORITES: State<Favorites> = mutableStateOf(Favorites.EMPTY)
 
         /** Nothing known (previews, screens without a prefetcher). */
         val None = FeedHints(mutableStateOf(emptyMap()), mutableStateOf(emptyMap()))
@@ -279,6 +290,7 @@ fun FeedEntry(
             listening = listening,
             paused = paused,
             read = read,
+            hints = hints,
             actions = actions,
             // The buttons at its end keep reaching the picture's edge.
             modifier = Modifier.padding(start = CardInset, top = 4.dp),
@@ -409,6 +421,7 @@ private fun FeedMetaRow(
     listening: Boolean,
     paused: Boolean,
     read: Boolean,
+    hints: FeedHints,
     actions: FeedActions,
     modifier: Modifier = Modifier,
 ) {
@@ -449,7 +462,7 @@ private fun FeedMetaRow(
         IconButton(onClick = { actions.onShare(article) }) {
             Icon(Icons.Rounded.Share, contentDescription = commonStrings().share, tint = colors.onSurfaceVariant)
         }
-        FeedMenu(article = article, read = read, actions = actions)
+        FeedMenu(article = article, read = read, starred = { hints.isStarred(article.item) }, actions = actions)
     }
 }
 
@@ -527,11 +540,12 @@ private fun Equalizer(color: Color, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun FeedMenu(article: FeedArticle, read: Boolean, actions: FeedActions) {
+private fun FeedMenu(article: FeedArticle, read: Boolean, starred: () -> Boolean, actions: FeedActions) {
     var open by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     val strings = feedStrings()
     val common = commonStrings()
+    val favorites = favoritesStrings()
     val source = article.item.source.ifBlank { publisherHost(article.item) }.ifBlank { hostOf(article.item.url) }
     Box {
         IconButton(onClick = { open = true }) {
@@ -548,6 +562,14 @@ private fun FeedMenu(article: FeedArticle, read: Boolean, actions: FeedActions) 
             MenuItem(strings.readArticle, Icons.AutoMirrored.Rounded.Article) { open = false; actions.onOpen(article) }
             MenuItem(common.openInBrowser, Icons.AutoMirrored.Rounded.OpenInNew) { open = false; actions.onOpenExternal(article) }
             MenuItem(common.copyLink, Icons.Rounded.ContentCopy) { open = false; actions.onCopyLink(article) }
+            actions.onSetStarred?.let { setStarred ->
+                // Read when the menu opens: one card's menu, not every card, follows the favorites.
+                if (starred()) {
+                    MenuItem(favorites.removeFavorite, Icons.Rounded.Star, tint = colors.primary) { open = false; setStarred(article, false) }
+                } else {
+                    MenuItem(favorites.addFavorite, Icons.Rounded.StarBorder) { open = false; setStarred(article, true) }
+                }
+            }
             actions.onSetRead?.let { setRead ->
                 if (read) {
                     MenuItem(strings.markUnread, Icons.Rounded.Restore) { open = false; setRead(article, false) }

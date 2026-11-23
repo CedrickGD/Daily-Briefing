@@ -33,6 +33,8 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -63,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import com.cedrickgd.morgenbriefing.i18n.favoritesStrings
 import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.ui.components.pressScale
 import com.cedrickgd.morgenbriefing.ui.glass.GlassLevel
@@ -77,8 +80,8 @@ private val SearchFieldShape = RoundedCornerShape(16.dp)
 
 /**
  * The feed bar of "Heute" (docs/DESIGN.md §7): a search field – a button that looks like one and
- * opens the search screen – with a round history button beside it ("Gelesen & ausgeblendet",
- * [onHistory]), and the tabs "Für dich", "Neueste", one per followed topic (with its icon) and a
+ * opens the search screen – with two round buttons beside it, "Gelesen & ausgeblendet"
+ * ([onHistory]) and "Favoriten" ([onFavorites]), and the tabs "Für dich", "Neueste", one per followed topic (with its icon) and a
  * round "＋" at the end that opens "Deine Themen". It sits in the page below the weather and pins
  * to the top once it reaches it (the page's top glass then carries it).
  *
@@ -95,15 +98,21 @@ fun FeedBar(
     onManageTopics: () -> Unit,
     modifier: Modifier = Modifier,
     onHistory: (() -> Unit)? = null,
+    onFavorites: (() -> Unit)? = null,
     rowState: LazyListState = rememberLazyListState(),
     onGlass: Boolean = false,
 ) {
+    val strings = feedStrings()
     Column(modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp)) {
         Row(Modifier.padding(horizontal = FeedGutter), verticalAlignment = Alignment.CenterVertically) {
             SearchFieldButton(onClick = onSearch, onGlass = onGlass, modifier = Modifier.weight(1f))
             if (onHistory != null) {
                 Spacer(Modifier.width(8.dp))
-                HistoryButton(onClick = onHistory, onGlass = onGlass)
+                BarButton(Icons.Rounded.History, label = strings.openHistory, onClick = onHistory, onGlass = onGlass)
+            }
+            if (onFavorites != null) {
+                Spacer(Modifier.width(8.dp))
+                BarButton(Icons.Rounded.StarBorder, label = favoritesStrings().openFavorites, onClick = onFavorites, onGlass = onGlass)
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -152,10 +161,12 @@ private fun SearchFieldButton(onClick: () -> Unit, onGlass: Boolean, modifier: M
     }
 }
 
-/** The round button beside the search field: opens "Gelesen & ausgeblendet", the read and hidden stories. */
+/**
+ * A button beside the search field, as high as the field and with its corners: "Gelesen &
+ * ausgeblendet" (the read and hidden stories) or "Favoriten" (the starred ones).
+ */
 @Composable
-private fun HistoryButton(onClick: () -> Unit, onGlass: Boolean) {
-    val strings = feedStrings()
+private fun BarButton(icon: ImageVector, label: String, onClick: () -> Unit, onGlass: Boolean) {
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
@@ -166,13 +177,13 @@ private fun HistoryButton(onClick: () -> Unit, onGlass: Boolean) {
                 interactionSource = interaction,
                 indication = ripple(),
                 role = Role.Button,
-                onClickLabel = strings.openHistory,
+                onClickLabel = label,
                 onClick = onClick,
             )
-            .semantics { contentDescription = strings.openHistory },
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Rounded.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
     }
 }
 

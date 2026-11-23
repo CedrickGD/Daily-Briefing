@@ -10,6 +10,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -17,10 +18,14 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cedrickgd.morgenbriefing.MorgenbriefingApp
+import com.cedrickgd.morgenbriefing.data.local.Favorites
+import com.cedrickgd.morgenbriefing.data.local.FavoritesStore
 import com.cedrickgd.morgenbriefing.data.local.ReadHistoryStore
 import com.cedrickgd.morgenbriefing.data.model.Topic
+import com.cedrickgd.morgenbriefing.i18n.favoritesStrings
 import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.listen.ListenController
+import com.cedrickgd.morgenbriefing.util.attempt
 import com.cedrickgd.morgenbriefing.util.rememberLinkActions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -70,7 +75,7 @@ internal fun rememberListeningKey(listen: ListenController?): State<NowListening
 /**
  * [FeedActions] for a screen: opening (in-app reader or browser), sharing, listening and copying
  * are handled here – an article opened in the browser counts as read (the reader and "Zuhören"
- * note their own); following, unfollowing, hiding a source or a story and marking it read are
+ * note their own) – and so is the star (⋮ → "Zu Favoriten hinzufügen", confirmed by [onMessage]); following, unfollowing, hiding a source or a story and marking it read are
  * the screen's. Null callbacks hide those menu items.
  *
  * @param onMessage shows a short message (snackbar), e.g. "Link kopiert".
@@ -94,9 +99,11 @@ internal fun rememberFeedActions(
     val context = LocalContext.current
     val links = rememberLinkActions()
     val history = rememberReadHistoryStore()
+    val favorites = rememberFavoritesStore()
     val listen = rememberListenController()
     val strings = feedStrings()
     val currentStrings by rememberUpdatedState(strings)
+    val favoriteStrings by rememberUpdatedState(favoritesStrings())
     val message by rememberUpdatedState(onMessage)
     val hideSource by rememberUpdatedState(onHideSource)
     val openArticle by rememberUpdatedState(onOpenArticle)
@@ -112,7 +119,7 @@ internal fun rememberFeedActions(
     val canFollow = onFollowTopic != null
     val canHide = onHide != null
     val canMarkRead = onSetRead != null
-    return remember(context, links, listen, history, canHideSource, readsInApp, canUnfollow, canFollow, canHide, canMarkRead) {
+    return remember(context, links, listen, history, favorites, canHideSource, readsInApp, canUnfollow, canFollow, canHide, canMarkRead) {
         FeedActions(
             onOpen = { article ->
                 openArticle?.invoke(article) ?: run {
@@ -156,8 +163,35 @@ internal fun rememberFeedActions(
             canUnfollowTopic = { topic -> mayUnfollow(topic) },
             onHide = if (canHide) { article -> hide?.invoke(article) } else null,
             onSetRead = if (canMarkRead) { article, read -> setRead?.invoke(article, read) } else null,
+            onSetStarred = favorites?.let { store ->
+                { article, starred ->
+                    store.setStarred(article.item, starred)
+                    message(if (starred) favoriteStrings.added else favoriteStrings.removed)
+                }
+            },
         )
     }
+}
+
+/** The app's favorites, or null in previews (no MorgenbriefingApp there). */
+@Composable
+internal fun rememberFavoritesStore(): FavoritesStore? {
+    val context = LocalContext.current
+    return remember(context) { (context.applicationContext as? MorgenbriefingApp)?.container?.favorites }
+}
+
+/**
+ * The starred stories, for [FeedHints]: read from disk once (off the main thread), then every
+ * change. Empty in previews.
+ */
+@Composable
+fun rememberFavorites(): State<Favorites> {
+    val store = rememberFavoritesStore()
+    LaunchedEffect(store) {
+        attempt { store?.warm() }.onFailure { Log.w(TAG, "Favorites unavailable", it) }
+    }
+    val flow = remember(store) { store?.state ?: flowOf(Favorites.EMPTY) }
+    return flow.collectAsStateWithLifecycle(initialValue = store?.state?.value ?: Favorites.EMPTY)
 }
 
 /** The app's reading history, or null in previews (no MorgenbriefingApp there). */

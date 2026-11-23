@@ -34,6 +34,8 @@ import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -71,6 +73,7 @@ import com.cedrickgd.morgenbriefing.domain.ItemEdition
 import com.cedrickgd.morgenbriefing.i18n.FeedStrings
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
+import com.cedrickgd.morgenbriefing.i18n.favoritesStrings
 import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.ui.components.entrance
 import com.cedrickgd.morgenbriefing.ui.components.pressScale
@@ -256,6 +259,7 @@ internal fun StoryCardItem(
             read = read,
             menuOpen = menuOpen,
             onMenu = { menuOpen = it },
+            hints = hints,
             actions = actions,
             menuShift = menuShift,
         )
@@ -377,6 +381,7 @@ private fun StoryMetaRow(
     read: Boolean,
     menuOpen: Boolean,
     onMenu: (Boolean) -> Unit,
+    hints: FeedHints,
     actions: FeedActions,
     menuShift: Dp,
 ) {
@@ -422,6 +427,7 @@ private fun StoryMetaRow(
                 listening = listening,
                 paused = paused,
                 read = read,
+                starred = { hints.isStarred(article.item) },
                 onDismiss = { onMenu(false) },
                 actions = actions,
             )
@@ -461,8 +467,8 @@ private fun BadgeMark(badge: CardBadge, strings: FeedStrings) {
 
 /**
  * The ⋮ menu of a story ([storyMenu]): Zuhören (or Weiter / Beenden while it is loaded in the
- * player), Teilen, Link kopieren, Im Browser öffnen, then following or unfollowing a topic and
- * hiding the source where they apply.
+ * player), Teilen, Link kopieren, Im Browser öffnen, then starring it ([starred]: read while the
+ * menu is open), following or unfollowing a topic and hiding the source where they apply.
  */
 @Composable
 private fun StoryMenu(
@@ -471,12 +477,14 @@ private fun StoryMenu(
     listening: Boolean,
     paused: Boolean,
     read: Boolean,
+    starred: () -> Boolean,
     onDismiss: () -> Unit,
     actions: FeedActions,
 ) {
     val colors = MaterialTheme.colorScheme
     val strings = feedStrings()
     val common = commonStrings()
+    val favorites = favoritesStrings()
     DropdownMenu(
         expanded = open,
         onDismissRequest = onDismiss,
@@ -486,7 +494,9 @@ private fun StoryMenu(
         shadowElevation = 12.dp,
     ) {
         val source = storySource(article.item)
-        val items = remember(article, listening, paused, read, actions, source) {
+        // Read while the menu is open: one card's menu, not every card, follows the favorites.
+        val isStarred = starred()
+        val items = remember(article, listening, paused, read, isStarred, actions, source) {
             storyMenu(
                 article = article,
                 listening = listening,
@@ -497,6 +507,7 @@ private fun StoryMenu(
                 sourceName = source,
                 read = if (actions.onSetRead != null) read else null,
                 canHide = actions.onHide != null,
+                starred = if (actions.onSetStarred != null) isStarred else null,
             )
         }
         for (entry in items) {
@@ -507,6 +518,8 @@ private fun StoryMenu(
                 StoryAction.SHARE -> common.share to Icons.Rounded.Share
                 StoryAction.COPY_LINK -> common.copyLink to Icons.Rounded.ContentCopy
                 StoryAction.OPEN_IN_BROWSER -> common.openInBrowser to Icons.AutoMirrored.Rounded.OpenInNew
+                StoryAction.STAR -> favorites.addFavorite to Icons.Rounded.StarBorder
+                StoryAction.UNSTAR -> favorites.removeFavorite to Icons.Rounded.Star
                 StoryAction.MARK_READ -> strings.markRead to Icons.Rounded.Visibility
                 StoryAction.MARK_UNREAD -> strings.markUnread to Icons.Rounded.Restore
                 StoryAction.HIDE -> strings.hideStory to Icons.Rounded.VisibilityOff
@@ -515,7 +528,7 @@ private fun StoryMenu(
                 StoryAction.HIDE_SOURCE -> strings.hideSource(source) to Icons.AutoMirrored.Rounded.VolumeOff
             }
             val accent = entry.action == StoryAction.FOLLOW_TOPIC || entry.action == StoryAction.STOP_LISTENING ||
-                entry.action == StoryAction.RESUME_LISTENING
+                entry.action == StoryAction.RESUME_LISTENING || entry.action == StoryAction.UNSTAR
             StoryMenuEntry(label, icon, tint = if (accent) colors.primary else colors.onSurfaceVariant) {
                 onDismiss()
                 runStoryAction(entry, article, actions)
@@ -532,6 +545,8 @@ private fun runStoryAction(entry: StoryMenuItem, article: FeedArticle, actions: 
         StoryAction.SHARE -> actions.onShare(article)
         StoryAction.COPY_LINK -> actions.onCopyLink(article)
         StoryAction.OPEN_IN_BROWSER -> actions.onOpenExternal(article)
+        StoryAction.STAR -> actions.onSetStarred?.invoke(article, true)
+        StoryAction.UNSTAR -> actions.onSetStarred?.invoke(article, false)
         StoryAction.MARK_READ -> actions.onSetRead?.invoke(article, true)
         StoryAction.MARK_UNREAD -> actions.onSetRead?.invoke(article, false)
         StoryAction.HIDE -> actions.onHide?.invoke(article)

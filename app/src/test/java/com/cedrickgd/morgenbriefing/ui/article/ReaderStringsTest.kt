@@ -8,6 +8,7 @@ import com.cedrickgd.morgenbriefing.data.model.ReaderSpacing
 import com.cedrickgd.morgenbriefing.i18n.AppLanguage
 import com.cedrickgd.morgenbriefing.i18n.ReaderStrings
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -77,5 +78,17 @@ class ReaderStringsTest {
             "Der Link führt über Google News, und Google News ist gerade nicht erreichbar. Bist du online?",
             ReaderStrings.of(AppLanguage.DE).failureReason(ReadOutcome.NETWORK, "CNN", null, "Google News"),
         )
+    }
+
+    @Test
+    fun `read full names the minutes that are left, in every language`() {
+        for (lang in AppLanguage.entries) {
+            val text = ReaderStrings.of(lang).readFull(4)
+            assertTrue("$lang $text", text.contains("4"))
+            assertFalse("$lang", 0x2014.toChar() in text)
+        }
+        assertEquals("Ganzen Artikel lesen · noch 4 Min.", ReaderStrings.of(AppLanguage.DE).readFull(4))
+        val texts = AppLanguage.entries.map { ReaderStrings.of(it).readFull(2) }
+        assertEquals(texts.size, texts.toSet().size)
     }
 }

@@ -42,6 +42,7 @@ import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Cookie
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GppBad
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.LinkOff
@@ -51,6 +52,8 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -98,6 +101,7 @@ import com.cedrickgd.morgenbriefing.domain.ItemEdition
 import com.cedrickgd.morgenbriefing.i18n.FeedStrings
 import com.cedrickgd.morgenbriefing.i18n.LocalAppLanguage
 import com.cedrickgd.morgenbriefing.i18n.commonStrings
+import com.cedrickgd.morgenbriefing.i18n.favoritesStrings
 import com.cedrickgd.morgenbriefing.i18n.feedStrings
 import com.cedrickgd.morgenbriefing.i18n.readerStrings
 import com.cedrickgd.morgenbriefing.listen
@@ -126,7 +130,7 @@ private val TextGutter = 16.dp
 /** The failure panel reaches closer to the edge than the text (the card edge); the picture is edge to edge. */
 private val ImageGutter = 10.dp
 
-/** The floating controls (back, "A", listen, ⋮) sit this far from the edge. */
+/** The floating controls (back, "Aa", star, listen, ⋮) sit this far from the edge. */
 private val ControlsGutter = 10.dp
 
 /** Height of the controls' row under the status bar; the bar behind them is status bar + this. */
@@ -143,8 +147,10 @@ private val ControlsBarCorner = 24.dp
  * article's text on a calm, opaque surface — no ads, no cookie banners, no navigation, no source
  * lines, and one picture: the card's (or the page's lead picture) edge-to-edge under the status
  * bar. Then the time, the headline in serif, the teaser and the text, in the size, font and line
- * spacing of "Darstellung". Floating glass controls: back, "A" (the sheet "Darstellung"),
- * "Zuhören" (reads the full text) and ⋮ (share, copy the link, "Im Browser öffnen" – the way out
+ * spacing of "Darstellung". A long article opens with its beginning ([shorten]) and "Ganzen
+ * Artikel lesen · noch X Min." below it. Floating glass controls: back, "Aa" (the sheet
+ * "Darstellung"), the star ("Favoriten"), "Zuhören" (reads what is shown: the short version, or
+ * the whole article once opened) and ⋮ (share, copy the link, "Im Browser öffnen" – the way out
  * when a page cannot be read). Over the picture they float alone; once the text reaches them, a
  * frosted bar behind them takes the status bar and the controls' row, so the text never runs
  * under the clock or the buttons.
@@ -181,7 +187,8 @@ fun ArticleScreen(
     ) {
         val heroHeight = minOf(statusTop + maxWidth * 0.72f, maxHeight * 0.5f)
         val listState = rememberLazyListState()
-        val content = state.content
+        // The short version of a long article, or all of it once "Ganzen Artikel lesen" was tapped.
+        val content = state.shown
         // The picture has scrolled up to the controls: from here on, text passes beneath them.
         val barAfterPx = with(LocalDensity.current) { (heroHeight - statusTop - ControlsBarHeight - ControlsBarLead).toPx() }
         val textUnderControls by remember(listState, barAfterPx) {
@@ -205,10 +212,16 @@ fun ArticleScreen(
                 content != null -> {
                     item(key = "head") { Head(state, type) }
                     // The text only: ArticleCleaner.arrange took every picture and caption out (the one picture is on top).
+                    // The short version is a prefix of the whole text, block by block: opening the
+                    // rest only adds items below (same keys above), so what is read stays put.
                     itemsIndexed(content.blocks, key = { index, _ -> "block$index" }, contentType = { _, block -> block.type }) { _, block ->
                         BlockView(block, type)
                     }
-                    item(key = "end") { EndNote(state, onOpenExternal = openExternal) }
+                    if (state.canExpand) {
+                        item(key = "more") { ReadFull(minutes = state.restMinutes, onClick = viewModel::expand) }
+                    } else {
+                        item(key = "end") { EndNote(state, onOpenExternal = openExternal) }
+                    }
                 }
 
                 state.loading -> {
@@ -235,12 +248,14 @@ fun ArticleScreen(
             back = { ReaderControl(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = common.back, onClick = onBack) },
         ) {
             AppearanceControl(contentDescription = reader.appearance, onClick = { appearanceOpen = true })
+            StarControl(starred = state.starred, onClick = viewModel::toggleStar)
             val speakingThis = listeningThis && listenState.speaking
             ReaderControl(
                 icon = if (speakingThis) Icons.Rounded.Pause else Icons.Rounded.Headphones,
                 contentDescription = if (speakingThis) reader.pauseListening else reader.listen,
                 onClick = {
-                    if (listeningThis) listen.pauseOrResume() else listen.play(state.item, state.content?.text)
+                    // Reads what is shown: the short version, or the whole article once opened.
+                    if (listeningThis) listen.pauseOrResume() else listen.play(state.item, state.shown?.text)
                 },
             )
             ReaderOverflow(
@@ -409,6 +424,24 @@ private fun AppearanceControl(contentDescription: String, onClick: () -> Unit) {
     }
 }
 
+/**
+ * ☆ in the reader's bar: stars the story ("Favoriten") or takes its star off; filled in the accent
+ * colour while starred. Its label says what a tap does.
+ */
+@Composable
+private fun StarControl(starred: Boolean, onClick: () -> Unit) {
+    val strings = favoritesStrings()
+    GlassIconButton(
+        icon = if (starred) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+        contentDescription = if (starred) strings.removeFavorite else strings.addFavorite,
+        onClick = onClick,
+        level = GlassLevel.Regular,
+        tint = if (starred) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        container = MaterialTheme.colorScheme.surfaceContainerHighest,
+        floating = true,
+    )
+}
+
 @Composable
 private fun Hero(state: ArticleUiState, height: Dp, showImage: Boolean) {
     val item = state.item
@@ -544,6 +577,17 @@ private fun EndNote(state: ArticleUiState, onOpenExternal: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
         GlassPillButton(text = commonStrings().openInBrowser, icon = Icons.AutoMirrored.Rounded.OpenInNew, onClick = onOpenExternal)
+    }
+}
+
+/**
+ * Under the short version of a long article: "Ganzen Artikel lesen · noch X Min." as a pill, in
+ * the place and style of the end note. A tap shows the rest below.
+ */
+@Composable
+private fun ReadFull(minutes: Int, onClick: () -> Unit) {
+    Column(Modifier.padding(start = TextGutter, end = TextGutter, top = 20.dp)) {
+        GlassPillButton(text = readerStrings().readFull(minutes), icon = Icons.Rounded.ExpandMore, onClick = onClick)
     }
 }
 

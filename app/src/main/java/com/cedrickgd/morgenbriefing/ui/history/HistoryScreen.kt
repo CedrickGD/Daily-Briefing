@@ -207,13 +207,14 @@ fun HistoryScreen(
             }
             if (!state.isEmpty) {
                 item(key = "search", contentType = "search") {
-                    HistorySearchField(
+                    ArchiveSearchField(
                         value = query,
                         onValueChange = {
                             query = it
                             viewModel.setQuery(it)
                         },
-                        strings = strings,
+                        placeholder = strings.searchPlaceholder,
+                        clearLabel = strings.clearSearch,
                         modifier = Modifier.padding(bottom = 10.dp),
                     )
                 }
@@ -296,8 +297,9 @@ private class HistoryRowActions(
     val onMarkUnread: (HistoryEntry) -> Unit,
 )
 
+/** True once the page title has gone under the pushed bar (the bar turns solid and shows it). */
 @Composable
-private fun rememberSolidBar(listState: LazyListState): Boolean {
+internal fun rememberSolidBar(listState: LazyListState): Boolean {
     val thresholdPx = with(LocalDensity.current) { SolidBarAfter.toPx() }
     val solid by remember(listState, thresholdPx) {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > thresholdPx }
@@ -350,7 +352,7 @@ private fun HistoryHeader(state: HistoryUiState, strings: HistoryStrings, modifi
 
 /** An icon tile in [tint], a large serif number and its label. */
 @Composable
-private fun Counter(icon: ImageVector, count: Int, label: String, tint: Color, modifier: Modifier = Modifier) {
+internal fun Counter(icon: ImageVector, count: Int, label: String, tint: Color, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         AccentIconTile(icon, size = 44.dp, tint = tint)
         Spacer(Modifier.width(12.dp))
@@ -366,9 +368,15 @@ private fun Counter(icon: ImageVector, count: Int, label: String, tint: Color, m
     }
 }
 
-/** A frosted field: 🔍, the text (filters as it is typed), ✕ to clear. */
+/** A frosted field: 🔍, the text (filters as it is typed), ✕ ([clearLabel]) to clear. */
 @Composable
-private fun HistorySearchField(value: String, onValueChange: (String) -> Unit, strings: HistoryStrings, modifier: Modifier = Modifier) {
+internal fun ArchiveSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    clearLabel: String,
+    modifier: Modifier = Modifier,
+) {
     val colors = MaterialTheme.colorScheme
     val focus = LocalFocusManager.current
     val shape = RoundedCornerShape(16.dp)
@@ -385,7 +393,7 @@ private fun HistorySearchField(value: String, onValueChange: (String) -> Unit, s
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (value.isEmpty()) {
                 Text(
-                    text = strings.searchPlaceholder,
+                    text = placeholder,
                     style = MaterialTheme.typography.bodyLarge,
                     color = colors.onSurfaceVariant,
                     maxLines = 1,
@@ -403,12 +411,12 @@ private fun HistorySearchField(value: String, onValueChange: (String) -> Unit, s
                 keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .semantics { contentDescription = strings.searchPlaceholder },
+                    .semantics { contentDescription = placeholder },
             )
         }
         if (value.isNotEmpty()) {
             IconButton(onClick = { onValueChange("") }) {
-                Icon(Icons.Rounded.Close, contentDescription = strings.clearSearch, tint = colors.onSurfaceVariant)
+                Icon(Icons.Rounded.Close, contentDescription = clearLabel, tint = colors.onSurfaceVariant)
             }
         } else {
             Spacer(Modifier.size(48.dp))
@@ -484,8 +492,9 @@ private fun LazyListScope.dayItems(state: HistoryUiState, strings: HistoryString
     }
 }
 
+/** A day's name ("HEUTE") as an overline on the sky, on the cards' text line. */
 @Composable
-private fun DayHeading(text: String, modifier: Modifier = Modifier) {
+internal fun DayHeading(text: String, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     Box(
         modifier
@@ -519,6 +528,39 @@ private fun HistoryRow(
     divider: Boolean,
 ) {
     val colors = MaterialTheme.colorScheme
+    ArchiveRow(
+        entry = entry,
+        topic = topic,
+        showImage = showImage,
+        divider = divider,
+        onOpen = { actions.onOpen(entry) },
+        mark = {
+            if (entry.hidden) {
+                StatusMark(Icons.Rounded.VisibilityOff, strings.statusHidden, colors.tertiary)
+            } else {
+                StatusMark(Icons.Rounded.Visibility, strings.statusRead, colors.primary)
+            }
+        },
+        menu = { open, onDismiss -> RowMenu(entry, open, onDismiss = onDismiss, strings = strings, actions = actions) },
+    )
+}
+
+/**
+ * A story in a list of kept stories ("Gelesen & ausgeblendet", "Favoriten"): its picture (or
+ * generated cover), the serif title, an optional [mark], source and the time it was kept, and ⋮
+ * ([menu]). A tap opens it ([onOpen]), a long press the menu.
+ */
+@Composable
+internal fun ArchiveRow(
+    entry: HistoryEntry,
+    topic: Topic,
+    showImage: Boolean,
+    divider: Boolean,
+    onOpen: () -> Unit,
+    mark: (@Composable () -> Unit)?,
+    menu: @Composable (open: Boolean, onDismiss: () -> Unit) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
     val feed = feedStrings()
     val haptics = LocalHapticFeedback.current
     val interaction = remember { MutableInteractionSource() }
@@ -541,7 +583,7 @@ private fun HistoryRow(
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         menuOpen = true
                     },
-                    onClick = { actions.onOpen(entry) },
+                    onClick = onOpen,
                 )
                 .padding(top = 12.dp, bottom = 2.dp),
             verticalAlignment = Alignment.Top,
@@ -569,12 +611,10 @@ private fun HistoryRow(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                        if (entry.hidden) {
-                            StatusMark(Icons.Rounded.VisibilityOff, strings.statusHidden, colors.tertiary)
-                        } else {
-                            StatusMark(Icons.Rounded.Visibility, strings.statusRead, colors.primary)
+                        if (mark != null) {
+                            mark()
+                            Spacer(Modifier.width(8.dp))
                         }
-                        Spacer(Modifier.width(8.dp))
                         val source = entry.source.ifBlank { entry.domain }
                         if (source.isNotBlank()) {
                             Text(
@@ -591,7 +631,7 @@ private fun HistoryRow(
                         IconButton(onClick = { menuOpen = true }) {
                             Icon(Icons.Rounded.MoreVert, contentDescription = feed.moreOptions, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
                         }
-                        RowMenu(entry, menuOpen, onDismiss = { menuOpen = false }, strings = strings, actions = actions)
+                        menu(menuOpen) { menuOpen = false }
                     }
                 }
             }
@@ -641,8 +681,9 @@ private fun RowMenu(entry: HistoryEntry, open: Boolean, onDismiss: () -> Unit, s
     }
 }
 
+/** One entry of a row's ⋮ menu. */
 @Composable
-private fun MenuEntry(label: String, icon: ImageVector, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant, onClick: () -> Unit) {
+internal fun MenuEntry(label: String, icon: ImageVector, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant, onClick: () -> Unit) {
     DropdownMenuItem(
         text = { Text(label, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         onClick = onClick,
@@ -653,7 +694,7 @@ private fun MenuEntry(label: String, icon: ImageVector, tint: Color = MaterialTh
 
 /** A calm note when nothing is listed: an icon in a soft accent glow, a serif title and one line. */
 @Composable
-private fun EmptyNote(icon: ImageVector, title: String, text: String) {
+internal fun EmptyNote(icon: ImageVector, title: String, text: String) {
     val colors = MaterialTheme.colorScheme
     val dark = isGlassDark()
     Column(

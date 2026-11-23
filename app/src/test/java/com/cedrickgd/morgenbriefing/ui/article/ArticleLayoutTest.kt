@@ -110,4 +110,80 @@ class ArticleLayoutTest {
         assertEquals(FailureIcon.OFFLINE, failureIcon(ArticleFailure(ReadOutcome.NETWORK)))
         assertEquals(FailureIcon.ERROR, failureIcon(null))
     }
+
+    // The short version ------------------------------------------------------------------
+
+    /** A paragraph of [words] words in sentences of ten ("Satz wort2 … ende."); [tag] tells paragraphs apart. */
+    private fun para(words: Int, tag: String = "p"): ArticleBlock {
+        val text = (1..words).joinToString(" ") { i ->
+            when {
+                i % 10 == 0 || i == words -> "ende."
+                i % 10 == 1 -> "Satz"
+                else -> "wort$tag$i"
+            }
+        }
+        return ArticleBlock.paragraph(text)
+    }
+
+    private fun words(blocks: List<ArticleBlock>) = blocks.sumOf(::wordsOf)
+
+    @Test
+    fun `a short article stays whole`() {
+        assertNull(shorten(listOf(para(200), para(150))))
+        assertNull(shorten(listOf(para(350))))
+    }
+
+    @Test
+    fun `whole paragraphs are taken until about 220 words, never past 300`() {
+        val blocks = List(10) { para(60, "n$it") }
+        val short = shorten(blocks)!!
+        assertEquals(blocks.take(4), short.short)
+        assertEquals(blocks, short.full)
+        assertEquals(360, short.restWords)
+        assertEquals(2, short.restMinutes)
+        val bigSecond = shorten(listOf(para(160), para(250), para(200)))!!
+        // 160 + 250 would pass 300: the short version stops after the first paragraph.
+        assertEquals(1, bigSecond.short.size)
+        assertTrue(words(bigSecond.short) <= SHORT_MAX_WORDS)
+    }
+
+    @Test
+    fun `a huge first paragraph is cut at a sentence, and the whole text keeps both halves`() {
+        val first = para(500, "a")
+        val blocks = listOf(first, para(100, "b"))
+        val short = shorten(blocks)!!
+        val head = short.short.single()
+        val count = wordsOf(head)
+        assertTrue("$count", count in SHORT_TARGET_WORDS..SHORT_MAX_WORDS)
+        assertTrue(head.text.endsWith("."))
+        // The short version is a prefix of the whole one: opening the rest only adds below.
+        assertEquals(short.short, short.full.take(short.short.size))
+        assertEquals(first.text, short.full[0].text + " " + short.full[1].text)
+        assertEquals(blocks[1], short.full.last())
+        assertEquals(words(blocks), words(short.full))
+        assertEquals(words(blocks) - count, short.restWords)
+    }
+
+    @Test
+    fun `the short version never ends on a heading`() {
+        val blocks = listOf(para(100, "a"), para(100, "b"), ArticleBlock.heading("Was jetzt kommt"), para(200, "c"))
+        val short = shorten(blocks)!!
+        assertEquals(blocks.take(2), short.short)
+        assertEquals(blocks, short.full)
+    }
+
+    @Test
+    fun `too little left to open stays whole`() {
+        assertNull(shorten(listOf(para(280), para(75))))
+        assertTrue(shorten(listOf(para(250), para(120))) != null)
+    }
+
+    @Test
+    fun `abbreviations, initials and dates are no sentence ends`() {
+        val text = "Es geht z. B. um Dr. Müller und den 3. Oktober. Dann kommt der zweite Satz. Und ein dritter."
+        val (head, tail) = cutAtSentence(text, target = 9, max = 12)
+        assertEquals("Es geht z. B. um Dr. Müller und den 3. Oktober.", head)
+        assertEquals("Dann kommt der zweite Satz. Und ein dritter.", tail)
+        assertEquals("" to text, cutAtSentence(text, target = 2, max = 3))
+    }
 }

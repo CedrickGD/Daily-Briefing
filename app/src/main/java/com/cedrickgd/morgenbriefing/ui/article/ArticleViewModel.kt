@@ -70,8 +70,17 @@ data class ArticleUiState(
     /** The feed item (headline, teaser, source, picture); a stub when the feed no longer has it. */
     val item: NewsItem,
     val topic: Topic,
-    /** The extracted article without what the head above it already shows; null while loading or when loading failed. */
+    /**
+     * The extracted article without what the head above it already shows – for a long article only
+     * its beginning ([shorten]; the rest is [full]); null while loading or when loading failed.
+     */
     val content: ArticleContent? = null,
+    /** The whole article when [content] is its short version; null when [content] is all of it. */
+    val full: ArticleContent? = null,
+    /** "Ganzen Artikel lesen" was tapped: [full] shows. */
+    val expanded: Boolean = false,
+    /** "noch X Min." for the part of [full] beyond [content]. */
+    val restMinutes: Int = 0,
     /**
      * The teaser shown under the headline: the feed's (else the page's own), shortened or
      * replaced so it never repeats the text below.
@@ -94,7 +103,15 @@ data class ArticleUiState(
      * its end. Judged on the whole extracted text, before the head is taken out.
      */
     val partial: Boolean = false,
-)
+    /** The user starred the story ("Favoriten"). */
+    val starred: Boolean = false,
+) {
+    /** What the reader shows and "Zuhören" reads: the whole article once expanded, else [content]. */
+    val shown: ArticleContent? get() = if (expanded && full != null) full else content
+
+    /** A short version is shown and the rest waits behind "Ganzen Artikel lesen". */
+    val canExpand: Boolean get() = full != null && !expanded
+}
 
 /**
  * Loads the readable article for [route]: the feed item is taken from the news repository (by
@@ -115,6 +132,12 @@ class ArticleViewModel(
     private var job: Job? = null
 
     init {
+        viewModelScope.launch {
+            attempt { container.favorites.warm() }.onFailure { Log.w(TAG, "Favorites unavailable", it) }
+            container.favorites.state.collect { favorites ->
+                _state.update { s -> s.copy(starred = favorites.isStarred(s.item)) }
+            }
+        }
         load(refresh = false)
         // Opened in the reader: the story counts as read. A bare link (the mini player) is noted once its title is known.
         _state.value.item.takeIf { it.headline.isNotBlank() }?.let(::noteRead)
@@ -207,11 +230,15 @@ class ArticleViewModel(
                         container.prefetcher.report(item, content)
                         arrange(content, shown, cover) to !ArticleCompleteness.isComplete(content, item)
                     }
+                    // A long article opens with its beginning; the rest waits behind "Ganzen Artikel lesen".
+                    val split = withContext(Dispatchers.Default) { split(arranged.content) }
                     ensureActive()
                     _state.update { s ->
                         s.copy(
-                            item = shown, content = arranged.content, teaser = arranged.teaser, hero = arranged.hero,
+                            item = shown, content = split.content, full = split.full, restMinutes = split.restMinutes,
+                            teaser = arranged.teaser, hero = arranged.hero,
                             loading = false, failure = null, now = clock(), partial = partial,
+                            starred = container.favorites.state.value.isStarred(shown),
                         )
                     }
                 },
@@ -225,6 +252,22 @@ class ArticleViewModel(
     }
 
     fun retry() = load(refresh = true)
+
+    /** "Ganzen Artikel lesen": the rest of a shortened article shows below what is there. */
+    fun expand() {
+        _state.update { it.copy(expanded = true) }
+    }
+
+    /** The star in the reader's bar: stars the story or takes its star off. */
+    fun toggleStar() {
+        val s = _state.value
+        val starred = !s.starred
+        _state.update { it.copy(starred = starred) }
+        attempt { container.favorites.setStarred(s.item, starred) }.onFailure {
+            Log.w(TAG, "Could not change the star", it)
+            _state.update { it.copy(starred = !starred) }
+        }
+    }
 
     companion object {
         private const val TAG = "ArticleViewModel"
@@ -247,6 +290,18 @@ class ArticleViewModel(
                 pictureFromText = true,
                 sources = listOf(item.source, item.publisherDomain, hostOf(item.url).removePrefix("www."), content.site),
             )
+
+        /** The reader's text split into its short version and the whole ([shorten]). */
+        internal data class Split(val content: ArticleContent, val full: ArticleContent? = null, val restMinutes: Int = 0)
+
+        /**
+         * [content] as the reader opens it: a long article as its short version ([shorten]) with
+         * the whole one beside it, a short one as it is.
+         */
+        internal fun split(content: ArticleContent): Split {
+            val short = shorten(content.blocks) ?: return Split(content)
+            return Split(content = content.copy(blocks = short.short), full = content.copy(blocks = short.full), restMinutes = short.restMinutes)
+        }
 
         /**
          * [content] without the lead paragraph(s) that repeat [summary] (see [ArticleCleaner.arrange]

@@ -16,6 +16,7 @@ import com.cedrickgd.morgenbriefing.data.article.LinkResolver
 import com.cedrickgd.morgenbriefing.data.article.ReadabilityStore
 import com.cedrickgd.morgenbriefing.data.article.VerdictStore
 import com.cedrickgd.morgenbriefing.data.local.NewsCache
+import com.cedrickgd.morgenbriefing.data.local.FavoritesStore
 import com.cedrickgd.morgenbriefing.data.local.ReadHistoryStore
 import com.cedrickgd.morgenbriefing.data.local.WeatherStore
 import com.cedrickgd.morgenbriefing.data.model.Topics
@@ -130,6 +131,12 @@ class AppContainer(context: Context) {
      */
     val history = ReadHistoryStore(
         File(storeDir, "read-history.json"), json, CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        resolved = googleNewsDecoder::peek,
+    )
+
+    /** The stories the user starred – "Favoriten" (`store/favorites.json`), never pruned. */
+    val favorites = FavoritesStore(
+        File(storeDir, "favorites.json"), json, CoroutineScope(SupervisorJob() + Dispatchers.IO),
         resolved = googleNewsDecoder::peek,
     )
 }

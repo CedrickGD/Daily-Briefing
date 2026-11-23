@@ -149,6 +149,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
 import java.util.Locale
+import com.cedrickgd.morgenbriefing.ui.news.rememberFavorites
+import com.cedrickgd.morgenbriefing.i18n.favoritesStrings
 
 private const val TAG = "SearchScreen"
 
@@ -290,7 +292,8 @@ fun SearchScreen(
     val listenState by remember(context) { context.listen.state }.collectAsStateWithLifecycle()
     // Results the user read already sit back like feed cards.
     val history = remember(context) { context.container.history.state }.collectAsStateWithLifecycle()
-    val hints = remember(history) { FeedHints(NO_PICTURES, NO_STATUSES, history = history) }
+    val favorites = rememberFavorites()
+    val hints = remember(history, favorites) { FeedHints(NO_PICTURES, NO_STATUSES, history = history, favorites = favorites) }
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(
@@ -469,7 +472,7 @@ private const val COVERS_AHEAD = 6
 
 /**
  * The feed entry's actions for search results: open in the reader, listen, share, copy, mark
- * read or unread. A result opened in the browser counts as read.
+ * read or unread, star. A result opened in the browser counts as read.
  */
 @Composable
 private fun rememberSearchFeedActions(onOpen: (NewsItem) -> Unit, onMessage: (String) -> Unit): FeedActions {
@@ -479,9 +482,11 @@ private fun rememberSearchFeedActions(onOpen: (NewsItem) -> Unit, onMessage: (St
     val latestOpen by rememberUpdatedState(onOpen)
     val latestMessage by rememberUpdatedState(onMessage)
     val latestStrings by rememberUpdatedState(strings)
+    val latestFavorites by rememberUpdatedState(favoritesStrings())
     return remember(context, links) {
         val listen = context.listen
         val history = context.container.history
+        val favorites = context.container.favorites
         FeedActions(
             onOpen = { latestOpen(it.item) },
             onOpenExternal = { article ->
@@ -514,6 +519,10 @@ private fun rememberSearchFeedActions(onOpen: (NewsItem) -> Unit, onMessage: (St
                 }
             },
             onSetRead = { article, read -> if (read) history.markRead(article.item) else history.markUnread(article.item) },
+            onSetStarred = { article, starred ->
+                favorites.setStarred(article.item, starred)
+                latestMessage(if (starred) latestFavorites.added else latestFavorites.removed)
+            },
         )
     }
 }

@@ -23,6 +23,9 @@ interface ReaderStrings {
     /** Under an article that is probably cut short. */
     val truncatedNote: String
 
+    /** Under the short version of a long article: opens the rest, [minutes] of reading. */
+    fun readFull(minutes: Int): String
+
     /** The "A" in the reader's bar and the title of its sheet: how the text looks. */
     val appearance: String
 
@@ -82,6 +85,7 @@ interface ReaderStrings {
         override val pauseListening = "Vorlesen pausieren"
         override val readInApp = "Artikel lesen"
         override val truncatedNote = "Das war vermutlich nur der Anfang – den Rest zeigt die Redaktion nur auf ihrer Seite."
+        override fun readFull(minutes: Int) = "Ganzen Artikel lesen · noch $minutes Min."
         override val appearance = "Darstellung"
         override val textSize = "Textgröße"
         override fun percent(value: Int) = "$value\u00A0%"
@@ -140,6 +144,7 @@ interface ReaderStrings {
         override val pauseListening = "Pause reading aloud"
         override val readInApp = "Read article"
         override val truncatedNote = "That was probably just the beginning – the publisher shows the rest only on its own site."
+        override fun readFull(minutes: Int) = "Read the full article · $minutes min more"
         override val appearance = "Appearance"
         override val textSize = "Text size"
         override fun percent(value: Int) = "$value%"
@@ -198,6 +203,7 @@ interface ReaderStrings {
         override val pauseListening = "Mettre la lecture en pause"
         override val readInApp = "Lire l'article"
         override val truncatedNote = "Ce n'était sans doute que le début : la rédaction ne montre la suite que sur son propre site."
+        override fun readFull(minutes: Int) = "Lire l'article entier · encore $minutes min"
         override val appearance = "Affichage"
         override val textSize = "Taille du texte"
         override fun percent(value: Int) = "$value\u00A0%"
@@ -256,6 +262,7 @@ interface ReaderStrings {
         override val pauseListening = "Pausar la lectura"
         override val readInApp = "Leer artículo"
         override val truncatedNote = "Probablemente esto era solo el comienzo: el medio muestra el resto únicamente en su web."
+        override fun readFull(minutes: Int) = "Leer el artículo completo · $minutes min más"
         override val appearance = "Apariencia"
         override val textSize = "Tamaño del texto"
         override fun percent(value: Int) = "$value\u00A0%"
@@ -314,6 +321,7 @@ interface ReaderStrings {
         override val pauseListening = "Metti in pausa la lettura"
         override val readInApp = "Leggi l'articolo"
         override val truncatedNote = "Probabilmente era solo l'inizio: la redazione mostra il resto solo sul proprio sito."
+        override fun readFull(minutes: Int) = "Leggi l'articolo intero · altri $minutes min"
         override val appearance = "Aspetto"
         override val textSize = "Dimensione del testo"
         override fun percent(value: Int) = "$value%"

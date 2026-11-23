@@ -158,6 +158,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
+import com.cedrickgd.morgenbriefing.ui.news.rememberFavorites
 
 /** Key of the feed bar in the list. */
 private const val BAR_KEY = "today-bar"
@@ -200,6 +201,7 @@ private const val PREFETCH_SETTLE_MS = 350L
  * @param onOpenDiscover opens the discover screen, at [categoryId]'s detail when not null.
  * @param onAddPlace opens the discover screen with its place search ("Ort hinzufügen").
  * @param onOpenHistory opens "Gelesen & ausgeblendet" (the button beside the search field).
+ * @param onOpenFavorites opens "Favoriten" (the star beside it).
  */
 @Composable
 fun TodayScreen(
@@ -212,6 +214,7 @@ fun TodayScreen(
     onOpenDiscover: (categoryId: String?) -> Unit = {},
     onAddPlace: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
+    onOpenFavorites: () -> Unit = {},
     viewModel: TodayViewModel = viewModel(factory = TodayViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -220,7 +223,8 @@ fun TodayScreen(
     val statuses = viewModel.articleStatus.collectAsStateWithLifecycle()
     val covers = viewModel.articleCovers.collectAsStateWithLifecycle()
     val history = viewModel.history.collectAsStateWithLifecycle()
-    val hints = remember(images, statuses, covers, history) { FeedHints(images, statuses, covers, history) }
+    val favorites = rememberFavorites()
+    val hints = remember(images, statuses, covers, history, favorites) { FeedHints(images, statuses, covers, history, favorites) }
     val listState = rememberLazyListState()
     // After process death the saved position points into the feed; measuring the header and the
     // loading skeleton first would clamp it to their few items. Until weather and news are known
@@ -260,6 +264,7 @@ fun TodayScreen(
         onOpenDiscover = onOpenDiscover,
         onAddPlace = onAddPlace,
         onOpenHistory = onOpenHistory,
+        onOpenFavorites = onOpenFavorites,
         onSetTopicOrder = viewModel::setTopicOrder,
         onSetSourceEnabled = viewModel::setSourceEnabled,
         onFollow = viewModel::follow,
@@ -307,6 +312,7 @@ private class TodayCallbacks(
     val onOpenDiscover: (String?) -> Unit,
     val onAddPlace: () -> Unit,
     val onOpenHistory: () -> Unit,
+    val onOpenFavorites: () -> Unit,
     val onSetTopicOrder: (List<String>) -> Unit,
     val onSetSourceEnabled: (String, Boolean) -> Unit,
     val onFollow: (String, Int?) -> Unit,
@@ -440,6 +446,7 @@ private fun TodayContent(
             onSearch = callbacks.onOpenSearch,
             onManageTopics = { showTopics = true },
             onHistory = callbacks.onOpenHistory,
+            onFavorites = callbacks.onOpenFavorites,
             rowState = tabRowState,
             onGlass = onGlass,
         )
