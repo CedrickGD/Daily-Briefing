@@ -302,6 +302,12 @@ gefüllte Pill.
    (Equalizer, während die Probe läuft), „Automatisch“ zuerst; Tempo als große Zahl („1,25×“) und
    Tonhöhe in Worten, je mit ruhigem Slider und Hörprobe beim Loslassen; ehrliche Hinweise (keine
    Stimme, nur online, gewählte Stimme fehlt) als Lamina-Zeile; „Weitere Stimmen installieren“.
+   Darunter „Natürliche Stimmen“ (nur, wenn die Sprachbibliothek lädt): Overline in Akzentfarbe,
+   ein Satz dazu, bei mobilen Daten ein Lamina-Hinweis; geladene Stimmen sind Radio-Zeilen wie die
+   der Engine („Thorsten · männlich“, „Aufnahmen: Thorsten-Voice · CC0“) mit Probehören und
+   Löschen, die anderen zeigen dieselben zwei Zeilen und eine Pill „Laden · 21 MB“, ein laufender
+   Download Balken, „8 von 21 MB“ und Abbrechen; zuletzt die Herkunft in einer ruhigen Zeile. Wo
+   es hilft, eine Lamina-Karte zu „Google Sprachausgabe“ mit einer Pill (laden bzw. verwenden).
 8. **Darstellung**: drei Vorschau-Kacheln (Mini-Handy mit Himmel + Glaskarte) für
    System/Hell/Dunkel; Akzentfarben als große Farbperlen mit gleitendem Auswahlring + Name;
    **Effekte** als drei Pills mit Symbol (Automatisch · Volle Effekte · Sparsam) und darunter

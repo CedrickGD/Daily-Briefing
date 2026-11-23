@@ -229,7 +229,7 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
 | `notify` | `AlarmScheduler`, `MorningAlarmReceiver`, `SystemEventsReceiver`, `MorningWorker`, `Notifications` |
 | `update` | In-App-Updater: `UpdateChecker`, `ApkDownloader`, `ApkVerifier`, `ApkInstaller`, `UpdateWorker` |
 | `perf` | Geräteklasse und Effekte: `DeviceTiers` (LOW/FULL, rein, getestet), `DeviceProbe` (Speicher, Low-RAM, schnellster Kern aus sysfs, Energiesparmodus), `Effects` (FULL/LIGHT aus Einstellung × Klasse), `Performance` (prozessweit im `AppContainer`), `BackgroundWork` (2 Parse-Threads niedriger Priorität) |
-| `listen` | „Zuhören“: Text-to-Speech (Stimme in der Sprache der Nachrichten), Mini-Player mit Tempo-Chip, Audio-Fokus. „Vorlesen“ (`AppSettings.listen`: Engine, feste Sprache, Stimme je Sprache, Vorliebe weiblich/männlich, Tempo, Tonhöhe): `VoiceCatalog` (rein, getestet) macht aus `getVoices()` Listeneinträge („Stimme 1 · weiblich · offline“, lokal/online einmal, nicht installierte gezählt), `VoiceGenders` nennt ein Geschlecht nur, wenn die Stimme es verrät (Wort „female“/„male“, Samsung `SMTf…`/`SMTm…`, Tabelle der Google-Codes), `VoiceChoice` wählt: gewählt → Vorliebe → beste Offline-Stimme (wie früher) → Engine-Standard. Der `ListenController` setzt Stimme, Tempo und Tonhöhe vor jedem Vorlesen; Änderungen mitten im Artikel setzen am Satzanfang neu an. Tempo/Tonhöhe sind Faktoren auf die System-Einstellung der Sprachausgabe (1× = wie das Handy) |
+| `listen` | „Zuhören“: Text-to-Speech (Stimme in der Sprache der Nachrichten), Mini-Player mit Tempo-Chip, Audio-Fokus. „Vorlesen“ (`AppSettings.listen`: Engine, feste Sprache, Stimme je Sprache, Vorliebe weiblich/männlich, Tempo, Tonhöhe): `VoiceCatalog` (rein, getestet) macht aus `getVoices()` Listeneinträge („Stimme 1 · weiblich · offline“, lokal/online einmal, nicht installierte gezählt), `VoiceGenders` nennt ein Geschlecht nur, wenn die Stimme es verrät (Wort „female“/„male“, Samsung `SMTf…`/`SMTm…`, Tabelle der Google-Codes), `VoiceChoice` wählt: gewählt → Vorliebe → beste Offline-Stimme (wie früher) → Engine-Standard. Der `ListenController` setzt Stimme, Tempo und Tonhöhe vor jedem Vorlesen; Änderungen mitten im Artikel setzen am Satzanfang neu an. Tempo/Tonhöhe sind Faktoren auf die System-Einstellung der Sprachausgabe (1× = wie das Handy). „Automatisch“ nimmt die Offline-Stimme der besten Qualität (sehr hoch zuerst), bei Gleichstand die des Landes der Ausgabe, dann die schneller startende; `GoogleVoices.hint` schlägt „Google Sprachausgabe“ vor (Play Store, wenn sie fehlt; „Google verwenden“, wenn eine andere Engine liest), außer die Engine hat schon eine Offline-Stimme sehr hoher Qualität. **Natürliche Stimmen** (siehe unten): `NeuralVoices` (Katalog, Download, Entpacken, Löschen), `NeuralSpeaker` (Wiedergabe), gewählt als `neural:<id>` in `ListenSettings.voices` |
 | `ui/shell` | Wischbarer Pager Heute → Einstellungen, Glas-Seitenindikator, Chrome-Steuerung, `ShellNavigator` |
 | `ui/glass` | Morgenglas: `Modifier.glass`, `GlassCard`, durchgehender Himmel (`AmbientSky`), Seitentitel/-leiste |
 | `ui/today`, `ui/news` | Heute-Seite: kompakte Wetterkarte (`TodayWeather`), Feed-Leiste mit Suche und Tabs (`FeedChips`, pinnt oben), Glaskarten je Thema aus Listen-Stücken (`FeedCards` = reine Logik, `StoryCards`, `FeedSections`), endlose Listen, „Deine Themen“-Sheet, Vorladen |
@@ -241,6 +241,44 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
 | `ui/history` | „Gelesen & ausgeblendet“: `HistoryScreen` + `HistoryViewModel`, `HistoryLogic` (Suche, Filter, Tage – rein, getestet) |
 | `ui/nav` | `MainRoute` (der Pager), `ArticleRoute`, `DiscoverRoute`, `SearchRoute`, `HistoryRoute` (darüber geschoben) |
 | `ui/article` | `ArticleScreen` + `ArticleViewModel`: der Lesemodus (ein Bild, Zeit, Überschrift, Teaser, Textblöcke; Leiste Zurück · „A“ · Zuhören · ⋮ mit Teilen, Link kopieren, Browser als Ausweg; eigene Zustände für Bezahlschranke, Cookie-Wand und Sperre), `ReaderAppearanceSheet` („Darstellung“), `ReaderType` (`ReaderMetrics`, Textstile je Darstellung) |
+
+### Natürliche Stimmen (`listen/NeuralVoices.kt`, `listen/NeuralSpeaker.kt`)
+
+* **Katalog** (`NeuralVoiceCatalog`): Piper-Stimmen (rhasspy), von k2-fsa für sherpa-onnx
+  umgewandelt, als int8-Archive im GitHub-Release `k2-fsa/sherpa-onnx` › `tts-models`
+  (`vits-piper-<id>-int8.tar.bz2`, je ≈ 21 MB, SHA-256 aus dessen `checksum.txt` fest im Code).
+  Aufgenommen nur Stimmen, deren Aufnahmen frei lizenziert sind (Modellkarte auf Hugging Face
+  `rhasspy/piper-voices` und im Archiv, geprüft 23.11.2026): DE Thorsten (medium, CC0),
+  Kerstin (low, CC0) · EN LJ Speech „Linda“ (medium, gemeinfrei), Norman (medium, gemeinfrei) ·
+  FR Siwis (medium, CC BY 4.0), Gilles (low, CC0) · ES Davefx (medium, CC0), Sharvard
+  Sprecherin F (medium, CC BY 3.0) · IT Paola (medium, CC0). Draußen: lessac (Blizzard-Lizenz),
+  Ryan/hfc/pavoque (CC BY-NC-SA), tom (AGPL), Amy/Alan/Jenny/M-AILABS (Lizenz nur „see URL“),
+  GLaDOS und andere Fan-Stimmen, miro/dii (keine Modellkarte). Hinweis: die k2-fsa-Archive sind
+  die älteren Piper-Fassungen; mehrere davon sind von lessac (medium) bzw. Ryan (low)
+  feinjustiert. Die Einstellungen nennen je Stimme Aufnahmen + Lizenz und die Herkunft.
+* **Download** (`NeuralVoices`, im `AppContainer`): OkHttp ohne Gesamt-Timeout nach
+  `files/neural-voices/.partial/`, SHA-256 prüfen, entpacken (`NeuralArchive`: Apache Commons
+  Compress, oberster Ordner fällt weg, Einträge außerhalb des Ordners brechen ab, von espeak-ng
+  nur das Wörterbuch der eigenen Sprache und Englisch ≈ −15 MB), vollständig prüfen
+  (`NeuralVoiceFiles.verified`: Modell, `tokens.txt`, `espeak-ng-data/phontab`), dann an seinen
+  Platz verschieben. Reste eines abgebrochenen Downloads räumt der Start-Scan weg. Fortschritt,
+  Fehler und Installiertes als `StateFlow<NeuralVoicesState>`. Fertig geladen → die Sprache liest
+  mit dieser Stimme (`ListenController.downloadNeural`); Löschen setzt sie auf „Automatisch“.
+* **Wiedergabe** (`NeuralSpeaker`): ein Thread erzeugt Satz für Satz (`NeuralSentences`), ein
+  zweiter spielt über `AudioTrack` (Float-PCM, Stream), bis zu 4 Sätze Vorlauf; Tempo = Tempo des
+  Modells, Tonhöhe = `PlaybackParams` (Android 6+). Callbacks wie bei TextToSpeech (Teil startet,
+  Satz startet, Teil fertig – der letzte erst, wenn er wirklich zu hören war), mit dem `session`
+  des Controllers markiert. Der `ListenController` nimmt diesen Weg, wenn für die Sprache eine
+  installierte natürliche Stimme gewählt ist und die Bibliothek lädt; Mini-Player, Fortschritt,
+  Pause/Weiter, Tempo-Chip, Satz-genaues Weiterlesen nach einer Änderung und Audio-Fokus gelten
+  unverändert. Lädt eine Stimme nicht, liest die Engine an derselben Stelle weiter (für den
+  Prozess gemerkt).
+* **Bibliothek** (`NeuralRuntime`, `createNeuralEngine()` in `NeuralEngineFactory.kt`): sherpa-onnx
+  ≥ 2.0 kann Piper-Stimmen nicht mehr aus Text sprechen (espeak-ng entfernt, weil GPL); nur
+  sherpa-onnx 1.13.8 kann es, mit espeak-ng (GPL-3.0) in der nativen Bibliothek. Dieser Stand
+  liefert darum keine Bibliothek aus: `createNeuralEngine()` gibt null, `NeuralRuntime.probe()`
+  ist falsch und „Natürliche Stimmen“ bleibt verborgen. Fehlt oder scheitert die Bibliothek auf
+  einem Gerät, gilt dasselbe.
 
 Kein DI-Framework: `AppContainer` (ein Objekt pro Prozess) wird über `context.container`
 erreicht, Vorlesen über `context.listen`. ViewModels über `viewModelFactory { initializer { … } }`.
