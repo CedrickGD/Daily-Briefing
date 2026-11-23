@@ -187,15 +187,23 @@ internal object VoiceChoice {
                     compareByDescending<VoiceInfo> { it.offline }
                         .thenByDescending { preferredCountry != null && it.country == preferredCountry }
                         .thenByDescending { it.quality }
+                        .thenBy { it.latency }
                         .thenBy { it.name },
                 )
                 .firstOrNull()
             if (match != null) return VoicePick(match, VoiceSource.PREFERENCE, missing)
         }
-        // As before these settings: the first offline voice of the best quality, in engine order.
-        val offline = installed.filter { it.offline }.maxByOrNull { it.quality }
+        // The offline voice of the best quality ("sehr hohe Qualität" first); among equals the
+        // edition's country, then the one that starts sooner, then the engine's order.
+        val offline = installed.filter { it.offline }.sortedWith(bestFirst(preferredCountry)).firstOrNull()
         return if (offline != null) VoicePick(offline, VoiceSource.BEST_OFFLINE, missing) else VoicePick(null, VoiceSource.ENGINE_DEFAULT, missing)
     }
+
+    /** Best quality first, then [preferredCountry], then lower latency; stable, so the engine's order breaks ties. */
+    private fun bestFirst(preferredCountry: String?): Comparator<VoiceInfo> =
+        compareByDescending<VoiceInfo> { it.quality }
+            .thenByDescending { preferredCountry != null && it.country == preferredCountry }
+            .thenBy { it.latency }
 
     /** The engine lists voices of [language], but none of them works offline (reading needs the internet). */
     fun onlineOnly(voices: List<VoiceInfo>, language: String): Boolean {
@@ -224,6 +232,8 @@ data class VoicePanel(
     val chosen: VoiceEntry?,
     /** A voice was chosen but is gone (other engine, uninstalled): automatic reads instead. */
     val chosenMissing: Boolean,
+    /** Id of the natural voice chosen for the language ([NeuralVoiceIds]); null = an engine voice or automatic. */
+    val neuralChosen: String? = null,
     /** What "Automatisch" reads with right now, and its entry when it is one of the list. */
     val auto: VoicePick,
     val autoEntry: VoiceEntry?,
@@ -244,7 +254,7 @@ internal object VoiceCatalog {
      * The installed voices of [language] as list entries: a voice offered offline and online
      * ("…-local", "…-network") once, as its offline variant; the engine's alias for its default
      * ("de-DE-language") left out when real voices exist; the [preferredCountry] first, then by
-     * country and name. Numbered 1… in that order.
+     * country, the best quality first, then by name. Numbered 1… in that order.
      */
     fun entries(voices: List<VoiceInfo>, language: String, preferredCountry: String?): List<VoiceEntry> {
         val installed = voices.filter { it.language == language && it.installed }
@@ -258,6 +268,7 @@ internal object VoiceCatalog {
             .sortedWith(
                 compareByDescending<VoiceInfo> { preferredCountry != null && it.country == preferredCountry }
                     .thenBy { it.country }
+                    .thenByDescending { it.quality }
                     .thenBy { identity(it.name).lowercase(Locale.ROOT) },
             )
             .mapIndexed { i, voice -> VoiceEntry(voice, number = i + 1, gender = VoiceGenders.of(voice)) }
@@ -266,7 +277,10 @@ internal object VoiceCatalog {
     fun panel(voices: List<VoiceInfo>, language: String, settings: ListenSettings, preferredCountry: String?): VoicePanel {
         val entries = entries(voices, language, preferredCountry)
         val nearby = entries.filter { it.voice.country == preferredCountry }.ifEmpty { entries }
-        val chosenName = settings.voiceFor(language)
+        val stored = settings.voiceFor(language)
+        // A natural voice is chosen outside the engine's list (see [NeuralVoiceIds]).
+        val neural = NeuralVoiceIds.idOf(stored)
+        val chosenName = stored.takeIf { neural == null }
         val chosen = chosenName?.let { name ->
             entries.firstOrNull { it.voice.name == name } ?: entries.firstOrNull { identity(it.voice.name) == identity(name) }
         }
@@ -279,6 +293,7 @@ internal object VoiceCatalog {
             elsewhere = entries - nearby.toSet(),
             chosen = chosen,
             chosenMissing = chosenName != null && chosen == null,
+            neuralChosen = neural,
             auto = auto,
             autoEntry = autoEntry,
             genders = entries.mapNotNull { it.gender }.toSet(),
@@ -309,4 +324,34 @@ data class TtsEngine(
             label.isNotBlank() -> label.trim()
             else -> name.substringAfterLast('.')
         }
+}
+
+/** What the hint below the voice list suggests about "Google Sprachausgabe" (Speech Services by Google). */
+enum class GoogleVoiceHint {
+    /** Not on the phone: get it from the Play Store. */
+    INSTALL,
+
+    /** Installed, but another engine reads: switch to it. */
+    USE,
+}
+
+/** Google's engine has free offline voices of high quality; [hint] decides when the settings mention it. */
+internal object GoogleVoices {
+    const val PACKAGE = "com.google.android.tts"
+
+    /**
+     * Nothing while the engines are unknown, when Google already reads, or when the engine in use
+     * already has a voice of very high quality offline for [language] (a good setup stays quiet).
+     * Otherwise [GoogleVoiceHint.USE] when Google is installed, [GoogleVoiceHint.INSTALL] when not.
+     */
+    fun hint(voices: ListenVoices, language: String): GoogleVoiceHint? {
+        if (!voices.loaded || voices.engines.isEmpty()) return null
+        if (voices.engine == PACKAGE) return null
+        val excellent = voices.voices.any { it.language == language && it.offline && it.quality >= VoiceInfo.QUALITY_VERY_HIGH }
+        return when {
+            excellent -> null
+            voices.engines.any { it.name == PACKAGE } -> GoogleVoiceHint.USE
+            else -> GoogleVoiceHint.INSTALL
+        }
+    }
 }

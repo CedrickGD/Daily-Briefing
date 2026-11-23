@@ -66,4 +66,43 @@ class ListenStringsTest {
         AppLanguage.entries.forEach { lang -> assertTrue(ListenStrings.of(lang).sampleSentence.length > 20) }
         assertEquals(5, AppLanguage.entries.map { ListenStrings.of(it).sampleSentence }.distinct().size)
     }
+
+    @Test
+    fun `natural voice texts exist in every language, name the voice and say tu in French`() {
+        AppLanguage.entries.forEach { lang ->
+            val strings = ListenStrings.of(lang)
+            val texts = listOf(
+                strings.neuralVoiceTitle("Kerstin", VoiceGender.FEMALE),
+                strings.neuralVoiceDetails("Thorsten-Voice", "CC0"),
+                strings.neuralDownload(21),
+                strings.neuralProgress(8, 21),
+                strings.neuralCancel("Thorsten"),
+                strings.neuralDelete("Thorsten"),
+            )
+            assertTrue(texts[0].startsWith("Kerstin · "))
+            assertTrue(texts[1].endsWith("Thorsten-Voice · CC0"))
+            assertTrue(texts[2].endsWith("21 MB") || texts[2].endsWith("21 Mo"))
+            assertTrue(texts[3].contains("8") && texts[3].contains("21"))
+            assertTrue(texts[4].contains("Thorsten") && texts[5].contains("Thorsten"))
+            texts.forEach { assertFalse("em dash in $lang: $it", it.contains('\u2014')) }
+        }
+        val de = ListenStrings.of(AppLanguage.DE)
+        assertEquals("Thorsten · männlich", de.neuralVoiceTitle("Thorsten", VoiceGender.MALE))
+        assertEquals("Aufnahmen: LJ Speech · gemeinfrei", de.neuralVoiceDetails("LJ Speech", NeuralVoice.PUBLIC_DOMAIN))
+        assertEquals("Laden · 21 MB", de.neuralDownload(21))
+        assertEquals("Recordings: LibriVox · public domain", ListenStrings.of(AppLanguage.EN).neuralVoiceDetails("LibriVox", NeuralVoice.PUBLIC_DOMAIN))
+        val formal = Regex("""\b(vous|votre|vos)\b""", RegexOption.IGNORE_CASE)
+        val french = ListenStrings.of(AppLanguage.FR)
+        listOf(french.neuralHint, french.neuralMetered, french.neuralFailed, french.neuralSource, french.googleInstallHint, french.googleUseHint)
+            .forEach { assertFalse("formal French: $it", formal.containsMatchIn(it)) }
+    }
+
+    @Test
+    fun `no new listen text uses an em dash`() {
+        fixed.forEach { (lang, texts) ->
+            texts.filterKeys { it.contains("Neural") || it.contains("Google") }.forEach { (name, text) ->
+                assertFalse("$name in $lang", text.contains('\u2014'))
+            }
+        }
+    }
 }

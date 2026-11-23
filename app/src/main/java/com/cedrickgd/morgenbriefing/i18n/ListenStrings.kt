@@ -2,6 +2,7 @@ package com.cedrickgd.morgenbriefing.i18n
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import com.cedrickgd.morgenbriefing.listen.NeuralVoice
 import com.cedrickgd.morgenbriefing.listen.VoiceGender
 import com.cedrickgd.morgenbriefing.listen.VoiceInfo
 import com.cedrickgd.morgenbriefing.listen.VoiceSource
@@ -104,6 +105,34 @@ interface ListenStrings {
     /** "Etwas höher" for one of the offered pitches. */
     fun pitchLabel(pitch: Float): String
     val pitchDescription: String
+
+    // "Natürliche Stimmen": downloadable voices (Piper via sherpa-onnx)
+    val neuralOverline: String
+    val neuralHint: String
+    /** Shown while the phone is on mobile data. */
+    val neuralMetered: String
+    /** "Thorsten · männlich". */
+    fun neuralVoiceTitle(name: String, gender: VoiceGender): String
+    /** "Aufnahmen: Thorsten-Voice · CC0"; [licence] is a short licence name or `NeuralVoice.PUBLIC_DOMAIN`. */
+    fun neuralVoiceDetails(dataset: String, licence: String): String
+    /** Button of a voice that is not on the phone: "Laden · 21 MB". */
+    fun neuralDownload(megabytes: Int): String
+    /** "8 von 21 MB". */
+    fun neuralProgress(doneMegabytes: Int, totalMegabytes: Int): String
+    val neuralUnpacking: String
+    /** Screen reader text of the cancel button while [name] downloads. */
+    fun neuralCancel(name: String): String
+    /** Screen reader text of the delete button of an installed voice. */
+    fun neuralDelete(name: String): String
+    val neuralFailed: String
+    /** Where the voices come from (below the list). */
+    val neuralSource: String
+
+    // Hint about Google's text-to-speech engine ([com.cedrickgd.morgenbriefing.listen.GoogleVoiceHint])
+    val googleInstallHint: String
+    val googleInstallAction: String
+    val googleUseHint: String
+    val googleUseAction: String
 
     companion object {
         fun of(lang: AppLanguage): ListenStrings = when (lang) {
@@ -257,6 +286,24 @@ interface ListenStrings {
         override val pitchOverline = "Tonhöhe"
         override fun pitchLabel(pitch: Float) = listOf("Tiefer", "Etwas tiefer", "Normal", "Etwas höher", "Höher")[ListenStrings.pitchStep(pitch)]
         override val pitchDescription = "Tonhöhe der Stimme"
+        override val neuralOverline = "Natürliche Stimmen"
+        override val neuralHint = "Trainiert mit Aufnahmen echter Sprecher, und sie lesen ohne Internet. Lade eine Stimme einmal, dann bleibt sie auf dem Handy."
+        override val neuralMetered = "Du bist nicht im WLAN. Eine Stimme lädt dann über mobile Daten."
+        override fun neuralVoiceTitle(name: String, gender: VoiceGender) =
+            "$name · " + if (gender == VoiceGender.FEMALE) "weiblich" else "männlich"
+        override fun neuralVoiceDetails(dataset: String, licence: String) =
+            "Aufnahmen: $dataset · " + if (licence == NeuralVoice.PUBLIC_DOMAIN) "gemeinfrei" else licence
+        override fun neuralDownload(megabytes: Int) = "Laden · $megabytes MB"
+        override fun neuralProgress(doneMegabytes: Int, totalMegabytes: Int) = "$doneMegabytes von $totalMegabytes MB"
+        override val neuralUnpacking = "Wird entpackt …"
+        override fun neuralCancel(name: String) = "Download von $name abbrechen"
+        override fun neuralDelete(name: String) = "$name löschen"
+        override val neuralFailed = "Laden hat nicht geklappt. Prüf die Verbindung und tippe nochmal auf Laden."
+        override val neuralSource = "Die Stimmen stammen aus dem Projekt Piper und kommen über sherpa-onnx (k2-fsa) von GitHub. Bei jeder Stimme stehen ihre Aufnahmen und deren Lizenz."
+        override val googleInstallHint = "Google Sprachausgabe bringt kostenlose Offline-Stimmen in hoher Qualität mit."
+        override val googleInstallAction = "Google Sprachausgabe laden"
+        override val googleUseHint = "Google Sprachausgabe ist schon installiert. Ihre Offline-Stimmen klingen oft natürlicher."
+        override val googleUseAction = "Google verwenden"
     }
 
     private object En : ListenStrings {
@@ -352,6 +399,24 @@ interface ListenStrings {
         override val pitchOverline = "Pitch"
         override fun pitchLabel(pitch: Float) = listOf("Lower", "Slightly lower", "Normal", "Slightly higher", "Higher")[ListenStrings.pitchStep(pitch)]
         override val pitchDescription = "Pitch of the voice"
+        override val neuralOverline = "Natural voices"
+        override val neuralHint = "Trained on recordings of real speakers, and they read without internet. Download a voice once and it stays on your phone."
+        override val neuralMetered = "You're not on Wi-Fi. A voice will download over mobile data."
+        override fun neuralVoiceTitle(name: String, gender: VoiceGender) =
+            "$name · " + if (gender == VoiceGender.FEMALE) "female" else "male"
+        override fun neuralVoiceDetails(dataset: String, licence: String) =
+            "Recordings: $dataset · " + if (licence == NeuralVoice.PUBLIC_DOMAIN) "public domain" else licence
+        override fun neuralDownload(megabytes: Int) = "Download · $megabytes MB"
+        override fun neuralProgress(doneMegabytes: Int, totalMegabytes: Int) = "$doneMegabytes of $totalMegabytes MB"
+        override val neuralUnpacking = "Unpacking …"
+        override fun neuralCancel(name: String) = "Stop downloading $name"
+        override fun neuralDelete(name: String) = "Delete $name"
+        override val neuralFailed = "The download didn't work. Check your connection and tap Download again."
+        override val neuralSource = "The voices come from the Piper project, via sherpa-onnx (k2-fsa) on GitHub. Each voice lists its recordings and their licence."
+        override val googleInstallHint = "Speech Services by Google comes with free offline voices in high quality."
+        override val googleInstallAction = "Get Speech Services by Google"
+        override val googleUseHint = "Speech Services by Google is already installed. Its offline voices often sound more natural."
+        override val googleUseAction = "Use Google"
     }
 
     private object Fr : ListenStrings {
@@ -448,6 +513,24 @@ interface ListenStrings {
         override fun pitchLabel(pitch: Float) =
             listOf("Plus grave", "Un peu plus grave", "Normale", "Un peu plus aiguë", "Plus aiguë")[ListenStrings.pitchStep(pitch)]
         override val pitchDescription = "Hauteur de la voix"
+        override val neuralOverline = "Voix naturelles"
+        override val neuralHint = "Entraînées sur des enregistrements de vraies personnes, elles lisent sans internet. Télécharge une voix une fois, elle reste sur ton téléphone."
+        override val neuralMetered = "Tu n'es pas en Wi-Fi. La voix se téléchargera avec tes données mobiles."
+        override fun neuralVoiceTitle(name: String, gender: VoiceGender) =
+            "$name · " + if (gender == VoiceGender.FEMALE) "féminine" else "masculine"
+        override fun neuralVoiceDetails(dataset: String, licence: String) =
+            "Enregistrements : $dataset · " + if (licence == NeuralVoice.PUBLIC_DOMAIN) "domaine public" else licence
+        override fun neuralDownload(megabytes: Int) = "Télécharger · $megabytes Mo"
+        override fun neuralProgress(doneMegabytes: Int, totalMegabytes: Int) = "$doneMegabytes sur $totalMegabytes Mo"
+        override val neuralUnpacking = "Décompression …"
+        override fun neuralCancel(name: String) = "Arrêter le téléchargement de $name"
+        override fun neuralDelete(name: String) = "Supprimer $name"
+        override val neuralFailed = "Le téléchargement n'a pas marché. Vérifie ta connexion et touche à nouveau Télécharger."
+        override val neuralSource = "Les voix viennent du projet Piper, via sherpa-onnx (k2-fsa) sur GitHub. Chaque voix indique ses enregistrements et leur licence."
+        override val googleInstallHint = "Synthèse vocale Google propose gratuitement des voix hors ligne de haute qualité."
+        override val googleInstallAction = "Installer Synthèse vocale Google"
+        override val googleUseHint = "Synthèse vocale Google est déjà installée. Ses voix hors ligne sonnent souvent plus naturel."
+        override val googleUseAction = "Utiliser Google"
     }
 
     private object Es : ListenStrings {
@@ -544,6 +627,24 @@ interface ListenStrings {
         override fun pitchLabel(pitch: Float) =
             listOf("Más grave", "Algo más grave", "Normal", "Algo más aguda", "Más aguda")[ListenStrings.pitchStep(pitch)]
         override val pitchDescription = "Tono de la voz"
+        override val neuralOverline = "Voces naturales"
+        override val neuralHint = "Entrenadas con grabaciones de personas reales, leen sin internet. Descarga una voz una vez y se queda en tu móvil."
+        override val neuralMetered = "No estás en una red wifi. La voz se descargará con datos móviles."
+        override fun neuralVoiceTitle(name: String, gender: VoiceGender) =
+            "$name · " + if (gender == VoiceGender.FEMALE) "femenina" else "masculina"
+        override fun neuralVoiceDetails(dataset: String, licence: String) =
+            "Grabaciones: $dataset · " + if (licence == NeuralVoice.PUBLIC_DOMAIN) "dominio público" else licence
+        override fun neuralDownload(megabytes: Int) = "Descargar · $megabytes MB"
+        override fun neuralProgress(doneMegabytes: Int, totalMegabytes: Int) = "$doneMegabytes de $totalMegabytes MB"
+        override val neuralUnpacking = "Descomprimiendo …"
+        override fun neuralCancel(name: String) = "Detener la descarga de $name"
+        override fun neuralDelete(name: String) = "Eliminar $name"
+        override val neuralFailed = "La descarga no funcionó. Revisa la conexión y toca Descargar otra vez."
+        override val neuralSource = "Las voces vienen del proyecto Piper, a través de sherpa-onnx (k2-fsa) en GitHub. Cada voz indica sus grabaciones y su licencia."
+        override val googleInstallHint = "Servicios de voz de Google incluye voces sin conexión gratuitas y de alta calidad."
+        override val googleInstallAction = "Instalar Servicios de voz de Google"
+        override val googleUseHint = "Servicios de voz de Google ya está instalado. Sus voces sin conexión suelen sonar más naturales."
+        override val googleUseAction = "Usar Google"
     }
 
     private object It : ListenStrings {
@@ -640,6 +741,24 @@ interface ListenStrings {
         override fun pitchLabel(pitch: Float) =
             listOf("Più grave", "Un po' più grave", "Normale", "Un po' più acuta", "Più acuta")[ListenStrings.pitchStep(pitch)]
         override val pitchDescription = "Tono della voce"
+        override val neuralOverline = "Voci naturali"
+        override val neuralHint = "Addestrate su registrazioni di persone vere, leggono senza internet. Scarica una voce una volta e resta sul telefono."
+        override val neuralMetered = "Non sei in Wi-Fi. La voce verrà scaricata con i dati mobili."
+        override fun neuralVoiceTitle(name: String, gender: VoiceGender) =
+            "$name · " + if (gender == VoiceGender.FEMALE) "femminile" else "maschile"
+        override fun neuralVoiceDetails(dataset: String, licence: String) =
+            "Registrazioni: $dataset · " + if (licence == NeuralVoice.PUBLIC_DOMAIN) "pubblico dominio" else licence
+        override fun neuralDownload(megabytes: Int) = "Scarica · $megabytes MB"
+        override fun neuralProgress(doneMegabytes: Int, totalMegabytes: Int) = "$doneMegabytes di $totalMegabytes MB"
+        override val neuralUnpacking = "Estrazione in corso …"
+        override fun neuralCancel(name: String) = "Interrompi il download di $name"
+        override fun neuralDelete(name: String) = "Elimina $name"
+        override val neuralFailed = "Il download non è riuscito. Controlla la connessione e tocca di nuovo Scarica."
+        override val neuralSource = "Le voci vengono dal progetto Piper, tramite sherpa-onnx (k2-fsa) su GitHub. Ogni voce indica le sue registrazioni e la loro licenza."
+        override val googleInstallHint = "Servizi di sintesi vocale di Google offre voci offline gratuite e di alta qualità."
+        override val googleInstallAction = "Installa i Servizi di sintesi vocale di Google"
+        override val googleUseHint = "I Servizi di sintesi vocale di Google sono già installati. Le loro voci offline spesso suonano più naturali."
+        override val googleUseAction = "Usa Google"
     }
 }
 
