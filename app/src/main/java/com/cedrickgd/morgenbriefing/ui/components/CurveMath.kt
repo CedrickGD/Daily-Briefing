@@ -79,4 +79,24 @@ internal object CurveMath {
         val h11 = t3 - t2
         return h00 * ys[i] + h10 * h * tangents[i] + h01 * ys[i + 1] + h11 * h * tangents[i + 1]
     }
+
+    /**
+     * x of [n] evenly spaced points across [width], [inset] in from both edges (the first and the
+     * last hour sit on the insets). A single point sits on the left inset.
+     */
+    fun pointXs(n: Int, width: Float, inset: Float): FloatArray {
+        if (n <= 0) return FloatArray(0)
+        val step = if (n > 1) (width - 2 * inset) / (n - 1) else 0f
+        return FloatArray(n) { inset + it * step }
+    }
+
+    /**
+     * The left edge of a label [labelWidth] wide, centred on [center] where it fits, else kept
+     * [margin] inside the chart's [width]: the labels of the first and the last hour never leave the card.
+     */
+    fun labelLeft(center: Float, labelWidth: Float, width: Float, margin: Float): Float {
+        val max = width - margin - labelWidth
+        if (max <= margin) return margin
+        return (center - labelWidth / 2f).coerceIn(margin, max)
+    }
 }

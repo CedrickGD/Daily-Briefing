@@ -60,4 +60,27 @@ class CurveMathTest {
         assertEquals(0.5f, two[1], 1e-6f)
         assertEquals(0f, CurveMath.monotoneTangents(floatArrayOf(3f), floatArrayOf(7f))[0], 0f)
     }
+
+    @Test
+    fun `hours spread across the chart, the outer ones on the insets`() {
+        // A 360 dp card with the chart's 6 dp inset: 10 to 18 Uhr on nine points, 43.5 dp apart.
+        val xs = CurveMath.pointXs(9, width = 360f, inset = 6f)
+        assertEquals(6f, xs.first(), 1e-3f)
+        assertEquals(354f, xs.last(), 1e-3f)
+        assertEquals(43.5f, xs[1] - xs[0], 1e-3f)
+        assertEquals(1, CurveMath.pointXs(1, 360f, 6f).size)
+        assertEquals(0, CurveMath.pointXs(0, 360f, 6f).size)
+    }
+
+    @Test
+    fun `labels stay inside the chart`() {
+        // In the middle: centred on its hour.
+        assertEquals(170f, CurveMath.labelLeft(center = 180f, labelWidth = 20f, width = 360f, margin = 2f), 0f)
+        // The first hour sits 6 dp from the edge: its label is pushed in, never past the margin.
+        assertEquals(2f, CurveMath.labelLeft(center = 6f, labelWidth = 24f, width = 360f, margin = 2f), 0f)
+        // The last hour likewise, on the right.
+        assertEquals(334f, CurveMath.labelLeft(center = 354f, labelWidth = 24f, width = 360f, margin = 2f), 0f)
+        // A label wider than the chart starts at the margin.
+        assertEquals(2f, CurveMath.labelLeft(center = 20f, labelWidth = 400f, width = 360f, margin = 2f), 0f)
+    }
 }

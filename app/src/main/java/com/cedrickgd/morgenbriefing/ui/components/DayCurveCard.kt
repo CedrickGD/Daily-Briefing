@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -84,9 +86,12 @@ private const val MIN_TEMP_RANGE = 6.0
  * The chart is one Canvas: a smooth, non-overshooting temperature line with a soft fill, hour
  * dots with labels, condition emojis, rain-probability bars and a dashed "jetzt" marker while
  * the window is running. The line draws itself in once (skipped with reduced motion).
+ *
+ * @param chartBleed how far the chart reaches past this section on both sides, into the card's
+ *   padding: the curve gets the card's whole width, title and summary stay on the text edge.
  */
 @Composable
-fun DayCurveSection(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
+fun DayCurveSection(snapshot: WeatherSnapshot, modifier: Modifier = Modifier, chartBleed: Dp = 0.dp) {
     val day = snapshot.day
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -121,7 +126,9 @@ fun DayCurveSection(snapshot: WeatherSnapshot, modifier: Modifier = Modifier) {
                 DayCurveChart(
                     day = day,
                     hours = hours,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .horizontalBleed(chartBleed)
+                        .fillMaxWidth(),
                 )
             } else {
                 Text(
@@ -179,6 +186,33 @@ private class ChartGeometry(val emojiRow: Float, val curveTop: Float, val belowC
 private val DOT_RADIUS = 4.5.dp
 private val BAR_MAX = 30.dp
 
+/** The first and the last hour sit this far in from the chart's edges (the dot and its ring fit). */
+private val CHART_INSET = 6.dp
+
+/** Labels of the outer hours keep this distance to the chart's edges. */
+private val LABEL_MARGIN = 2.dp
+
+/**
+ * Widens the element by [bleed] on both sides beyond the space its parent gives it, without
+ * taking more room in the parent's layout: it reaches into the parent's padding.
+ */
+private fun Modifier.horizontalBleed(bleed: Dp): Modifier = if (bleed <= 0.dp) {
+    this
+} else {
+    layout { measurable, constraints ->
+        val side = bleed.roundToPx()
+        val wide = if (constraints.hasBoundedWidth) {
+            constraints.copy(minWidth = constraints.minWidth + 2 * side, maxWidth = constraints.maxWidth + 2 * side)
+        } else {
+            constraints
+        }
+        val placeable = measurable.measure(wide)
+        layout(constraints.constrainWidth(placeable.width - 2 * side), placeable.height) {
+            placeable.place(-side, 0)
+        }
+    }
+}
+
 @Composable
 private fun DayCurveChart(day: DayWeather, hours: List<HourPoint>, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
@@ -235,11 +269,13 @@ private fun DayCurveChart(day: DayWeather, hours: List<HourPoint>, modifier: Mod
             .semantics { contentDescription = description }
             .drawWithCache {
                 val n = hours.size
-                val inset = 18.dp.toPx()
+                val inset = CHART_INSET.toPx()
                 val left = inset
                 val right = size.width - inset
                 val step = (right - left) / (n - 1)
-                val xs = FloatArray(n) { left + it * step }
+                val xs = CurveMath.pointXs(n, size.width, inset)
+                val margin = LABEL_MARGIN.toPx()
+                fun labelX(center: Float, labelWidth: Int) = CurveMath.labelLeft(center, labelWidth.toFloat(), size.width, margin)
 
                 val emojiRow = geometry.emojiRow
                 val curveTop = geometry.curveTop
@@ -290,7 +326,7 @@ private fun DayCurveChart(day: DayWeather, hours: List<HourPoint>, modifier: Mod
                 val pillRect = nowX?.let {
                     Rect(
                         offset = Offset(
-                            (it - pillSize.width / 2f).coerceIn(0f, size.width - pillSize.width),
+                            CurveMath.labelLeft(it, pillSize.width, size.width, margin),
                             size.height - pillSize.height,
                         ),
                         size = pillSize,
@@ -319,7 +355,7 @@ private fun DayCurveChart(day: DayWeather, hours: List<HourPoint>, modifier: Mod
                             drawText(
                                 label,
                                 topLeft = Offset(
-                                    (xs[i] - label.size.width / 2f).coerceIn(0f, size.width - label.size.width),
+                                    labelX(xs[i], label.size.width),
                                     plotBottom - barHeight - label.size.height - 2.dp.toPx(),
                                 ),
                                 alpha = a,
@@ -363,7 +399,7 @@ private fun DayCurveChart(day: DayWeather, hours: List<HourPoint>, modifier: Mod
                             drawText(
                                 label,
                                 topLeft = Offset(
-                                    (xs[i] - label.size.width / 2f).coerceIn(0f, size.width - label.size.width),
+                                    labelX(xs[i], label.size.width),
                                     ys[i] - dotRadius - 4.dp.toPx() - label.size.height,
                                 ),
                                 alpha = a,
@@ -373,7 +409,7 @@ private fun DayCurveChart(day: DayWeather, hours: List<HourPoint>, modifier: Mod
                             val emoji = labels.emojis[i]
                             drawText(
                                 emoji,
-                                topLeft = Offset(xs[i] - emoji.size.width / 2f, (emojiRow - emoji.size.height) / 2f),
+                                topLeft = Offset(labelX(xs[i], emoji.size.width), (emojiRow - emoji.size.height) / 2f),
                                 alpha = a,
                             )
                         }
@@ -383,7 +419,7 @@ private fun DayCurveChart(day: DayWeather, hours: List<HourPoint>, modifier: Mod
                     for (i in 0 until n) {
                         if (i % hourEvery != 0) continue
                         val label = labels.hours[i]
-                        val topLeft = Offset(xs[i] - label.size.width / 2f, size.height - label.size.height)
+                        val topLeft = Offset(labelX(xs[i], label.size.width), size.height - label.size.height)
                         val bounds = Rect(topLeft, Size(label.size.width.toFloat(), label.size.height.toFloat()))
                         if (pillRect != null && nowAlpha > 0f && bounds.overlaps(pillRect.inflate(2.dp.toPx()))) continue
                         drawText(label, topLeft = topLeft)

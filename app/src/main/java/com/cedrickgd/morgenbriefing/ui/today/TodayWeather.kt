@@ -202,10 +202,13 @@ internal fun WeatherSummaryCard(
             )
         }
         if (expanded) {
-            ExpandedWeather(weather, cards, Modifier.padding(start = 18.dp, end = 18.dp, bottom = 18.dp))
+            ExpandedWeather(weather, cards, Modifier.padding(start = ExpandedPadding, end = ExpandedPadding, bottom = ExpandedPadding))
         }
     }
 }
+
+/** The expanded card's inner padding (the day chart reaches into it). */
+private val ExpandedPadding = 18.dp
 
 /** What the card adds when expanded; fades in each time it opens. */
 @Composable
@@ -231,7 +234,8 @@ private fun ExpandedWeather(weather: WeatherUi, cards: Set<WeatherCard>, modifie
         WeatherNowDetails(weather.snapshot)
         if (WeatherCard.CURVE in cards) {
             Spacer(Modifier.height(20.dp))
-            DayCurveSection(weather.snapshot)
+            // The curve takes the card's whole width; its title and summary stay on the text edge.
+            DayCurveSection(weather.snapshot, chartBleed = ExpandedPadding)
         }
         if (WeatherCard.CLOTHING in cards) {
             weather.clothing?.let { advice ->
