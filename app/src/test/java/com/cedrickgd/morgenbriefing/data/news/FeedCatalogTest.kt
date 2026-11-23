@@ -68,6 +68,25 @@ class FeedCatalogTest {
     }
 
     @Test
+    fun `newsrooms from abroad serve their home as their own and other German editions only from abroad`() {
+        val switzerland = NewsEdition("CH", "de")
+        val byId = FeedCatalog.entries.associateBy { it.source.id }
+        val web = byId.getValue("derstandard-web")
+        assertTrue(web.serves(austria) && !web.servesAbroad(austria))
+        assertTrue(!web.serves(NewsEdition.GERMANY) && web.servesAbroad(NewsEdition.GERMANY) && web.servesAbroad(switzerland))
+        assertFalse(web.servesAbroad(NewsEdition.USA) || web.servesAbroad(NewsEdition("DE", "en")))
+        // An international brand's German desk is nobody's own.
+        val euronews = byId.getValue("euronews-de")
+        assertTrue(listOf(NewsEdition.GERMANY, austria, switzerland).none { euronews.serves(it) })
+        assertTrue(listOf(NewsEdition.GERMANY, austria, switzerland, NewsEdition("US", "de")).all { euronews.servesAbroad(it) })
+        // Home desks never travel; Germany's own feeds never count as from abroad.
+        assertFalse(byId.getValue("derstandard").servesAbroad(NewsEdition.GERMANY))
+        assertTrue(FeedCatalog.entries.none { it.abroad && it.language != "de" })
+        assertTrue(FeedCatalog.forEdition(NewsEdition.GERMANY).none { it.abroad })
+        assertTrue(FeedCatalog.entries.filter { it.serves(NewsEdition.GERMANY) }.none { it.servesAbroad(NewsEdition.GERMANY) })
+    }
+
+    @Test
     fun `no built-in feed of a known wall is read when only readable articles are wanted`() {
         val walled = FeedCatalog.builtIn.filter { KnownWalls.matches(GoogleNews.domainOf(it.url)) }.map { it.id }
         assertTrue("golem" in walled && "zeit-politik" in walled)
