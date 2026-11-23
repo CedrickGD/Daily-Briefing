@@ -15,6 +15,7 @@ import com.cedrickgd.morgenbriefing.data.model.NewsItem
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleHandoff
 import com.cedrickgd.morgenbriefing.ui.nav.ArticleRoute
 import com.cedrickgd.morgenbriefing.ui.nav.DiscoverRoute
+import com.cedrickgd.morgenbriefing.ui.nav.FavoritesRoute
 import com.cedrickgd.morgenbriefing.ui.nav.HistoryRoute
 import com.cedrickgd.morgenbriefing.ui.nav.MainRoute
 import com.cedrickgd.morgenbriefing.ui.nav.SearchRoute
@@ -107,6 +108,9 @@ class ShellNavigator internal constructor(
 
     /** Opens "Gelesen & ausgeblendet", the archive of read and hidden stories, over the pager. */
     fun openHistory() = open(HistoryRoute)
+
+    /** Opens "Favoriten", the starred stories, over the pager. */
+    fun openFavorites() = open(FavoritesRoute)
 
     /**
      * Closes [from], the pushed screen whose back arrow was tapped. Only while it is still the

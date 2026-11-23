@@ -147,6 +147,12 @@ enum class StoryAction {
     COPY_LINK,
     OPEN_IN_BROWSER,
 
+    /** Star the story: it lands in "Favoriten" (it was not starred). */
+    STAR,
+
+    /** Take the story's star off. */
+    UNSTAR,
+
     /** The story counts as read from now on (it was not). */
     MARK_READ,
 
@@ -170,7 +176,8 @@ internal data class StoryMenuItem(val action: StoryAction, val topic: Topic? = n
 
 /**
  * The ⋮ menu of [article], in this order: listening (start, resume or stop), share, copy the
- * link, open in the browser, then – where they apply – mark it read or unread ([read]: null
+ * link, open in the browser, then – where they apply – star it or take its star off ([starred]:
+ * null when the screen does not offer it), mark it read or unread ([read]: null
  * when the screen does not offer it), hide it ([canHide]), follow its sub-topic
  * ([followSuggestion]), stop following the topic it is shown under ([canUnfollow]: the screen
  * offers it and it is not the last followed topic) and hide its source ([canHideSource]: the
@@ -187,6 +194,7 @@ internal fun storyMenu(
     sourceName: String,
     read: Boolean? = null,
     canHide: Boolean = false,
+    starred: Boolean? = null,
 ): List<StoryMenuItem> = buildList {
     add(
         StoryMenuItem(
@@ -200,6 +208,11 @@ internal fun storyMenu(
     add(StoryMenuItem(StoryAction.SHARE))
     add(StoryMenuItem(StoryAction.COPY_LINK))
     add(StoryMenuItem(StoryAction.OPEN_IN_BROWSER))
+    when (starred) {
+        true -> add(StoryMenuItem(StoryAction.UNSTAR))
+        false -> add(StoryMenuItem(StoryAction.STAR))
+        null -> Unit
+    }
     when (read) {
         true -> add(StoryMenuItem(StoryAction.MARK_UNREAD))
         false -> add(StoryMenuItem(StoryAction.MARK_READ))

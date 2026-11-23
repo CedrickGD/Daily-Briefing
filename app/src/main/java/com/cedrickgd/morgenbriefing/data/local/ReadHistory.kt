@@ -38,12 +38,15 @@ data class HistoryEntry(
     val hiddenAt: Long? = null,
     val resolvedUrl: String? = null,
     val aggregator: String? = null,
+    /** When the user starred the story ([FavoritesStore]); the reading history never sets it. */
+    val starredAt: Long? = null,
 ) {
     val read: Boolean get() = readAt != null
     val hidden: Boolean get() = hiddenAt != null
+    val starred: Boolean get() = starredAt != null
 
-    /** When the user last did something with the story (archive order, pruning). */
-    val touchedAt: Long get() = maxOf(readAt ?: 0L, hiddenAt ?: 0L)
+    /** When the user last did something with the story (archive order, pruning, the favorites' day). */
+    val touchedAt: Long get() = maxOf(readAt ?: 0L, hiddenAt ?: 0L, starredAt ?: 0L)
 
     /** The story as a feed article again: for the reader, sharing, copying and matching. */
     fun toItem(): NewsItem = NewsItem(

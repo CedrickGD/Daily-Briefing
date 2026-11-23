@@ -129,6 +129,24 @@ class FeedCardsTest {
     }
 
     @Test
+    fun `the star follows the browser, toggles with the story's state and is left out where not offered`() {
+        val article = FeedArticle(item("a"), boerse)
+        fun withStar(starred: Boolean?) =
+            storyMenu(article, false, false, null, canUnfollow = true, canHideSource = true, sourceName = "Handelsblatt", read = false, canHide = true, starred = starred)
+                .map { it.action }
+        assertEquals(
+            listOf(
+                StoryAction.LISTEN, StoryAction.SHARE, StoryAction.COPY_LINK, StoryAction.OPEN_IN_BROWSER,
+                StoryAction.STAR, StoryAction.MARK_READ, StoryAction.HIDE, StoryAction.UNFOLLOW_TOPIC, StoryAction.HIDE_SOURCE,
+            ),
+            withStar(false),
+        )
+        assertTrue(StoryAction.UNSTAR in withStar(true))
+        assertFalse(StoryAction.STAR in withStar(true))
+        assertFalse(StoryAction.STAR in withStar(null) || StoryAction.UNSTAR in withStar(null))
+    }
+
+    @Test
     fun `listening turns into stop while read and into resume while paused`() {
         assertEquals(StoryAction.STOP_LISTENING, menu(listening = true).first())
         assertEquals(StoryAction.RESUME_LISTENING, menu(paused = true).first())

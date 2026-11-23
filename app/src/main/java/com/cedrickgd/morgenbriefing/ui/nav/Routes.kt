@@ -36,3 +36,7 @@ data class SearchRoute(val query: String? = null)
  */
 @Serializable
 data object HistoryRoute
+
+/** "Favoriten", pushed over the pager: every story the user starred, to open, share or unstar. */
+@Serializable
+data object FavoritesRoute
