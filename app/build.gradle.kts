@@ -50,6 +50,9 @@ android {
 
     buildTypes {
         release {
+            // Natural voices: the in-app updater installs one universal APK, so it carries the
+            // speech library for both phone ABIs (and nothing for emulators).
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -60,6 +63,7 @@ android {
             }
         }
         debug {
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
             // Parallel QA installs can use their own id: -PMB_ID_SUFFIX=.qa1
             applicationIdSuffix = (findProperty("MB_ID_SUFFIX") as String?) ?: ".debug"
             versionNameSuffix = "-debug"
@@ -80,6 +84,9 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // Native libraries compressed in the APK: the updater downloads about 22 MB instead of 44 MB;
+        // Android unpacks them once at install.
+        jniLibs.useLegacyPackaging = true
     }
 
     testOptions {
@@ -129,6 +136,8 @@ dependencies {
     implementation(libs.readability4j)
     // Natural voices arrive as .tar.bz2 archives (Apache Commons Compress: bzip2 + tar).
     implementation(libs.commons.compress)
+    // sherpa-onnx 1.13.8 (static ONNX Runtime, espeak-ng inside): speaks the natural voices.
+    implementation(files("libs/sherpa-onnx-tts-1.13.8.aar"))
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

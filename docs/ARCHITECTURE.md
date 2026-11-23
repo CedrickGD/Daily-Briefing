@@ -274,11 +274,15 @@ Titelbilder (Meldungen ohne Bild im Feed: alle von Google News)
   unverändert. Lädt eine Stimme nicht, liest die Engine an derselben Stelle weiter (für den
   Prozess gemerkt).
 * **Bibliothek** (`NeuralRuntime`, `createNeuralEngine()` in `NeuralEngineFactory.kt`): sherpa-onnx
-  ≥ 2.0 kann Piper-Stimmen nicht mehr aus Text sprechen (espeak-ng entfernt, weil GPL); nur
-  sherpa-onnx 1.13.8 kann es, mit espeak-ng (GPL-3.0) in der nativen Bibliothek. Dieser Stand
-  liefert darum keine Bibliothek aus: `createNeuralEngine()` gibt null, `NeuralRuntime.probe()`
-  ist falsch und „Natürliche Stimmen“ bleibt verborgen. Fehlt oder scheitert die Bibliothek auf
-  einem Gerät, gilt dasselbe.
+  ≥ 2.0 kann Piper-Stimmen nicht mehr aus Text sprechen (espeak-ng entfernt, weil GPL); darum
+  sherpa-onnx **1.13.8** (Apache-2.0; ONNX Runtime statisch gelinkt, MIT; **espeak-ng GPL-3.0** in
+  `libsherpa-onnx-jni.so`). `app/libs/sherpa-onnx-tts-1.13.8.aar` ist das Static-Link-AAR des
+  Releases, gekürzt auf arm64-v8a, armeabi-v7a und x86_64; Release packt nur die beiden ARM-ABIs
+  ein (eine Universal-APK für den Updater), Debug zusätzlich x86_64 für den Emulator; die
+  nativen Bibliotheken liegen komprimiert in der APK (`useLegacyPackaging`). Release-APK:
+  3,47 MB (v3.5.0) → 20,6 MB (unkomprimiert wären es 44,2 MB). ProGuard behält die
+  TTS-Konfigurationsklassen (JNI liest ihre Felder per Name). Fehlt die Bibliothek für das ABI
+  des Geräts oder lädt sie nicht, bleibt „Natürliche Stimmen“ verborgen.
 
 Kein DI-Framework: `AppContainer` (ein Objekt pro Prozess) wird über `context.container`
 erreicht, Vorlesen über `context.listen`. ViewModels über `viewModelFactory { initializer { … } }`.

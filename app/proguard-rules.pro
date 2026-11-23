@@ -19,3 +19,9 @@
 
 # Readability4J logs through slf4j-api without a binding
 -dontwarn org.slf4j.**
+
+# sherpa-onnx: the native library reads the TTS config objects field by field (JNI GetFieldID)
+# and builds GeneratedAudio itself, so these classes keep their names and members.
+-keep class com.k2fsa.sherpa.onnx.OfflineTts* { *; }
+-keep class com.k2fsa.sherpa.onnx.GeneratedAudio { *; }
+-keep class com.k2fsa.sherpa.onnx.GenerationConfig { *; }
