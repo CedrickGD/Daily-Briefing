@@ -25,3 +25,5 @@
 -keep class com.k2fsa.sherpa.onnx.OfflineTts* { *; }
 -keep class com.k2fsa.sherpa.onnx.GeneratedAudio { *; }
 -keep class com.k2fsa.sherpa.onnx.GenerationConfig { *; }
+# The native library calls the audio callback by name and signature (invoke([F)Ljava/lang/Integer;).
+-keep class com.cedrickgd.morgenbriefing.listen.SamplesCallback { *; }

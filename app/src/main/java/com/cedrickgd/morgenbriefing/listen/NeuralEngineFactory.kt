@@ -41,8 +41,18 @@ private class SherpaSynth(private val tts: OfflineTts, private val speaker: Int)
     override val sampleRate: Int = tts.sampleRate()
 
     override fun generate(text: String, speed: Float, onSamples: (FloatArray) -> Boolean) {
-        tts.generateWithCallback(text, speaker, speed) { samples -> if (onSamples(samples)) 1 else 0 }
+        tts.generateWithCallback(text, speaker, speed, SamplesCallback(onSamples))
     }
 
     override fun release() = tts.release()
+}
+
+/**
+ * The callback the native library calls per chunk of audio. It looks the method up by its JVM
+ * signature, `invoke([F)Ljava/lang/Integer;`, which a Kotlin lambda (compiled to invokedynamic)
+ * does not have: it only has the erased `invoke(Object)`, and the call aborts the process. A real
+ * class gets the typed method; ProGuard keeps it (`proguard-rules.pro`).
+ */
+internal class SamplesCallback(private val onSamples: (FloatArray) -> Boolean) : (FloatArray) -> Int {
+    override fun invoke(samples: FloatArray): Int = if (onSamples(samples)) 1 else 0
 }
