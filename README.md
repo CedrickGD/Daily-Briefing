@@ -219,5 +219,19 @@ sie in den Einstellungen ab.
 - **Standort:** „Mein Standort“ fragt den Standort einmalig ab und wandelt ihn mit Androids
   Geocoder in einen Ortsnamen um; gespeichert werden nur Name und Koordinaten des Orts.
 - **Updates:** Die App fragt GitHub nach der neuesten Veröffentlichung dieses Repos.
+- **Suchvorschläge:** Bei jedem Start holt die App den öffentlichen RSS-Feed von Google Trends für
+  das Land deiner Ausgabe. Google erfährt dabei nur dieses Land.
+- **Natürliche Stimmen:** Lädst du eine Stimme, kommt sie aus den GitHub-Releases von sherpa-onnx
+  (k2-fsa). Ohne Download wird nichts abgerufen.
 - Es gibt keine Konten, keine Analyse-Dienste, keine Werbung und keine Server des Entwicklers.
   Einstellungen, gespeicherte Meldungen und Artikel bleiben auf dem Handy.
+
+## Lizenz
+
+Daily Briefing steht ab Version 3.6.0 unter der **GNU General Public License v3.0** (siehe
+[LICENSE](LICENSE)). Grund: Die natürlichen Stimmen laufen über sherpa-onnx 1.13.8, und dessen
+Sprachbibliothek enthält espeak-ng, das unter GPL-3.0 steht. Der vollständige Quellcode jeder
+Version liegt in diesem Repo.
+
+Die Stimmen selbst sind eigene Werke mit eigener Lizenz (CC0, Public Domain, CC BY); die App nennt
+sie bei jeder Stimme in Einstellungen › Vorlesen.
