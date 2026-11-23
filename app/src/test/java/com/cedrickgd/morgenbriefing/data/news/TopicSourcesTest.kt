@@ -227,7 +227,8 @@ class TopicSourcesTest {
         for (country in NewsEdition.COUNTRIES) {
             for (language in NewsEdition.LANGUAGES) {
                 val edition = NewsEdition(country, language)
-                val settings = AppSettings(edition = edition, localPlaces = listOf(place))
+                // The edition's own sources (the ones from beyond it: see the mixing tests below).
+                val settings = AppSettings(edition = edition, localPlaces = listOf(place), internationalSources = false, englishSources = false)
                 for (topicId in topics) {
                     val def = Taxonomy.byId(topicId)!!
                     val label = "${edition.key} $topicId"

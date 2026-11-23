@@ -40,6 +40,14 @@ data class PagingQuery(
  * language's home countries; other topics read the language's sections, searches and the
  * publisher feeds that are not bound to a country. A place becomes a search for its name.
  *
+ * Topics that are not about the reader's country ([mixes]: tech, science, the world, the
+ * economy …) also read newsrooms from beyond the edition, each kind behind its own switch and
+ * capped so the edition's own sources stay the majority: newsrooms in the edition's language
+ * from abroad ([CatalogFeed.abroad], [AppSettings.internationalSources], at most [MAX_ABROAD]
+ * and half as many as the edition's own) and English feeds not bound to a country
+ * ([AppSettings.englishSources], at most [MAX_ENGLISH] and half as many as those in the
+ * edition's language).
+ *
  * Feeds the user added to any topic come last. With [AppSettings.readableOnly] publisher feeds
  * of sites the reader cannot show are skipped and searches leave those sites out (`-site:`).
  */
@@ -174,8 +182,65 @@ object TopicSources {
                 ?.let { GoogleNews.searchUrl(GoogleNews.buildQuery(it, exclusions(settings, edition, blocked)), edition) }
         }
         val google = googleUrl?.let { googleSource(topicId, it, edition) }
-        return curated + listOfNotNull(google)
+        val own = curated + listOfNotNull(google)
+        if (searchesCountry(def, edition) || !mixes(def)) return own
+        // What joins from beyond the edition stays a complement: at most half as many feeds as
+        // the edition reads itself (Google News counted, walled feeds not when they are skipped).
+        val blockedSet = blocked.toSet()
+        val readable = { feed: CatalogFeed -> !isBlockedFeed(feed.source, settings, blockedSet) }
+        val homeCount = own.count { it.isGoogleNews || !isBlockedFeed(it, settings, blockedSet) }
+        val abroad = if (!settings.internationalSources) emptyList() else mixIn(
+            FeedCatalog.entries.filter { it.servesAbroad(edition) && readable(it) },
+            topicId, members, limit = minOf(MAX_ABROAD, homeCount / 2),
+        )
+        val english = if (!settings.englishSources || edition.language == ENGLISH) emptyList() else mixIn(
+            FeedCatalog.entries.filter { it.language == ENGLISH && it.countries.isEmpty() && readable(it) },
+            topicId, members, limit = minOf(MAX_ENGLISH, (homeCount + abroad.size) / 2),
+        )
+        return curated + abroad + english + listOfNotNull(google)
     }
+
+    /**
+     * Whether [def] reads sources from beyond the edition ([AppSettings.internationalSources],
+     * [AppSettings.englishSources]): every built-in topic but the news of the reader's own
+     * country – top stories, politics at home and its elections, the economy at home (business
+     * cycle, money, housing). The economy as a whole is world news too and mixes; the Region,
+     * places and own topics never reach here.
+     */
+    internal fun mixes(def: TopicDef): Boolean = !def.topStories && def.id !in HOME_NEWS
+
+    private val HOME_NEWS: Set<String> = Taxonomy.DOMESTIC - "wirtschaft"
+
+    /** Whether readers of [edition] can get newsrooms from abroad at all (the settings show the switch only then). */
+    fun readsAbroad(edition: NewsEdition): Boolean = FeedCatalog.entries.any { it.servesAbroad(edition) }
+
+    /**
+     * Whether English feeds can join for [edition]: it reads another language and has publisher
+     * feeds of its own – with Google News alone half as many is none.
+     */
+    fun readsEnglish(edition: NewsEdition): Boolean =
+        edition.language != ENGLISH && FeedCatalog.forEdition(edition).isNotEmpty()
+
+    /**
+     * Up to [limit] of [candidates] for [topicId]: the feeds of the topic itself first, then
+     * those of its sub-topics ([members]) that mix themselves, each in catalogue order.
+     */
+    private fun mixIn(candidates: List<CatalogFeed>, topicId: String, members: Set<String>, limit: Int): List<FeedSource> {
+        if (limit <= 0) return emptyList()
+        return candidates
+            .filter { feed -> feed.source.topicId in members && Taxonomy.byId(feed.source.topicId)?.let(::mixes) == true }
+            .sortedBy { if (it.source.topicId == topicId) 0 else 1 }
+            .take(limit)
+            .map { it.source.copy(topicId = topicId) }
+    }
+
+    /** At most this many newsrooms from abroad in the edition's language per topic ([AppSettings.internationalSources]). */
+    internal const val MAX_ABROAD = 3
+
+    /** At most this many English feeds per topic ([AppSettings.englishSources]). */
+    internal const val MAX_ENGLISH = 3
+
+    private const val ENGLISH = "en"
 
     /** What the Google News source of a built-in topic is. */
     enum class GoogleFeed { TOP_STORIES, SECTION, SEARCH }

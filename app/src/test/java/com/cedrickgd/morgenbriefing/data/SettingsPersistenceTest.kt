@@ -217,6 +217,31 @@ class SettingsPersistenceTest {
     }
 
     @Test
+    fun `sources from abroad and in English are on for a fresh install and for one from before 3_6`() = runBlocking {
+        assertEquals(true to true, repository.current().let { it.internationalSources to it.englishSources })
+        // Version 3.5 stored its settings without either key.
+        store.edit { prefs ->
+            prefs[booleanPreferencesKey("readable_only")] = false
+            prefs[booleanPreferencesKey("onboarding_done")] = true
+        }
+        val read = repository.current()
+        assertEquals(true to true, read.internationalSources to read.englishSources)
+        assertEquals(false, read.readableOnly)
+    }
+
+    @Test
+    fun `switching the sources from abroad and in English off is stored and leaves the rest alone`() = runBlocking {
+        repository.update { it.copy(themeMode = ThemeMode.LIGHT, onboardingDone = true, followed = listOf("ki")) }
+        val before = repository.current()
+        repository.update { it.copy(internationalSources = false) }
+        assertEquals(before.copy(internationalSources = false), repository.current())
+        repository.update { it.copy(englishSources = false) }
+        assertEquals(before.copy(internationalSources = false, englishSources = false), repository.current())
+        repository.update { it.copy(internationalSources = true) }
+        assertEquals(before.copy(englishSources = false), repository.current())
+    }
+
+    @Test
     fun `a stored edition the app does not offer falls back to the German news an old install had`() = runBlocking {
         for (broken in listOf("XX:yy", "US", "us:en", "US:en:x", "NO:nb", "")) {
             store.edit { prefs ->

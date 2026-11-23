@@ -210,6 +210,15 @@ data class AppSettings(
     /** Hide articles of sites the in-app reader cannot show (paywall, consent wall, bot block). */
     val readableOnly: Boolean = true,
     /**
+     * "Internationale Quellen auf Deutsch": newsrooms in the edition's language from other
+     * countries (Der Standard, SRF for a reader in Germany) and that language's desks of
+     * international brands (Euronews) join the topics that are not about the reader's country
+     * ([com.cedrickgd.morgenbriefing.data.news.TopicSources.mixes]), fewer than the edition's own.
+     */
+    val internationalSources: Boolean = true,
+    /** "Englischsprachige Quellen": a few English feeds join those topics too, fewer than the ones in the edition's language. */
+    val englishSources: Boolean = true,
+    /**
      * "Gelesene Artikel ausblenden": stories the user read leave the news lists – when a list is
      * built anew (start, refresh, another tab), never under the finger. Off: they show, calmer.
      */

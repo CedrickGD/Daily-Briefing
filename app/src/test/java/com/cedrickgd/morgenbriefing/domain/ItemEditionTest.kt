@@ -51,6 +51,20 @@ class ItemEditionTest {
     }
 
     @Test
+    fun `feeds mixed into a German reader's topics keep their own language`() {
+        val tech = TopicSources.resolve("ki", german).map { it.id }
+        assertEquals(true, "verge" in tech && "derstandard-web" in tech)
+        // English feeds read as English (Zuhören, hyphenation), whatever edition the reader has.
+        assertEquals("en", ItemEdition.languageOf(item("verge", "ki")))
+        assertEquals("en", ItemEdition.of(item("verge", "ki"), german).language)
+        assertEquals("en", ItemEdition.of(item("wired#page", "ki"), german).language)
+        // A newsroom from abroad in German is German, from its own country.
+        assertEquals(NewsEdition("AT", "de"), ItemEdition.of(item("derstandard-web", "ki"), german))
+        assertEquals(NewsEdition.GERMANY, ItemEdition.of(item("euronews-de", "welt"), german))
+        assertEquals("de", ItemEdition.languageOf(item("srf-international", "welt")))
+    }
+
+    @Test
     fun `Google News items name their edition`() {
         assertEquals(NewsEdition.GERMANY, ItemEdition.of(item("gn:politik@DE:de"), german))
         assertEquals(NewsEdition("FR", "fr"), ItemEdition.of(item("gn:${Topics.SEARCH_ID}@FR:fr", Topics.SEARCH_ID), german))
