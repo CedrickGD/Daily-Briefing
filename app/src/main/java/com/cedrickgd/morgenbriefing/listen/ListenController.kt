@@ -233,6 +233,41 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
     private var pendingPreview: PreviewRequest? = null
     private var previewCount = 0
 
+    /** Natural voices on the phone (downloaded in the settings); null in tests without the app. */
+    private val neuralVoices: NeuralVoices? get() = (app as? MorgenbriefingApp)?.container?.neuralVoices
+
+    /** Plays natural voices; created on the first reading with one ([NeuralRuntime] loaded). */
+    private var neuralSpeaker: NeuralSpeaker? = null
+
+    /** The current reading speaks with a natural voice (not the engine). */
+    private var neuralActive = false
+
+    /** Natural voices that failed to load in this process: their language reads with the engine. */
+    private val brokenNeural = mutableSetOf<String>()
+
+    private val neuralListener = object : NeuralSpeaker.Listener {
+        override fun onPartStart(token: Int, index: Int) {
+            main.post { if (token == session && neuralActive) onPartStart(index) }
+        }
+
+        override fun onPartRange(token: Int, index: Int, start: Int) {
+            main.post { if (token == session && neuralActive) onPartRange(index, start) }
+        }
+
+        override fun onPartDone(token: Int, index: Int) {
+            main.post {
+                when {
+                    token == session && neuralActive -> onPartDone(index)
+                    token < 0 && token == -previewCount -> onPreviewDone()
+                }
+            }
+        }
+
+        override fun onFailed(token: Int, index: Int) {
+            main.post { onNeuralFailed(token, index) }
+        }
+    }
+
     private val audioFocus: AudioFocus by lazy {
         val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         AudioFocus.create(audio, main, ::onFocusChange)
@@ -343,7 +378,7 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
         }
 
         session++
-        tts?.stop()
+        stopSpeech()
         script = next
         scriptIsFull = !body.isNullOrBlank()
         position = 0
@@ -357,7 +392,7 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
             title = item.headline.trim().ifEmpty { ListenStrings.of(uiLanguage).articleFallback },
             articleKey = key,
             articleUrl = item.url,
-            preparing = engine != Engine.READY,
+            preparing = engine != Engine.READY || neuralPick() != null,
             onlineVoiceOnly = voiceOnlineOnly,
             estimatedSeconds = next.estimatedSeconds,
             voiceLanguage = spoken.language,
@@ -384,7 +419,7 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
     /** Stops reading (and clears an [ListenState.issue]). */
     fun stop() = onMain {
         session++
-        tts?.stop()
+        stopSpeech()
         script = null
         position = 0
         resumeOnFocusGain = false
@@ -435,8 +470,13 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
      */
     fun preview(language: String, voiceName: String?, rate: Float, pitch: Float) = onMain {
         if (mutableState.value.speaking) pause(keepFocus = false)
-        pendingPreview = PreviewRequest(language.lowercase(Locale.ROOT), voiceName, rate, pitch)
         mutableVoices.update { it.copy(previewing = voiceName ?: ListenVoices.AUTO_VOICE) }
+        val neural = NeuralVoiceIds.idOf(voiceName)
+        if (neural != null) {
+            pendingPreview = null
+            return@onMain previewNeural(language.lowercase(Locale.ROOT), neural, rate, pitch)
+        }
+        pendingPreview = PreviewRequest(language.lowercase(Locale.ROOT), voiceName, rate, pitch)
         when (engine) {
             Engine.READY -> runPreview()
             Engine.STARTING -> Unit // onEngineInit plays it.
@@ -508,6 +548,8 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
         }
         registerNoisy()
         observeAppLifecycle()
+        // A natural voice needs no engine.
+        if (neuralPick() != null) return speakFrom(position)
         when (engine) {
             Engine.READY -> speakFrom(position)
             Engine.STARTING -> Unit // onEngineInit continues.
@@ -530,7 +572,7 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
         val current = mutableState.value
         if (!current.speaking) return
         session++
-        tts?.stop()
+        stopSpeech()
         resumeOnFocusGain = keepFocus
         if (!keepFocus) abandonFocus()
         unregisterNoisy()
@@ -561,9 +603,11 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
      * sentence start) when a reading continues in a new voice or speed.
      */
     private fun speakFrom(index: Int, charOffset: Int = 0) {
-        val engineTts = tts ?: return startEngine()
         val current = script ?: return
         if (index > current.lastIndex) return finish()
+        neuralPick()?.let { (voice, files) -> return speakNeural(current, index, charOffset, voice, files) }
+        neuralActive = false
+        val engineTts = tts ?: return startEngine()
         if (!ensureVoice(engineTts)) return
         val first = current.parts[index].text
         offsetIndex = index
@@ -584,6 +628,64 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
             }
         }
         mutableState.update { it.copy(preparing = false, progress = current.progressAt(index, offsetChars)) }
+    }
+
+    /**
+     * The natural voice chosen for the language being read, when it is installed and the speech
+     * library loads; null reads with the engine (also for a voice that failed before).
+     */
+    private fun neuralPick(): Pair<NeuralVoice, NeuralVoiceFiles>? {
+        val id = NeuralVoiceIds.idOf(listen.voiceFor(voiceEdition.language)) ?: return null
+        if (id in brokenNeural) return null
+        val voice = NeuralVoiceCatalog.byId(id) ?: return null
+        val files = neuralVoices?.files(id) ?: return null
+        return speakerOrNull()?.let { voice to files }
+    }
+
+    private fun speakerOrNull(): NeuralSpeaker? {
+        neuralSpeaker?.let { return it }
+        val engine = NeuralRuntime.engine ?: return null
+        return NeuralSpeaker(engine, neuralListener).also { neuralSpeaker = it }
+    }
+
+    /** [speakFrom] with a natural voice: the same parts and offsets, played by [NeuralSpeaker]. */
+    private fun speakNeural(current: ListenScript, index: Int, charOffset: Int, voice: NeuralVoice, files: NeuralVoiceFiles) {
+        val speaker = speakerOrNull() ?: return
+        // The engine may still say a sample: one voice at a time.
+        tts?.stop()
+        neuralActive = true
+        val first = current.parts[index].text
+        offsetIndex = index
+        offsetChars = charOffset.takeIf { it in 1 until first.length } ?: 0
+        position = index
+        rangeOffset = offsetChars
+        val parts = current.parts.subList(index, current.parts.size).mapIndexed { i, part ->
+            if (i == 0 && offsetChars > 0) part.copy(text = part.text.substring(offsetChars)) else part
+        }
+        voiceOnlineOnly = false
+        // Stays "preparing" until the first sentence sounds (onPartStart).
+        mutableState.update { it.copy(onlineVoiceOnly = false, progress = current.progressAt(index, offsetChars)) }
+        speaker.speak(session, voice, files, parts, index, listen.rate, listen.pitch)
+    }
+
+    /** A natural voice did not load or play: remember it and read on with the engine where the reading is. */
+    private fun onNeuralFailed(token: Int, index: Int) {
+        if (token < 0) {
+            if (token == -previewCount) onPreviewDone()
+            return
+        }
+        if (token != session || !neuralActive) return
+        NeuralVoiceIds.idOf(listen.voiceFor(voiceEdition.language))?.let { brokenNeural += it }
+        Log.w(TAG, "Natural voice failed at part $index; reading on with the engine")
+        neuralActive = false
+        session++
+        if (mutableState.value.speaking && script != null) speakFrom(if (index >= 0) index else position)
+    }
+
+    /** Silences whichever voice reads (engine or natural). */
+    private fun stopSpeech() {
+        tts?.stop()
+        neuralSpeaker?.stop()
     }
 
     /** Characters of part [index] skipped by a mid-way restart (its utterance starts there). */
@@ -640,10 +742,10 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
         if (old.language != new.language) mutableState.update { if (it.active) it.copy(voiceLanguage = voiceEdition.language) else it }
         // Only what changes the voice being heard (not a voice chosen for another language)
         // restarts the sentence; a paused reading picks it up when it resumes (speakFrom → ensureVoice).
-        val heard = engineLocale?.language?.let(VoiceLanguages::language) ?: voiceEdition.language
+        val heard = engineLocale?.language?.takeIf { !neuralActive }?.let(VoiceLanguages::language) ?: voiceEdition.language
         val audible = old.rate != new.rate || old.pitch != new.pitch || old.language != new.language ||
             old.voicePreference != new.voicePreference || old.voiceFor(heard) != new.voiceFor(heard)
-        if (audible && mutableState.value.speaking && engine == Engine.READY && script != null) continueInNewVoice()
+        if (audible && mutableState.value.speaking && (neuralActive || engine == Engine.READY) && script != null) continueInNewVoice()
     }
 
     /** Re-queues the reading from the sentence the voice is in, so the change is heard at once. */
@@ -652,13 +754,14 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
         val index = position.coerceIn(0, current.lastIndex)
         val restart = sentenceStartBefore(current.parts[index].text, rangeOffset)
         session++
-        tts?.stop()
+        stopSpeech()
         speakFrom(index, restart)
     }
 
     /** Another engine was chosen: start it (continuing a reading where it is) or start it for the voice list. */
     private fun switchEngine() {
-        val reading = mutableState.value.speaking && script != null
+        // A reading with a natural voice goes on; only the engine's voice list changes.
+        val reading = mutableState.value.speaking && script != null && !neuralActive
         // A sample of the old engine's voice makes no sense in the new one.
         pendingPreview = null
         mutableVoices.update { it.copy(voices = emptyList(), loaded = false, loading = catalogWanted, failed = false, previewing = null) }
@@ -868,6 +971,8 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
     private fun failEngine(issue: ListenIssue) {
         main.removeCallbacks(initWatchdog)
         shutdownEngine()
+        neuralSpeaker?.stop()
+        neuralActive = false
         session++
         script = null
         position = 0
@@ -892,6 +997,7 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
         main.removeCallbacks(releaseEngineTask)
         if (mutableState.value.speaking) return
         shutdownEngine()
+        neuralSpeaker?.release()
     }
 
     private fun shutdownEngine() {
@@ -968,6 +1074,7 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
         pendingPreview = null
         val engineTts = tts ?: return
         main.removeCallbacks(releaseEngineTask)
+        neuralSpeaker?.stop()
         // The sample changes the engine's language and voice: the next reading sets its own again.
         appliedVoice = null
         val sampleEdition = ListenLanguages.voiceEdition(edition, request.language, edition)
@@ -990,6 +1097,57 @@ class ListenController(context: Context, private val onPlay: (NewsItem) -> Unit 
             TextToSpeech.ERROR
         }
         if (result == TextToSpeech.ERROR) onPreviewDone()
+    }
+
+    /** "Probehören" of a natural voice: the sample sentence of [language], played by [NeuralSpeaker]. */
+    private fun previewNeural(language: String, id: String, rate: Float, pitch: Float) {
+        val voice = NeuralVoiceCatalog.byId(id)
+        val files = neuralVoices?.files(id)
+        val speaker = speakerOrNull()
+        if (voice == null || files == null || speaker == null || !audioFocus.request()) {
+            onPreviewDone()
+            return
+        }
+        main.removeCallbacks(releaseEngineTask)
+        tts?.stop()
+        val sampleEdition = ListenLanguages.voiceEdition(edition, language, edition)
+        val text = ListenStrings.of(ListenLanguages.scriptLanguage(uiLanguage, sampleEdition)).sampleSentence
+        speaker.speak(-(++previewCount), voice, files, listOf(SpeechPart(text)), 0, rate, pitch)
+    }
+
+    /**
+     * "Laden" in the settings: downloads [voice] and, once it is on the phone, reads its language
+     * with it (the user asked for exactly this voice).
+     */
+    fun downloadNeural(voice: NeuralVoice) {
+        val voices = neuralVoices ?: return
+        voices.download(voice) {
+            val repository = (app as? MorgenbriefingApp)?.container?.settings ?: return@download
+            scope.launch {
+                attempt { repository.update { it.copy(listen = it.listen.withVoice(voice.language, NeuralVoiceIds.choice(voice.id))) } }
+                    .onFailure { Log.w(TAG, "Could not choose ${voice.id}", it) }
+            }
+        }
+    }
+
+    /** Stops downloading [voice]. */
+    fun cancelNeural(voice: NeuralVoice) {
+        neuralVoices?.cancel(voice.id)
+    }
+
+    /** Removes a natural voice; a language that read with it goes back to "Automatisch". */
+    fun deleteNeural(voice: NeuralVoice) {
+        neuralVoices?.delete(voice.id)
+        onMain { brokenNeural -= voice.id }
+        val repository = (app as? MorgenbriefingApp)?.container?.settings ?: return
+        scope.launch {
+            attempt {
+                repository.update {
+                    val chosen = it.listen.voiceFor(voice.language) == NeuralVoiceIds.choice(voice.id)
+                    if (chosen) it.copy(listen = it.listen.withVoice(voice.language, null)) else it
+                }
+            }.onFailure { Log.w(TAG, "Could not reset the voice after deleting ${voice.id}", it) }
+        }
     }
 
     /** True for a sample's utterance id (handled here: the sample ended), false for everything else. */
