@@ -132,8 +132,8 @@ dem Entwurf, den der Besitzer gewählt hat):
   Serif-Temperatur, „Ort · Zustand“ und **eine** Zeile „min – max · Regen 60 % / trocken ·
   Kleidungstipp“, rechts ein Chevron. Antippen klappt sie weich auf (`animateContentSize`, Chevron
   dreht sich): die Serif-Headline des Tages, „Vor der Tür“ (gefühlt, Chips, Hinweis fürs
-  Losgehen), die Tageskurve (sie nutzt die ganze Kartenbreite, die erste und letzte Stunde 6 dp
-  vom Kartenrand; Titel und Zusammenfassung bleiben auf der Textkante) mit Zusammenfassung und die Anzieh-Kacheln – jeweils nur, wenn der
+  Losgehen), die Tageskurve (breiter als der Text: die erste und letzte Stunde 12 dp vom Kartenrand,
+  halb so weit wie die Textkante; Titel und Zusammenfassung bleiben auf der Textkante) mit Zusammenfassung und die Anzieh-Kacheln – jeweils nur, wenn der
   Wetterblock in den Einstellungen an ist. Auf/zu bleibt über App-Starts erhalten.
   **Warnungen** stehen immer sichtbar unter der Karte (getönte Glas-Banner), auch zugeklappt.
 * **Feed-Leiste** unter dem Wetter: ein Suchfeld (sieht aus wie ein Feld, ist ein Knopf und

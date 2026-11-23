@@ -210,6 +210,12 @@ internal fun WeatherSummaryCard(
 /** The expanded card's inner padding (the day chart reaches into it). */
 private val ExpandedPadding = 18.dp
 
+/**
+ * How far the day curve reaches into [ExpandedPadding]. With the chart's own 6 dp inset the first
+ * and last hour sit 12 dp from the card's edge: half-way to the text edge, wide without touching it.
+ */
+private val CurveBleed = 12.dp
+
 /** What the card adds when expanded; fades in each time it opens. */
 @Composable
 private fun ExpandedWeather(weather: WeatherUi, cards: Set<WeatherCard>, modifier: Modifier = Modifier) {
@@ -234,8 +240,8 @@ private fun ExpandedWeather(weather: WeatherUi, cards: Set<WeatherCard>, modifie
         WeatherNowDetails(weather.snapshot)
         if (WeatherCard.CURVE in cards) {
             Spacer(Modifier.height(20.dp))
-            // The curve takes the card's whole width; its title and summary stay on the text edge.
-            DayCurveSection(weather.snapshot, chartBleed = ExpandedPadding)
+            // The curve reaches past the text edge towards the card's edge; title and summary stay on the text edge.
+            DayCurveSection(weather.snapshot, chartBleed = CurveBleed)
         }
         if (WeatherCard.CLOTHING in cards) {
             weather.clothing?.let { advice ->
